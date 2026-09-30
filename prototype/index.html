@@ -11,15 +11,23 @@
       --muted: #6f8294;
       --surface: #0f1822;
       --edge: #1e2c3a;
+      --meter: #2a8fb0;
+      --hot: #d9824b;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
       font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif; }
     main { min-height: 100%; display: flex; flex-direction: column; align-items: center;
       justify-content: center; gap: 12px; padding: 16px; }
-    #surface { width: min(80vmin, 640px); aspect-ratio: 1; display: block;
+    .stage { width: min(80vmin, 640px, 100%); display: flex; flex-direction: column; gap: 8px; }
+    #surface { width: 100%; aspect-ratio: 1; display: block;
       background: var(--surface); border: 1px solid var(--edge); border-radius: 6px;
       touch-action: none; cursor: crosshair; }
+    .meter { display: grid; grid-template-columns: 7em 1fr; align-items: center; gap: 8px;
+      color: var(--muted); font-size: 12px; }
+    .track { height: 4px; background: var(--edge); border-radius: 2px; overflow: hidden; }
+    .fill { height: 100%; width: 0; background: var(--meter); }
+    .fill.hot { background: var(--hot); }
     #status { color: var(--muted); font-size: 12px; min-height: 1.4em; }
     #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       background: rgba(11, 16, 22, 0.88); color: var(--fg); font-size: 18px; border: 0;
@@ -29,7 +37,11 @@
 </head>
 <body>
   <main>
-    <canvas id="surface" width="640" height="640" aria-label="Water surface: click to drop"></canvas>
+    <div class="stage">
+      <canvas id="surface" width="640" height="640" aria-label="Water surface: click to drop, drag to disturb"></canvas>
+      <div class="meter"><span>surface energy</span><div class="track"><div id="energy" class="fill"></div></div></div>
+      <div class="meter"><span>output</span><div class="track"><div id="output" class="fill"></div></div></div>
+    </div>
     <div id="status"></div>
   </main>
   <button id="start">Click to wake the water</button>

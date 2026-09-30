@@ -321,6 +321,35 @@ const worstCase = (m, i, r) => { // every excitation slot busy with long, wide s
   report(idle.pct < 1, `32×32 asleep: ${idle.us.toFixed(1)} µs/block, ${idle.pct.toFixed(2)}%`, 'limit 1%');
 }
 
+// ---- 8b. Drag loudness is independent of sample rate and pointer rate ------
+console.log('\n8b. Drag: level independent of sample rate and pointer event rate');
+{
+  // A circular drag at 1 surface-width per second, as main.js sends it.
+  // Noise-driven resonances vary ~1 dB run to run, so average several seeds.
+  // `jitter` varies each pointer interval by up to ±jitter (real pointers are uneven).
+  const dragRmsOnce = (fs, hz, seed, jitter = 0) => {
+    const m = makeMedium(fs, {}, 32, seed);
+    const rad = 0.35, speed = 1, r = rng(seed + 100);
+    let a = 0;
+    const events = [];
+    for (let t = 0, dt = 1 / hz; t < 2.5; t += dt, dt = (1 + jitter * (2 * r() - 1)) / hz) {
+      const a0 = a, a1 = (a += (speed * dt) / rad);
+      events.push([t, (mm) => mm.stroke(0.5 + rad * Math.cos(a0), 0.5 + rad * Math.sin(a0),
+        0.5 + rad * Math.cos(a1), 0.5 + rad * Math.sin(a1), speed, 2 * dt)]);
+    }
+    const { L, R } = render(m, 2.5, events);
+    const from = Math.round(0.5 * fs);
+    return (rms(L, from) ** 2 + rms(R, from) ** 2) / 2;
+  };
+  const dragRms = (fs, hz, jitter = 0) => Math.sqrt([1, 2, 3, 4].reduce((s, seed) => s + dragRmsOnce(fs, hz, seed, jitter), 0) / 4);
+  const ref = dragRms(48000, 60);
+  const cases = [[44100, 60, 0], [192000, 60, 0], [48000, 120, 0], [48000, 60, 0.3]];
+  const diffs = cases.map(([fs, hz, j]) => [fs, j ? `${hz}Hz±30%` : `${hz}Hz`, 20 * Math.log10(dragRms(fs, hz, j) / ref)]);
+  const worst = Math.max(...diffs.map((d) => Math.abs(d[2])));
+  report(worst < 1, `1 width/s drag, rms ${ref.toFixed(4)} at 48k/60 Hz`,
+    diffs.map(([fs, label, d]) => `${fs / 1000}k/${label} ${d >= 0 ? '+' : ''}${d.toFixed(2)} dB`).join(', '));
+}
+
 // ---- 9. Event queue (page → audio thread) ----------------------------------
 console.log('\n9. Event queue');
 {

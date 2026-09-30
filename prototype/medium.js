@@ -40,6 +40,8 @@ const SILENCE_CHECK_INTERVAL = 1024; // samples
 const OUTPUT_CAL = 12; // loudest of 16 default drops peaks near 0.3
 const DROP_RADIUS = 1.5; // cells
 const STROKE_RADIUS = 2.0; // cells
+const STROKE_NOISE_CAL = 2; // a drag at strength 1 (≈ 1 surface-width/s) peaks near 0.1
+const KIND_IMPULSE = 0, KIND_NOISE = 1;
 const SMOOTHING_SECONDS = 0.02;
 
 export const PARAMS = {
@@ -49,6 +51,9 @@ export const PARAMS = {
   inputGain: { min: 0, max: 4, def: 1 },
   outputGain: { min: 0, max: 4, def: 1 },
 };
+
+// Where the medium is heard (x, y in [0, 1]): left, right.
+export const LISTEN_POINTS = [[0.29, 0.41], [0.71, 0.6]];
 
 const PARAM_KEYS = Object.keys(PARAMS);
 const P_DECAY = 0, P_HF_DECAY = 1, P_WAVE_SPEED = 2, P_INPUT_GAIN = 3, P_OUTPUT_GAIN = 4;
@@ -70,11 +75,12 @@ export class Medium {
 
     // Listening points: asymmetric and off-centre so low modes are heard, and
     // placed so neither sits on a nodal line of a low mode of the 32×32 grid.
-    this.listenL = this.cellIndex(0.29, 0.41);
-    this.listenR = this.cellIndex(0.71, 0.6);
+    this.listenL = this.cellIndex(LISTEN_POINTS[0][0], LISTEN_POINTS[0][1]);
+    this.listenR = this.cellIndex(LISTEN_POINTS[1][0], LISTEN_POINTS[1][1]);
 
     // Excitations, structure-of-arrays so nothing is allocated per event.
     this.exActive = new Uint8Array(MAX_EXCITATIONS);
+    this.exKind = new Uint8Array(MAX_EXCITATIONS);
     this.exT = new Int32Array(MAX_EXCITATIONS);
     this.exLen = new Int32Array(MAX_EXCITATIONS);
     this.exAmp = new Float64Array(MAX_EXCITATIONS);
@@ -90,7 +96,8 @@ export class Medium {
     this.exWx = new Float64Array(MAX_EXCITATIONS * KERNEL);
     this.exWy = new Float64Array(MAX_EXCITATIONS * KERNEL);
 
-    this.rng = seed >>> 0 || 1;
+    this.rng = new Uint32Array(1); // integer state: no boxing on the audio path
+    this.rng[0] = seed >>> 0 || 1;
 
     this.target = new Float64Array(PARAM_KEYS.length);
     this.current = new Float64Array(PARAM_KEYS.length);
@@ -148,10 +155,14 @@ export class Medium {
     // Impact lasts about as long as a wave takes to cross the drop's footprint,
     // so drops excite the surface similarly at any wave speed.
     const seconds = (r / this.current[P_WAVE_SPEED]) * (1 + 1.5 * this.rand());
-    this.addExcitation(gx, gy, gx, gy, r, amp, seconds);
+    this.addExcitation(gx, gy, gx, gy, r, amp, seconds, KIND_IMPULSE);
   }
 
-  // Energy injected while moving from (x0,y0) to (x1,y1) over `seconds`.
+  // The wake of something moving through the surface from (x0,y0) to (x1,y1)
+  // over `seconds`: broadband turbulence at the moving point, which the
+  // medium's resonances shape into sound. `strength` sets the power (1 ≈ a
+  // drag at one surface-width per second). Consecutive strokes should overlap
+  // by half (the sine envelopes then add to constant power).
   stroke(x0, y0, x1, y1, strength = 1, seconds = 0.02) {
     if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) ||
         !Number.isFinite(y1) || !Number.isFinite(strength) || !Number.isFinite(seconds)) return;
@@ -159,7 +170,7 @@ export class Medium {
     const amp = clamp(strength, 0, MAX_STRENGTH) * (1 + (this.rand() - 0.5) * 0.2);
     this.addExcitation(
       this.toGrid(x0), this.toGrid(y0), this.toGrid(x1), this.toGrid(y1),
-      r, amp, clamp(seconds, MIN_EXCITATION_SECONDS, MAX_EXCITATION_SECONDS));
+      r, amp, clamp(seconds, MIN_EXCITATION_SECONDS, MAX_EXCITATION_SECONDS), KIND_NOISE);
   }
 
   // Wipes the surface instantly. Internal guard only — not a performance
@@ -283,6 +294,25 @@ export class Medium {
     }
   }
 
+  // Add each interior cell's local energy density (motion + stretch, scaled by
+  // fs² like energy()) into acc (length ≥ N*N). It flickers far less than
+  // height with the phase of the oscillation, so it's what the visuals show.
+  // Each cell takes half of each of its four edges, so walls count evenly.
+  accumulateEnergyDensity(acc) {
+    const W = this.W, N = this.N, u = this.u, up = this.up;
+    const l2 = this.lambda2, s = this.fs * this.fs;
+    let o = 0;
+    for (let y = 1; y <= N; y++) {
+      let i = y * W + 1;
+      for (let x = 1; x <= N; x++, i++, o++) {
+        const v = u[i] - up[i];
+        const c = u[i];
+        const e = u[i + 1] - c, w = c - u[i - 1], n = c - u[i - W], sth = u[i + W] - c;
+        acc[o] += (v * v + 0.5 * l2 * (e * e + w * w + n * n + sth * sth)) * s;
+      }
+    }
+  }
+
   // Load an N×N interior state (current and previous heights), e.g. a pure
   // mode for tests. Not for the audio path.
   loadState(uInterior, upInterior) {
@@ -366,7 +396,7 @@ export class Medium {
     if (changed) this.updateCoefficients();
   }
 
-  addExcitation(x0, y0, x1, y1, r, amp, seconds) {
+  addExcitation(x0, y0, x1, y1, r, amp, seconds, kind) {
     // Reuse a free slot; if all are busy, take the one nearest its end.
     let slot = -1, best = -1;
     for (let i = 0; i < MAX_EXCITATIONS; i++) {
@@ -378,10 +408,15 @@ export class Medium {
     this.exActive[slot] = 1;
     this.exT[slot] = 0;
     this.exLen[slot] = len;
-    // Footprints sum to 1, so the whole excitation delivers the same velocity
-    // kick (amp) regardless of its size, length or the sample rate. The raised
-    // cosine sums to len/2.
-    this.exAmp[slot] = (2 * amp) / (len * this.fs);
+    this.exKind[slot] = kind;
+    // Footprints sum to 1, so level is independent of footprint size.
+    // Impulse: the whole excitation delivers the same velocity kick (amp)
+    // regardless of its length or the sample rate (the raised cosine sums to len/2).
+    // Noise: per-sample kicks of random sign whose power per second is amp²,
+    // independent of the sample rate.
+    this.exAmp[slot] = kind === KIND_NOISE
+      ? (amp * STROKE_NOISE_CAL) / (this.fs * Math.sqrt(this.fs))
+      : (2 * amp) / (len * this.fs);
     this.exR[slot] = clamp(r, 0.5, MAX_RADIUS);
     this.exX0[slot] = x0; this.exY0[slot] = y0;
     this.exX1[slot] = x1; this.exY1[slot] = y1;
@@ -431,9 +466,17 @@ export class Medium {
     for (let e = 0; e < MAX_EXCITATIONS; e++) {
       if (!this.exActive[e]) continue;
       const t = this.exT[e], len = this.exLen[e];
-      // Raised-cosine envelope: energy fades in and out, no clicks.
-      const env = 0.5 - 0.5 * Math.cos((2 * Math.PI * (t + 0.5)) / len);
-      const a = this.exAmp[e] * gain * env;
+      let a;
+      if (this.exKind[e] === KIND_NOISE) {
+        // Sine envelope (half-overlapped strokes sum to constant power) times
+        // uniform noise scaled to unit variance.
+        const env = Math.sin((Math.PI * (t + 0.5)) / len);
+        a = this.exAmp[e] * gain * env * (this.rand() - 0.5) * 3.4641016151377544;
+      } else {
+        // Raised-cosine envelope: energy fades in and out, no clicks.
+        const env = 0.5 - 0.5 * Math.cos((2 * Math.PI * (t + 0.5)) / len);
+        a = this.exAmp[e] * gain * env;
+      }
       const base = e * KERNEL;
       const nx = this.exNx[e], ny = this.exNy[e];
       const ix = this.exIx[e], iy = this.exIy[e];
@@ -459,11 +502,11 @@ export class Medium {
 
   rand() {
     // xorshift32: deterministic per seed, allocation-free.
-    let x = this.rng;
+    let x = this.rng[0];
     x ^= x << 13; x >>>= 0;
     x ^= x >>> 17;
     x ^= x << 5; x >>>= 0;
-    this.rng = x;
+    this.rng[0] = x;
     return x / 4294967296;
   }
 }

@@ -6,6 +6,7 @@
 // it costs.
 
 import { Medium, PARAMS } from './medium.js';
+import { createRingBuffer, RingWriter, RingReader, EV_DROP } from './ring.js';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 
@@ -318,6 +319,24 @@ const worstCase = (m, i, r) => { // every excitation slot busy with long, wide s
   report(w.pct < 50, `32×32 worst case (all 16 excitations at once): ${w.us.toFixed(0)} µs/block, ${w.pct.toFixed(1)}%`, 'limit 50%');
   const idle = bench(32, () => {});
   report(idle.pct < 1, `32×32 asleep: ${idle.us.toFixed(1)} µs/block, ${idle.pct.toFixed(2)}%`, 'limit 1%');
+}
+
+// ---- 9. Event queue (page → audio thread) ----------------------------------
+console.log('\n9. Event queue');
+{
+  const sab = createRingBuffer(8);
+  const w = new RingWriter(sab), r = new RingReader(sab);
+  const seen = [];
+  const handler = (d, o) => seen.push(d[o + 1]);
+  let pushed = 0;
+  while (w.push(EV_DROP, pushed)) pushed++;
+  const full = pushed === 7; // one slot stays empty to tell full from empty
+  r.drain(handler);
+  for (let i = 0; i < 20; i++) { w.push(EV_DROP, 100 + i); if (i % 3 === 2) r.drain(handler); } // wrap around
+  r.drain(handler);
+  const expected = [...Array(7).keys(), ...Array.from({ length: 20 }, (_, i) => 100 + i)];
+  const inOrder = seen.length === expected.length && seen.every((v, i) => v === expected[i]);
+  report(full && inOrder, 'FIFO order, full detection, wrap-around', `${seen.length} events`);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll checks passed.');

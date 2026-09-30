@@ -120,6 +120,13 @@ export class Medium {
     this.target[i] = Math.min(p.max, Math.max(p.min, value));
   }
 
+  // Same as setParam, by index into PARAMS order (used by the audio-thread queue).
+  setParamIndex(i, value) {
+    if (!Number.isInteger(i) || i < 0 || i >= PARAM_KEYS.length || !Number.isFinite(value)) return;
+    const p = PARAMS[PARAM_KEYS[i]];
+    this.target[i] = Math.min(p.max, Math.max(p.min, value));
+  }
+
   // Jump parameters straight to their targets (offline use, tests).
   snapParams() {
     for (let i = 0; i < PARAM_KEYS.length; i++) this.current[i] = this.target[i];

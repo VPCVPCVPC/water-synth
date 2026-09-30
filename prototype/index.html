@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Water Synth Prototype</title>
+  <style>
+    :root {
+      --bg: #0b1016;
+      --fg: #c9d6e2;
+      --muted: #6f8294;
+      --surface: #0f1822;
+      --edge: #1e2c3a;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+      font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    main { min-height: 100%; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 12px; padding: 16px; }
+    #surface { width: min(80vmin, 640px); aspect-ratio: 1; display: block;
+      background: var(--surface); border: 1px solid var(--edge); border-radius: 6px;
+      touch-action: none; cursor: crosshair; }
+    #status { color: var(--muted); font-size: 12px; min-height: 1.4em; }
+    #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(11, 16, 22, 0.88); color: var(--fg); font-size: 18px; border: 0;
+      cursor: pointer; width: 100%; }
+    #start[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <canvas id="surface" width="640" height="640" aria-label="Water surface: click to drop"></canvas>
+    <div id="status"></div>
+  </main>
+  <button id="start">Click to wake the water</button>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+# Build
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+*.vst3
+*.component
+*.clap
+
+# Dependencies
+libs/JUCE/
+node_modules/
+ui/dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.xcworkspace
+xcuserdata/
+
+# Test output
+tests/output/
+*.wav
+!tests/fixtures/*.wav
+
+# Local config
+.env
+.claude/settings.local.json

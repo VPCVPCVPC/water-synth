@@ -1,9 +1,9 @@
 // main.js — page side: starts audio, turns pointer input into gestures, and
 // draws the surface from frames the audio thread publishes.
 
-import { createRingBuffer, RingWriter, EV_DROP, EV_STROKE } from './ring.js';
+import { createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM } from './ring.js';
 import { createVisualBuffer, VisualReader, FRAME_HEADER } from './visuals.js';
-import { LISTEN_POINTS } from './medium.js';
+import { LISTEN_POINTS, PARAMS } from './medium.js';
 
 const SAMPLE_RATE = 48000; // the JS sim isn't real-time at 96k+; the port will fix this
 const GRID_SIZE = 32;
@@ -58,12 +58,108 @@ async function start() {
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 2048;
   node.connect(analyser);
-  window.waterDebug = { ctx, node, analyser, peak: () => peakOf(analyser), frame: () => lastFrame };
+  // `liveEnergy` reads shared memory directly, so it works even when the page
+  // is hidden and animation frames are paused.
+  const liveFrame = new Float32Array(visualBuffer, 8);
+  window.waterDebug = {
+    ctx, node, analyser,
+    peak: () => peakOf(analyser),
+    frame: () => lastFrame,
+    liveEnergy: () => liveFrame[0],
+  };
 
   await ctx.resume();
+  sendAllParams();
   status.textContent = `${ctx.sampleRate} Hz · ${GRID_SIZE}×${GRID_SIZE} · click to drop, drag to disturb`;
   requestAnimationFrame(draw);
 }
+
+// ---- physics controls (dev knobs, not instrument features) -----------------
+
+const PARAM_INDEX = Object.fromEntries(Object.keys(PARAMS).map((k, i) => [k, i]));
+const CONTROLS = [
+  { key: 'decay', label: 'decay', unit: 's', log: true, hint: 'how long broad motion rings' },
+  { key: 'hfDecay', label: 'fine-ripple decay', unit: 's', log: true, hint: 'how long sharp detail lasts (never longer than decay)' },
+  { key: 'waveSpeed', label: 'wave speed', unit: 'cells/s', log: true, hint: 'how fast ripples travel — also shifts the pitch of every resonance' },
+  { key: 'inputGain', label: 'input strength', unit: '×', log: false, hint: 'how hard each gesture pushes' },
+  { key: 'outputGain', label: 'volume', unit: '×', log: false, hint: 'listening level' },
+];
+const SLIDER_STEPS = 1000;
+const values = Object.fromEntries(CONTROLS.map((c) => [c.key, PARAMS[c.key].def]));
+const sliders = {};
+
+function toSlider(c, v) {
+  const { min, max } = PARAMS[c.key];
+  const f = c.log ? Math.log(v / min) / Math.log(max / min) : (v - min) / (max - min);
+  return Math.round(f * SLIDER_STEPS);
+}
+
+function fromSlider(c, s) {
+  const { min, max } = PARAMS[c.key];
+  const f = s / SLIDER_STEPS;
+  return c.log ? min * Math.pow(max / min, f) : min + f * (max - min);
+}
+
+function format(c, v) {
+  const digits = v >= 1000 ? 0 : v >= 10 ? 1 : 2;
+  return `${v.toFixed(digits)} ${c.unit}`;
+}
+
+function buildControls() {
+  const host = document.getElementById('controls');
+  for (const c of CONTROLS) {
+    const row = document.createElement('label');
+    row.className = 'control';
+    row.title = c.hint;
+    const name = document.createElement('span');
+    name.textContent = c.label;
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = 0;
+    input.max = SLIDER_STEPS;
+    input.value = toSlider(c, values[c.key]);
+    const readout = document.createElement('output');
+    readout.textContent = format(c, values[c.key]);
+    const hint = document.createElement('small');
+    hint.textContent = c.hint;
+    input.addEventListener('input', () => {
+      values[c.key] = fromSlider(c, Number(input.value));
+      readout.textContent = format(c, values[c.key]);
+      sendParam(c.key);
+    });
+    row.append(name, input, readout, hint);
+    host.append(row);
+    sliders[c.key] = { input, readout };
+  }
+  document.getElementById('defaults').addEventListener('click', () => {
+    for (const c of CONTROLS) {
+      values[c.key] = PARAMS[c.key].def;
+      sliders[c.key].input.value = toSlider(c, values[c.key]);
+      sliders[c.key].readout.textContent = format(c, values[c.key]);
+      sendParam(c.key);
+    }
+  });
+}
+
+// Parameters are state, not events: if the queue is full the latest value is
+// kept here and retried every animation frame until it gets through.
+const unsent = new Set();
+
+function sendParam(key) {
+  if (!events) return;
+  if (events.push(EV_PARAM, PARAM_INDEX[key], values[key])) unsent.delete(key);
+  else unsent.add(key);
+}
+
+function retryUnsentParams() {
+  for (const key of unsent) sendParam(key);
+}
+
+function sendAllParams() {
+  for (const c of CONTROLS) sendParam(c.key);
+}
+
+buildControls();
 
 // ---- gestures ---------------------------------------------------------------
 
@@ -120,6 +216,7 @@ let lastFrame = null;
 let energyLevel = 0, outputLevel = 0;
 
 function draw() {
+  if (unsent.size) retryUnsentParams();
   const frame = visuals.read();
   if (frame) {
     lastFrame = frame;

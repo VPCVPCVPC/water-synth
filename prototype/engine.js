@@ -7,12 +7,11 @@
 // "splash" knob). Splash always dies out: it is weaker than the crest that
 // caused it, rationed per second, and paid from a reservoir only gestures fill.
 //
-// Bell voices come in step 3; process() reports strikes with their sample
-// positions so the voices can start exactly on time. No allocation after
-// construction on the audio path.
+// process() reports strikes with their sample positions so the voices can
+// start exactly on time. No allocation after construction on the audio path.
 
 import { Surface, SURFACE_PARAMS, SIM_RATE } from './surface.js';
-import { Stones, StrikeBuffer, STONE_PARAMS, MAX_STONES } from './stones.js';
+import { Stones, StrikeBuffer, STONE_PARAMS, MAX_STONES, STRIKE_LIST } from './stones.js';
 
 export const ENGINE_PARAMS = {
   ...SURFACE_PARAMS,
@@ -45,7 +44,7 @@ export class Engine {
     this.samplesPerStep = sampleRate / SIM_RATE;
     this.surface = new Surface({ width, height });
     this.stones = new Stones();
-    this.strikes = new StrikeBuffer(256); // per audio block, for the voices
+    this.strikes = new StrikeBuffer(STRIKE_LIST); // per audio block, for the voices
     this.stepStrikes = new StrikeBuffer(MAX_STONES); // per simulation step
     this.seenResets = 0;
     this.gesturesDropped = 0; // diagnostics: queue full or beyond the horizon
@@ -176,6 +175,8 @@ export class Engine {
         this.stones.detect(this.surface, next, this.stepStrikes);
         this.splashFrom(this.stepStrikes);
         this.strikes.append(this.stepStrikes);
+      } else {
+        this.stones.calm();
       }
       if (this.splashTokens < SPLASH_BURST) this.splashTokens += SPLASH_RATE / SIM_RATE;
       this.reservoir = this.reservoir > 1e-12 ? this.reservoir * this.reservoirKeep : 0;

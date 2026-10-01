@@ -10,7 +10,14 @@
 //
 // Fixed capacity, allocated up front; detect() allocates nothing.
 
+import { SIM_RATE } from './surface.js';
+
 export const MAX_STONES = 128;
+// Every stone can ring at most once per simulation step, so this is how many
+// strikes one audio block's list must hold for the usual block sizes (the
+// instrument's per-tick list is HOLD_STEPS × MAX_STONES). A larger block than
+// this drops the excess, counted in StrikeBuffer.dropped.
+export const STRIKE_LIST = 4 * MAX_STONES;
 export const STONE_PARAMS = {
   // Crest height a stone needs to ring, in the units of Surface.drop strength.
   // At the default, one strength-1 drop rings ~25 stones over ~2 s (direct
@@ -18,6 +25,9 @@ export const STONE_PARAMS = {
   threshold: { min: 0.005, max: 0.3, def: 0.015 },
 };
 const REARM_FRACTION = 0.3; // must fall below threshold × this to ring again
+// How much the water around a stone is moving (for water-held sustain): a
+// peak follower of |height| that lets go over ~0.3 s of stream time.
+const MOTION_RELEASE = Math.exp(-1 / (0.3 * SIM_RATE)); // per simulation step
 const MIN_HZ = 8, MAX_HZ = 20000; // usable stone pitches; voices also drop partials above Nyquist
 
 const ARMED = 0, RISING = 1, SPENT = 2;
@@ -36,7 +46,22 @@ export class Stones {
     this.peakH = new Float64Array(MAX_STONES);
     this.beforePeakH = new Float64Array(MAX_STONES);
     this.peakStep = new Float64Array(MAX_STONES);
+    this.motion = new Float64Array(MAX_STONES);
     this.threshold = STONE_PARAMS.threshold.def;
+  }
+
+  // How much the water around stone i is moving: 0 calm → 1 when it's as
+  // high as a crest that rings it (smoothed, so it eases in and out).
+  wet(i) {
+    if (!(i < this.count) || !this.enabled[i]) return 0;
+    const m = this.motion[i] / this.threshold;
+    const x = m >= 1 ? 1 : m > 0 ? m : 0; // NaN → 0
+    return x * x * (3 - 2 * x);
+  }
+
+  // Each step while the water is asleep (flat): the stones' motion lets go.
+  calm() {
+    for (let i = 0; i < this.count; i++) this.motion[i] *= MOTION_RELEASE;
   }
 
   setThreshold(value) {
@@ -57,6 +82,7 @@ export class Stones {
     for (let i = 0; i < n; i++) {
       const ok = Number.isFinite(xs[i]) && Number.isFinite(ys[i]) &&
         Number.isFinite(hzs[i]) && hzs[i] >= MIN_HZ && hzs[i] <= MAX_HZ;
+      const wasEnabled = this.enabled[i];
       this.enabled[i] = ok ? 1 : 0;
       const x = ok ? xs[i] : 0.5, y = ok ? ys[i] : 0.5;
       const gx = surface.toGridX(x), gy = surface.toGridY(y);
@@ -64,9 +90,12 @@ export class Stones {
       this.x[i] = x; this.y[i] = y;
       this.gx[i] = gx; this.gy[i] = gy;
       this.hz[i] = ok ? hzs[i] : 0;
-      if (added) {
+      if (added || (ok && !wasEnabled)) {
+        // A stone that starts listening now (new, or enabled again after a bad
+        // pitch) begins from the water where it is: calm motion, no history.
         const h = surface.heightAt(gx, gy);
         this.prevH[i] = h;
+        this.motion[i] = 0;
         this.state[i] = h < this.threshold * REARM_FRACTION ? ARMED : SPENT;
       }
     }
@@ -102,8 +131,11 @@ export class Stones {
       if (!Number.isFinite(h)) { // guard: never strike on, or remember, bad water
         this.state[i] = SPENT;
         this.prevH[i] = 0;
+        this.motion[i] = 0;
         continue;
       }
+      const a = h < 0 ? -h : h, m = this.motion[i] * MOTION_RELEASE;
+      this.motion[i] = a > m ? a : m;
       switch (this.state[i]) {
         case ARMED:
           if (h >= th) {

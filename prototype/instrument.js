@@ -1,17 +1,27 @@
 // instrument.js — the whole instrument for one audio stream: the water and
-// its stones (engine.js) ringing one bell per stone (bells.js), plus the
-// handling of events from the page. The AudioWorklet and the Node checks both
+// its stones (engine.js) ringing one voice per stone (bells.js, voice.js),
+// plus the handling of events from the page. The AudioWorklet and the Node checks both
 // use this, so what's tested is what plays. No allocation after construction.
 
 import { Engine, ENGINE_PARAMS, ENGINE_PARAM_KEYS } from './engine.js';
 import { Bells, BELL_PARAMS } from './bells.js';
-import { MAX_STONES } from './stones.js';
-import { EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE } from './ring.js';
+import { MAX_STONES, StrikeBuffer } from './stones.js';
+import { VOICE_PARAMS, VOICE_KEYS, SHARED } from './voice.js';
+import {
+  EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE, EV_VOICE, EV_VOICE_OVERRIDE,
+} from './ring.js';
 import { GestureLooper, LOOPER_PARAMS, GESTURE_DROP, GESTURE_TRAIL } from './looper.js';
 import { FRAME_FLASH, FRAME_LOOPS, FRAME_HEIGHTS, frameLength } from './visuals.js';
 
-// Every knob, in the order the page sends parameter indices.
+// Every instrument-wide knob, in the order the page sends parameter indices.
+// Voice parameters travel separately (EV_VOICE), by index into VOICE_KEYS.
 export const PARAMS = { ...ENGINE_PARAMS, ...BELL_PARAMS, ...LOOPER_PARAMS };
+export { VOICE_PARAMS, VOICE_KEYS, SHARED };
+// Water-held sustain follows the water every few simulation steps. Each such
+// tick ends an audio segment, and every stone can ring once per simulation
+// step, so a segment's strike list holds HOLD_STEPS × MAX_STONES of them.
+const HOLD_STEPS = 4;
+const SEGMENT_STRIKES = HOLD_STEPS * MAX_STONES;
 const BELL_KEYS_END = Object.keys(ENGINE_PARAMS).length + Object.keys(BELL_PARAMS).length;
 export const PARAM_KEYS = Object.keys(PARAMS);
 
@@ -32,8 +42,12 @@ export class Instrument {
     this.rejectedCommits = 0; // diagnostics
     // Loudest audible strike per stone since the visuals last read it.
     this.flash = new Float32Array(MAX_STONES);
+    // Every strike of the last process() call (the engine's own list holds
+    // only the last segment's); step / SIM_RATE is its stream time.
+    this.strikes = new StrikeBuffer(SEGMENT_STRIKES);
     this.outputPeak = 0;
     this.frameEnergy = 0;
+    this.segmentGuards = 0; // diagnostics: a segment that would not have advanced
   }
 
   setParamIndex(i, value) {
@@ -43,9 +57,11 @@ export class Instrument {
     else this.looper.setParam(PARAM_KEYS[i], value);
   }
 
+  // An instrument knob, or a voice parameter by name (sets the shared voice).
   setParam(name, value) {
     const i = PARAM_KEYS.indexOf(name);
     if (i >= 0) this.setParamIndex(i, value);
+    else this.bells.setParam(name, value);
   }
 
   setStones(xs, ys, hzs, count) {
@@ -91,6 +107,8 @@ export class Instrument {
       case EV_LOOP: this.looper.action(d[o + 1], d[o + 2]); break;
       case EV_STONE_MOVE: e.stones.moveStone(e.surface, d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_PARAM: this.setParamIndex(d[o + 1], d[o + 2]); break;
+      case EV_VOICE: this.bells.voices.set(d[o + 1], d[o + 2], d[o + 3]); break;
+      case EV_VOICE_OVERRIDE: this.bells.voices.override(d[o + 1], d[o + 2] === 1); break;
       case EV_STONE: {
         const i = d[o + 1];
         if (Number.isInteger(i) && i >= 0 && i < MAX_STONES) {
@@ -114,23 +132,41 @@ export class Instrument {
   // Render n samples into outL / outR.
   process(outL, outR, n) {
     for (let i = 0; i < n; i++) outL[i] = outR[i] = 0;
-    const e = this.engine;
-    this.bells.applyPending();
+    if (!Number.isInteger(n) || n <= 0) return;
+    const e = this.engine, stones = e.stones, bells = this.bells;
+    this.strikes.clear();
+    bells.applyPending();
     this.looper.beginBlock();
-    e.process(n);
-    const st = e.strikes, stones = e.stones, bells = this.bells;
-    // Strikes come in time order. Render the bells up to each strike's sample,
-    // then strike, so every bell starts exactly on its sample.
+    // The block goes in segments that end just after each hold tick (every
+    // HOLD_STEPS simulation steps): the water and the stones run up to the
+    // tick, the bells catch up, then water-held sustain follows the water.
+    // Ticks fall on fixed stream samples, so the output never depends on
+    // how the stream is split into blocks.
     let pos = 0;
-    for (let i = 0; i < st.count; i++) {
-      const at = e.strikeSample(i);
-      if (at > pos) { bells.renderRange(outL, outR, pos, at); pos = at; }
-      const k = st.stone[i];
-      if (bells.strike(k, stones.hz[k], st.velocity[i], stones.x[k], at) && st.velocity[i] > this.flash[k]) {
-        this.flash[k] = st.velocity[i];
+    while (pos < n) {
+      const tick = (Math.floor(e.simStep / HOLD_STEPS) + 1) * HOLD_STEPS;
+      const tickAt = pos + e.stepSample(tick) - e.sample; // ≥ pos: that step hasn't run yet
+      let end = tickAt + 1 < n ? tickAt + 1 : n;
+      // The loop must always advance: a tick that lands at or behind `pos`
+      // (a rounding edge, a step already taken) must not stall the audio.
+      if (!(end > pos)) { end = n; this.segmentGuards++; }
+      e.process(end - pos);
+      const st = e.strikes, segment = pos;
+      this.strikes.append(st);
+      // Strikes come in time order. Render the bells up to each strike's
+      // sample, then strike, so every bell starts exactly on its sample.
+      for (let i = 0; i < st.count; i++) {
+        const at = segment + e.strikeSample(i);
+        if (at > pos) { bells.renderRange(outL, outR, pos, at); pos = at; }
+        const k = st.stone[i];
+        if (bells.strike(k, stones.hz[k], st.velocity[i], stones.x[k], at) && st.velocity[i] > this.flash[k]) {
+          this.flash[k] = st.velocity[i];
+        }
       }
+      bells.renderRange(outL, outR, pos, end);
+      pos = end;
+      if (e.simStep >= tick) bells.updateHold(stones);
     }
-    bells.renderRange(outL, outR, pos, n);
     bells.endBlock(outL, outR, n);
     let p = this.outputPeak;
     for (let i = 0; i < n; i++) {

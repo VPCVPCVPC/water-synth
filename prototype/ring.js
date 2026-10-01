@@ -14,6 +14,8 @@ export const EV_STONE = 4; // index, x, y, hz — staged until EV_STONES_COMMIT
 export const EV_STONES_COMMIT = 5; // count — the staged stones go live together
 export const EV_LOOP = 6; // layer, action (looper.js LOOP_*)
 export const EV_STONE_MOVE = 7; // index, x, y — move one stone now (no commit needed)
+export const EV_VOICE = 8; // target (−1 shared voice, else a stone), paramIndex (voice.js VOICE_KEYS), value
+export const EV_VOICE_OVERRIDE = 9; // stone, on (1: its own voice, copied from the shared one; 0: back to shared)
 
 const HEADER_BYTES = 8;
 

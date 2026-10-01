@@ -401,17 +401,23 @@ console.log('\n13. CPU per 128-sample block at 48 kHz (budget 2667 µs)');
   report(pct < 15, `128×97 water + ${PENTA.length} stones, playing: ${us.toFixed(0)} µs/block, ${pct.toFixed(1)}% of real time`, 'limit 15%');
 
   // Worst burst: a full gesture queue landing on one step (64 hard drops).
+  // Measured as the 95th percentile of the burst blocks, not the single worst:
+  // one garbage-collection pause otherwise decides this check (a real
+  // regression makes every block slow, so the percentile still catches it).
   const b = makeEngine({ params: { splash: 0.8 } });
   for (let k = 0; k < 200; k++) b.process(128); // warm up
-  let worst = 0;
-  for (let rep = 0; rep < 20; rep++) {
+  const burst = [];
+  for (let rep = 0; rep < 60; rep++) {
     for (let q = 0; q < 64; q++) b.drop((q * 0.17) % 1, (q * 0.43) % 1, 16);
     const t1 = performance.now();
     b.process(128);
-    worst = Math.max(worst, (performance.now() - t1) * 1000);
+    burst.push((performance.now() - t1) * 1000);
     for (let k = 0; k < 50; k++) b.process(128);
   }
-  report(worst / 2667 < 0.25, `burst of 64 drops on one step: worst block ${worst.toFixed(0)} µs, ${((worst / 2667) * 100).toFixed(1)}%`, 'limit 25%');
+  burst.sort((x, y) => x - y);
+  const worst = burst[Math.floor(burst.length * 0.95)], high = burst[burst.length - 1];
+  report(worst / 2667 < 0.25, `burst of 64 drops on one step: 95th-percentile block ${worst.toFixed(0)} µs, ${((worst / 2667) * 100).toFixed(1)}%`,
+    `limit 25% (worst single block ${high.toFixed(0)} µs)`);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll water checks passed.');

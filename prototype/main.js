@@ -4,11 +4,12 @@
 
 import {
   createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE,
+  EV_VOICE,
 } from './ring.js';
 import { createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_HEIGHTS, LOOP_FIELDS } from './visuals.js';
 import { buildPitches, noteLabel, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
-import { PARAMS, PARAM_KEYS } from './instrument.js';
+import { PARAMS as INSTRUMENT_PARAMS, PARAM_KEYS, VOICE_PARAMS, VOICE_KEYS, SHARED } from './instrument.js';
 import { REFERENCE_SPEED, SURFACE_W, SURFACE_H, SIM_RATE } from './surface.js';
 import { MAX_STONES } from './stones.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
@@ -194,7 +195,9 @@ function buildStoneControls() {
 
 // ---- knobs ---------------------------------------------------------------------------
 
-const values = Object.fromEntries(PARAM_KEYS.map((k) => [k, PARAMS[k].def]));
+// Instrument knobs and the shared voice's parameters, by name.
+const PARAMS = { ...INSTRUMENT_PARAMS, ...VOICE_PARAMS };
+const values = Object.fromEntries(Object.keys(PARAMS).map((k) => [k, PARAMS[k].def]));
 const SLIDER_STEPS = 1000;
 const logMap = (k) => ({
   to: (v) => Math.log(v / PARAMS[k].min) / Math.log(PARAMS[k].max / PARAMS[k].min),
@@ -272,7 +275,10 @@ function refreshReadouts() {
 const unsent = new Set();
 function sendParam(key) {
   if (!events) return;
-  if (events.push(EV_PARAM, PARAM_KEYS.indexOf(key), values[key])) unsent.delete(key);
+  const sent = PARAM_KEYS.includes(key)
+    ? events.push(EV_PARAM, PARAM_KEYS.indexOf(key), values[key])
+    : events.push(EV_VOICE, SHARED, VOICE_KEYS.indexOf(key), values[key]);
+  if (sent) unsent.delete(key);
   else unsent.add(key);
 }
 
@@ -429,7 +435,7 @@ async function startAudio() {
     liveLoops: () => Array.from({ length: LOOP_LAYERS }, (_, l) => Array.from(live.subarray(FRAME_LOOPS + l * LOOP_FIELDS, FRAME_LOOPS + (l + 1) * LOOP_FIELDS))),
   };
 
-  for (const k of PARAM_KEYS) sendParam(k);
+  for (const k of Object.keys(PARAMS)) sendParam(k);
   retune();
   requestAnimationFrame(draw); // draw even if iOS holds the resume back
   status.textContent = 'waking the water…';

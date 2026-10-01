@@ -34,7 +34,10 @@ class WaterProcessor extends AudioWorkletProcessor {
     const out = outputs[0];
     const L = out[0];
     if (!L) return true;
-    const R = out[1] || this.scratch;
+    // A mono device path gives no right channel; a host that hands the same
+    // array for both would get the limiter applied twice to it, so fall back
+    // to the scratch whenever the two are not distinct.
+    const R = out[1] && out[1] !== L ? out[1] : this.scratch;
     this.inst.process(L, R, L.length);
     this.samplesSinceFrame += L.length;
     if (this.publish && this.samplesSinceFrame >= this.frameSamples) {

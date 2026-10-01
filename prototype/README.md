@@ -189,6 +189,19 @@ C major pentatonic, C3–C6, 16 stones, today's bell.
 - Very rarely the display shows a frame mixed from two consecutive frames.
 - A very dense chromatic range at maximum splash and long bell decay can push
   into the limiter.
+- A hard-driven pond sits in the limiter, with the meter orange as normal rather
+  than as a fault. The level comes from how many stones the drops ring at once
+  and how long the sustain holds them ringing, not from any runaway: in the
+  test's never-calming water, hold on vs off is pre-limiter peak 1.98 vs 0.66
+  with the same stones ringing. How loud a busy pond should be is a taste
+  question for the listening gate.
+- All 128 stones ringing at once, each with a synth layer, costs about 510 µs
+  per 128-sample block at 48 kHz on the development machine (the budget is
+  2667 µs, and the check allows 30%). That figure is measured in its own
+  process: the same workload costs ~40% more when the process has already
+  rendered the earlier checks, which is not the engine's doing. A faded bell
+  or a silent synth layer drops out of the calculation, which is where the
+  headroom comes from.
 
 ## Checks
 
@@ -196,7 +209,7 @@ C major pentatonic, C3–C6, 16 stones, today's bell.
 cd prototype && npm run check
 ```
 
-About two minutes; four files:
+About three minutes; five files:
 
 - `check-tuning.mjs` — references (440, 432, any), scale building, maqam Rast,
   a non-octave scale, labels, bad input.
@@ -209,6 +222,21 @@ About two minutes; four files:
   at 44.1/48/192 kHz including A = 432 and a quarter tone, end to end through
   the event queue; no aliasing; decay; click-free re-strikes and retunes;
   tick tone independent of sample rate; limiter headroom; visuals frame; CPU.
+- `check-voices.mjs` — the synth layer in tune within 2 cents (sine, saw,
+  square; 44.1/48/192 kHz; osc 2 transposed) and band-limited at two pitches
+  where the folded-back partials cannot hide among the harmonics; envelopes and
+  no note-off; click-free re-strikes and retunes; harder strikes louder and
+  brighter (and not, with dynamics and strike brightness at 0); moving a knob
+  (synth level, oscillator mix, cutoff, resonance) and the filter's own fastest
+  strike sweep never step at a control refresh, by the output's phase-binned
+  curvature and by the running value's own trajectory; overrides through the
+  event path; water-held sustain holds while the water moves, lets go as it
+  calms, and always ends in silence; the bell settling over 30 s of held
+  strikes and still answering a strike by its hardness at that settled level;
+  the incremental hold decay tracking a rebuilt exp(); the mix stopping growing
+  over 30 s of looped drops in water that never calms; bit-identical at any
+  block size; extremes; bad input; a faded bell, a silent synth layer and a
+  guarded block segment; CPU.
 - `check-looper.mjs` — loops replay every gesture at the same place each pass
   while each pass plays a different phrase; overdub, mute, stop/restart,
   clear and clear all; quantize snap/lean/swing and whole bars on a shared
@@ -226,14 +254,15 @@ About two minutes; four files:
 | `looper.js` | The gesture looper and quantize. |
 | `tuning-limits.js` | What the page lets you choose (checked to always give playable stones). |
 | `engine.js` | Water + stones on one fixed clock; gestures; splash. |
-| `bells.js` | One water-struck bell per stone. |
+| `voice.js` | Voice parameters: one shared voice, an optional override per stone. |
+| `bells.js` | One voice per stone: the water-struck bell and the synth layer; water-held sustain. |
 | `instrument.js` | Everything for one audio stream; page events; visuals frames. |
 | `water-worklet.js` | Runs the instrument on the browser's audio thread. |
 | `ring.js` | Lock-free queue: page → audio thread. |
 | `visuals.js` | Lock-free frames: audio thread → page. |
 | `main.js`, `index.html` | The page: drawing, gestures, controls. |
 | `serve.mjs` | Local server with the headers shared memory needs; `--https` for devices. |
-| `check-*.mjs` | The checks. |
+| `check-*.mjs` | The checks (`check-lib.mjs`: FFT and pitch measuring shared by them). |
 
 ## Notes for the C++ port (Phase 3)
 
@@ -249,6 +278,42 @@ Collected from the real-time safety, DSP and tuning reviews of Phases 1a and 1b.
   long tails). Render each strike from its exact sample. Size the per-block
   strike list to `MAX_STONES × ceil(maxBlock / samplesPerStep)` or render per
   step; splash already reads a per-step list.
+- **Voices (Phase 1c):** the same structure ports directly —
+  - Every partial is a rotating phasor plus a per-sample decay. Give the bell a
+    capacity (the sum of the partials' magnitudes, which bounds the peak) *and*
+    let a hit drive it past that capacity by its own energy, bleeding the excess
+    back over ~0.1 s: a hard cap alone bounds the level correctly but swallows
+    re-strikes once the water holds the note, so the held note stops answering
+    how hard it is hit. The bleed is not what stops the runaway (the ring's own
+    held decay does that, settling near 4.9 with the bleed off); what it buys
+    is ~6 dB of headroom, so ordinary hits land in the transparent branch
+    instead of being scaled back. The only path that eats dynamics is that
+    hard-peak scale-back (`BELL_HARD_PEAK`): if it engages during play, raise
+    it or bleed faster — never accept it. The synth layer keeps a fixed
+    envelope cap (`SYNTH_PEAK`) with no bleed. Keep the tick uncapped.
+  - `level()` (the sum of the partials' magnitudes) is a phase-independent
+    *bound*, not a loudness: a hit at capacity can reduce it while adding
+    energy. Never use it to measure loudness, energy or drift.
+  - Read the voice's targets (filter cutoff and resonance, synth level,
+    oscillator mix) every N samples but follow them **per sample** with a
+    one-pole glide; a control-rate step on a ringing note is audible as a
+    zipper, and the filter's own post-strike sweep is the worst case. Drive the
+    filter envelope per sample and treat the glide's target as control-rate.
+  - Round filter state below ~1e-15 to zero: subnormals cost badly on Intel.
+    Retire the bell once its level is below hearing (the synth layer may ring
+    on), and retire the synth layer once no oscillator has gain and the filter
+    has drained — otherwise both keep costing CPU while silent.
+  - Water-held sustain rebuilds the partial decays when the water clock moves
+    the hold factor: scale `exp(lnd·Δf)` from where the decay was (its own
+    two-term series) rather than calling `exp` per partial per update.
+  - Voice parameters are state, so prefer shared atomics/APVTS over queued
+    events; an override per stone is a *copy* of the shared voice (a slot
+    index), and switching it on or off mid-note must reach a ringing stone at
+    the next block.
+  - The block-splitting loop (water → hold tick → voices) must always advance:
+    clamp the segment end so a tick that lands at or behind the cursor cannot
+    spin. Validate every float → int conversion on the voice path (strike
+    sample offsets, parameter indices and targets).
 - **Water:** `float` is fine for the grid with `juce::ScopedNoDenormals`; sum
   `energy()` in double. Craters are added at rest (to both height arrays) with
   the cached Laplacian refreshed over the window.

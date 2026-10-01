@@ -59,15 +59,18 @@ A stone struck while still ringing rings on: it is one object, not a sampler.
 ### Voices: what a struck stone sounds like
 The default voice is the **water-struck bell**: clear, tuned resonant tones with
 a soft bell/marimba-like decay and a short "tick" of water touching the stone.
-The voice can be designed — oscillators, filter, envelopes (Phase 1c) — but
-the water still decides when, which, and how hard: how hard a stone is struck
-shapes its loudness and brightness by default.
+The voice can be designed (Phase 1c) — but the water still decides when,
+which, and how hard: how hard a stone is struck shapes its loudness and
+brightness by default. A voice is the **bell** (its partials, decay, tick and
+brightness, all editable) plus an optional **synth layer** (two oscillators →
+filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
 - All stones share one voice; any single stone can be given an override.
 - **Stones have no note-off.** Every voice falls silent on its own. A voice may
   sustain only while the water around its stone keeps moving, releasing as the
   water calms — the water holds the note, never the player.
-- No factory presets or preset browser. Saving the session's state is fine;
-  whether to save and recall your own voices is an open decision for Dash.
+- No factory presets or preset browser. Saving the session's state is fine.
+  Saving and recalling your own voices: not yet — revisit after Dash has
+  played with the editor (Oct 2026).
 - Phase (Phase 6) will later act on these voice parameters; the voice editor is
   a sound-design surface, not the Phase mechanism.
 
@@ -83,8 +86,10 @@ shapes its loudness and brightness by default.
   still decided by distance and the water.
 - **Audio looper** — "a tape beside the pond": records the instrument's output
   and layers fixed audio, like a loop pedal. The one feature that isn't the
-  water; mainly for the standalone app. Stopping, muting and clearing fade,
-  never cut.
+  water; mainly for the standalone app. Several tape tracks of their own
+  lengths, each with record, overdub, mute and clear (Dash, Oct 2026); they
+  record the water's sound, not other tapes. Stopping, muting and clearing
+  fade, never cut.
 
 ### Prototype findings (Phase 1a, Sept 2026)
 An audio-rate 2D wave grid read directly as audio sounded like a metal plate,
@@ -101,6 +106,10 @@ layout (pitch-by-position retired), and played with a much slower flow
 The 1b design choices stand: a crest passing a threshold rings a stone;
 flow as time-lapse; splash bounded by what you play; re-strikes that add to
 a ringing stone (sometimes damping it).
+
+### Listening results (Phase 1c A, Oct 2026)
+Listening check 1 (loops, quantize, stone controls, touch): Dash — "it seems
+good." Batch A's choices stand.
 
 ### Gestures (how you disturb it)
 | Gesture | What it does to the medium |
@@ -249,6 +258,6 @@ Inside `processBlock` and anything it calls:
 - How Phase changes the surface and the bell voices (ice / liquid / vapor).
 - How Vessel works now: outside audio disturbing the water, or becoming the
   stones' voice.
-- Whether to save and recall voices you've designed (no factory presets either way).
+- Whether to save and recall voices you've designed (not yet; revisit after playing the editor).
 - How camera / body motion maps to gestures, and when camera input is scheduled.
 - Instrument name.

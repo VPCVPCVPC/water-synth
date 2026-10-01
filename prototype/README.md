@@ -155,11 +155,17 @@ when the stones do — possibly on a different note.
 - *Water-held sustain*: while the water around a stone keeps moving, its note
   decays more slowly; as the water calms it lets go. The water holds the note,
   never you.
-- *Synth layer* (folded away; off until you raise its level): two oscillators (sine →
+- *Synth layer*: the **synth layer** knob (off until you raise it — raising
+  it opens the rest), then **shape the synth layer**: two oscillators (sine →
   triangle → saw → square), osc 2's pitch and detune, their mix, a low-pass
   that follows the stone's pitch and opens with each strike (cutoff, resonance,
   filter envelope and its decay), attack and decay. No note-off: it fades on
   its own like the bell.
+
+**Saved voices** — name the voice you're editing and **save voice** (the same
+name **replace**s it). Each saved voice has **use** (puts it on the voice
+you're editing; a stone that still follows the shared voice gets its own) and
+**delete** (tap twice). They're kept in this browser; nothing ships in the list.
 
 Edits reach stones that are already ringing. **… voice back to defaults**
 resets only the voice the knobs show. **Volume** and **water knobs back to
@@ -210,11 +216,14 @@ voice editor untouched you hear exactly the Phase 1c bell.
     above 0.9; the orange meter shows it.)
 15. Did the voice editor pull you away from playing the water? Which knobs
     would you never touch mid-performance?
-16. After shaping a voice, did you want to keep it for next time? (Saving
-    voices is your open decision.)
+16. After shaping a voice, did you want to keep it for next time? (Answered:
+    yes — now **save voice**.)
 17. On the iPad/phone: are the voice and tape controls usable in the drawer?
 
 **Since your check-2 notes (Phase 1d):**
+
+0. **The synth layer** is now in plain view: the **synth layer** knob under
+   water-held sustain. Raise it — does bell + synth work?
 
 18. **Quantize, now felt:** turn it on (it snaps by default) and play to the
     pulsing rim. Do touches that wait for the beat feel like the water waiting,
@@ -240,8 +249,9 @@ voice editor untouched you hear exactly the Phase 1c bell.
 - **Retunes** — a ringing stone crossfades its old pitch out over 100 ms when
   next struck; the alternative is to let the old ring decay under the new one.
 - **Whether the water can move stones** (you can; the water can't, yet).
-- **Saving voices** — not yet (your call, Oct 2026); revisit after this check.
-- **Overrides on re-layout** — they belong to a stone's slot (question 9).
+- **Saving voices** — yes (Oct 2026): your own, by name, in this browser.
+- **Overrides on retune** — kept (Oct 2026); they belong to a stone's slot.
+- **Tapes** record only the water (Oct 2026).
 
 ### Provisional choices (not decisions)
 

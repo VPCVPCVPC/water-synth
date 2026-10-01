@@ -62,8 +62,14 @@
     .control output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
     .control small, .note { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
     .control.off { opacity: 0.45; }
-    details.group > summary { cursor: pointer; color: var(--muted); font-size: 12px; min-height: 36px;
-      display: flex; align-items: center; }
+    details.group > summary { cursor: pointer; font-size: 12px; min-height: 36px; display: flex; align-items: center;
+      border: 1px solid var(--edge); border-radius: 6px; padding: 4px 8px; background: #111a24; }
+    details.group[open] > summary { border-color: var(--accent); }
+    input[type=text] { background: #111a24; color: var(--fg); border: 1px solid var(--edge); border-radius: 6px;
+      padding: 6px 8px; font: inherit; min-height: 36px; }
+    .saved { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; font-size: 12px; }
+    .saved > span { overflow-wrap: anywhere; }
+    .saved + .saved { margin-top: 6px; }
     .group-body { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
     .layer { display: grid; grid-template-columns: 1.5em 1fr; gap: 4px 8px; align-items: center; }
     .layer .name { color: var(--muted); font-size: 12px; }
@@ -77,7 +83,7 @@
     .quantized[hidden] { display: none; }
     @media (pointer: coarse) {
       /* 16px stops iOS Safari zooming in when a field is focused. */
-      select, input, button { min-height: 44px; font-size: 16px; }
+      select, input, input[type=text], button { min-height: 44px; font-size: 16px; }
       .control input[type=range] { min-height: 36px; }
     }
     #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -169,11 +175,19 @@
           <div id="voice-bell-controls" style="display: contents"></div>
           <div id="voice-strike-controls" style="display: contents"></div>
           <div id="voice-sustain-controls" style="display: contents"></div>
-          <details class="group">
-            <summary>synth layer (off until its level is raised)</summary>
+          <div id="voice-synthlevel-controls" style="display: contents"></div>
+          <details class="group" id="synth-group">
+            <summary>shape the synth layer — oscillators, filter, envelope</summary>
             <div id="voice-synth-controls" class="group-body"></div>
           </details>
           <button id="voice-defaults" type="button">shared voice back to defaults</button>
+          <div class="row">
+            <input id="voice-name" type="text" maxlength="40" placeholder="name this voice" aria-label="name for the voice to save" style="flex: 1; min-width: 8em">
+            <button id="voice-save" type="button">save voice</button>
+          </div>
+          <div id="voice-saved"></div>
+          <div class="note" id="voice-saved-note" aria-live="polite">Your saved voices live in this browser. "use" puts one on the voice
+            you're editing (a stone that still follows the shared voice gets its own).</div>
           <label class="row" style="color: var(--muted); font-size: 12px">
             <input id="labels" type="checkbox"> show note names (dev aid)</label>
         </fieldset>

@@ -68,11 +68,14 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
 - **Stones have no note-off.** Every voice falls silent on its own. A voice may
   sustain only while the water around its stone keeps moving, releasing as the
   water calms — the water holds the note, never the player.
-- No factory presets or preset browser. Saving the session's state is fine.
-  Saving and recalling your own voices: not yet — revisit after Dash has
-  played with the editor (Oct 2026).
-- Phase (prototyped in build phase 2) will act on these voice parameters; the voice editor is
-  a sound-design surface, not the Phase mechanism.
+- No factory presets or preset browser. Saving the session's state is fine,
+  and you can save and recall your own voices (Dash, Oct 2026): a voice you
+  designed, by name, onto the shared voice or any stone. Nothing ships in
+  the list.
+- A stone's own voice stays with the stone when you retune (Dash, Oct 2026).
+- The Phase mode (prototyped in build phase 2) will act on these voice
+  parameters; the voice editor is a sound-design surface, not the Phase
+  mechanism.
 
 ### Layers: loopers
 - **Gesture looper** — records disturbances (drops and drags, with their
@@ -121,10 +124,12 @@ good." Batch A's choices stand.
 ### Listening results (Phase 1c B, Oct 2026)
 From listening check 2 so far: tapes must keep the tuning they were recorded
 in (they do); Flow needs a much lower floor (~30 s to cross the pond);
-quantize was hard to notice (now: live touches too, snap by default, a
-visible beat); tapes follow the beat in whole-beat lengths. The interface
-should become fun and pretty — and a near-final web prototype comes before
-the app, for user testing (see Build phases).
+quantize was hard to notice (now: live touches too, snap by default, a visible
+beat); tapes follow the beat in whole-beat lengths. Water-held sustain:
+"great". Tapes record only the water; a stone's own voice stays through
+retunes; voices should be savable. The synth layer was too hidden to find. The
+interface should become fun and pretty — and a near-final web prototype comes
+before the app, for user testing (see Build phases).
 
 ### Gestures (how you disturb it)
 | Gesture | What it does to the medium |
@@ -283,6 +288,5 @@ Inside `processBlock` and anything it calls:
 - How Phase changes the surface and the bell voices (ice / liquid / vapor).
 - How Vessel works now: outside audio disturbing the water, or becoming the
   stones' voice.
-- Whether to save and recall voices you've designed (not yet; revisit after playing the editor).
 - How camera / body motion maps to gestures, and when camera input is scheduled.
 - Instrument name.

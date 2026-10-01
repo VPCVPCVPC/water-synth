@@ -344,10 +344,7 @@ function buildVoiceControls() {
       voiceValues.delete(voiceTarget);
       sendOverride(voiceTarget, 0);
     } else {
-      // An override starts as a copy of the shared voice, as the audio thread makes it.
-      voiceValues.set(voiceTarget, { ...voiceValues.get(SHARED) });
-      overridden.add(voiceTarget);
-      sendOverride(voiceTarget, 1);
+      giveOwnVoice(voiceTarget);
     }
     refreshVoice();
   });
@@ -414,11 +411,107 @@ function sendOverride(stone, on) {
   if (on) for (const k of VOICE_KEYS) sendVoiceTo(stone, k);
 }
 function sendVoice(key) { sendVoiceTo(voiceTarget, key); }
+// An override starts as a copy of the shared voice, as the audio thread makes it.
+function giveOwnVoice(stone) {
+  voiceValues.set(stone, { ...voiceValues.get(SHARED) });
+  overridden.add(stone);
+  sendOverride(stone, 1);
+}
+
 function setVoiceValue(key, v) {
   const voice = voiceValues.get(voiceTarget);
   if (!voice) return; // not an override: its knobs are disabled
+  // Raising the synth layer from off opens its controls, so it can be found.
+  if (key === 'synthLevel' && v > 0 && !(voice[key] > 0)) document.getElementById('synth-group').open = true;
   voice[key] = v;
   sendVoice(key);
+}
+
+// ---- saved voices ---------------------------------------------------------------------
+//
+// Voices you designed, by name, kept in this browser (no presets ship). "use"
+// puts one on the voice the editor shows; a stone that still follows the
+// shared voice gets its own first. Storage can be missing or full (a private
+// window): the page works without it and says so.
+
+const SAVED_KEY = 'water-synth.voices';
+const SAVED_NOTE = 'Your saved voices live in this browser. "use" puts one on the voice you\'re editing (a stone that still follows the shared voice gets its own).';
+// Saved voices as a Map (names are any text — "constructor" or "__proto__"
+// included — so never keys on a plain object). Entries that aren't objects
+// are dropped. null when storage can't be read.
+function loadSaved() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVED_KEY) || '[]');
+    const pairs = Array.isArray(raw) ? raw : Object.entries(raw || {}); // [[name, voice], …] (or an older object)
+    return new Map(pairs.filter((p) => Array.isArray(p) && typeof p[0] === 'string' && p[1] && typeof p[1] === 'object'));
+  } catch { return null; }
+}
+function storeSaved(all) {
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify([...all])); return true; } catch { return false; }
+}
+// A saved voice back to values: only known keys, clamped; anything that isn't
+// a number defaults.
+function voiceFrom(saved) {
+  const out = {};
+  for (const k of VOICE_KEYS) {
+    const p = VOICE_PARAMS[k], v = saved[k];
+    out[k] = typeof v === 'number' && Number.isFinite(v) ? Math.min(p.max, Math.max(p.min, v)) : p.def;
+  }
+  return out;
+}
+function useVoice(saved) {
+  if (voiceTarget !== SHARED && !overridden.has(voiceTarget)) giveOwnVoice(voiceTarget); // its own voice first
+  const voice = voiceValues.get(voiceTarget);
+  if (!voice) return;
+  Object.assign(voice, voiceFrom(saved));
+  for (const k of VOICE_KEYS) sendVoiceTo(voiceTarget, k);
+  if (voice.synthLevel > 0) document.getElementById('synth-group').open = true; // opens, never closes
+  refreshVoice();
+}
+function buildSavedVoices() {
+  const name = document.getElementById('voice-name'), save = document.getElementById('voice-save');
+  const list = document.getElementById('voice-saved'), note = document.getElementById('voice-saved-note');
+  const say = (ok, msg) => { note.textContent = ok ? SAVED_NOTE : msg; };
+  const render = () => {
+    const all = loadSaved();
+    if (!all) say(false, "This browser isn't keeping data (a private window?), so voices can't be saved here.");
+    const names = all ? [...all.keys()].sort((a, b) => a.localeCompare(b)) : [];
+    list.replaceChildren(...names.map((n) => {
+      const row = document.createElement('div');
+      row.className = 'saved';
+      const label = document.createElement('span');
+      label.textContent = n;
+      const use = document.createElement('button'), del = document.createElement('button');
+      use.type = del.type = 'button';
+      use.textContent = 'use'; del.textContent = 'delete';
+      use.setAttribute('aria-label', `use the voice ${n}`);
+      use.addEventListener('click', () => { const v = loadSaved()?.get(n); if (v) useVoice(v); });
+      confirmButton(del, () => {
+        const a = loadSaved();
+        if (!a) return;
+        a.delete(n);
+        say(storeSaved(a), "Couldn't delete it (this browser isn't keeping data).");
+        render();
+      });
+      row.append(label, use, del);
+      return row;
+    }));
+    const n = name.value.trim();
+    save.textContent = n && all && all.has(n) ? 'replace' : 'save voice';
+    save.disabled = !n || !all;
+  };
+  name.addEventListener('input', render);
+  name.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) save.click(); });
+  save.addEventListener('click', () => {
+    const n = name.value.trim(), all = loadSaved();
+    if (!n || !all) return;
+    all.set(n, { ...voiceOf(voiceTarget) });
+    const ok = storeSaved(all);
+    say(ok, "Couldn't save here (this browser isn't keeping data — a private window?).");
+    if (ok) name.value = '';
+    render();
+  });
+  render();
 }
 
 // A voice knob's value maps are the voice's own ranges.
@@ -444,7 +537,7 @@ const VOICE_KNOBS = [
   // The water holds the note.
   { group: 'voice-sustain', key: 'hold', label: 'water-held sustain', map: voiceLin('hold'), show: (v) => (v < 0.02 ? 'off' : pct(v)), hint: "how much the moving water slows the note's decay — the water holds it, never the player" },
   // The synth layer, silent until its level is raised.
-  { group: 'voice-synth', key: 'synthLevel', label: 'synth level', map: voiceLin('synthLevel'), show: (v) => (v < 0.01 ? 'off' : v.toFixed(2)), hint: 'the synth layer under the bell (0 = the bell alone)' },
+  { group: 'voice-synthlevel', key: 'synthLevel', label: 'synth layer', map: voiceLin('synthLevel'), show: (v) => (v < 0.01 ? 'off' : v.toFixed(2)), hint: 'a synth under the bell — off until you raise it; shape it below' },
   { group: 'voice-synth', key: 'osc1Shape', label: 'osc 1 shape', map: voiceLin('osc1Shape'), show: (v) => shapeName(v), hint: 'sine → triangle → saw → square (morphs between)' },
   { group: 'voice-synth', key: 'osc2Shape', label: 'osc 2 shape', map: voiceLin('osc2Shape'), show: (v) => shapeName(v), hint: 'sine → triangle → saw → square (morphs between)' },
   { group: 'voice-synth', key: 'osc2Pitch', label: 'osc 2 pitch', map: voiceLin('osc2Pitch'), show: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(0)} st`, hint: "semitones from the stone's pitch" },
@@ -635,6 +728,7 @@ function updateLoops(frame) {
 buildTuningControls();
 buildKnobs();
 buildVoiceControls();
+buildSavedVoices();
 buildLoopControls();
 buildTapeControls();
 buildStoneControls();

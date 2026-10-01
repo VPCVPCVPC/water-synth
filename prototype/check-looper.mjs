@@ -269,6 +269,9 @@ console.log('\n5. Limits and bad input');
     lp.finishTake(l, s0 + 1000);
   }
   const L = new Float32Array(128), R = new Float32Array(128);
+  // Warm up through one full loop pass first: the first time a code path runs,
+  // JavaScript compiles it (a one-off spike the C++ port won't have).
+  for (let k = 0; k < 400; k++) r.inst.process(L, R, 128);
   let worst = 0;
   for (let k = 0; k < 2000; k++) { const t0 = performance.now(); r.inst.process(L, R, 128); worst = Math.max(worst, performance.now() - t0); }
   report(worst < 2.67 * 0.6, `4 layers × 1000 trails snapped onto a few steps: worst block ${worst.toFixed(2)} ms`, 'limit 60% of the block');

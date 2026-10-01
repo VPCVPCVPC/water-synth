@@ -1,1 +1,8 @@
-{ "private": true, "type": "module" }
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node check-tuning.mjs && node check-water.mjs && node check-bells.mjs",
+    "serve": "node serve.mjs"
+  }
+}

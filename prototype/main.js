@@ -1,31 +1,21 @@
-// main.js — page side: starts audio, turns pointer input into gestures, and
-// draws the surface from frames the audio thread publishes.
+// main.js — page side: starts audio, sends the stones, turns pointer input
+// into gestures. (Phase 1b step 3: the water isn't drawn yet — step 4 adds
+// ripples, controls and stone flashes.)
 
-import { createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM } from './ring.js';
-import { createVisualBuffer, VisualReader, FRAME_HEADER } from './visuals.js';
-import { LISTEN_POINTS, PARAMS } from './medium.js';
+import { createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_STONE, EV_STONES_COMMIT } from './ring.js';
+import { buildPitches, SCALES } from './tuning.js';
+import { stonePositions } from './layout.js';
 
-const SAMPLE_RATE = 48000; // the JS sim isn't real-time at 96k+; the port will fix this
-const GRID_SIZE = 32;
-
-// Display: overall brightness follows the mean energy density on a dB scale
-// (REF ≈ just after a fresh drop, fading to dark RANGE_DB below it). Waves
-// cross the grid in a few ms, so energy spreads everywhere almost at once;
-// the local pattern (standing waves, where energy pools) is shown as contrast
-// around that mean, exaggerated by CONTRAST so it reads.
-const DENSITY_REF = 3e-5;
-const RANGE_DB = 60;
-const CONTRAST = 0.18; // level change per doubling of local/mean density
-const DROP_ENERGY = 3.6e-2; // total energy of one default drop, for the meter
+const SAMPLE_RATE = 48000;
+const ASPECT = 97 / 128; // the water's shape (height / width)
 
 const surface = document.getElementById('surface');
 const status = document.getElementById('status');
 const startButton = document.getElementById('start');
-const energyBar = document.getElementById('energy');
-const outputBar = document.getElementById('output');
 
 let events = null;
-let visuals = null;
+let stones = { xs: [], ys: [], hzs: [], count: 0 };
+let stonesUnsent = false;
 
 startButton.addEventListener('click', start, { once: true });
 
@@ -36,18 +26,16 @@ async function start() {
     return;
   }
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule('medium-worklet.js');
+  await ctx.audioWorklet.addModule('water-worklet.js');
 
-  const eventBuffer = createRingBuffer(256);
-  const visualBuffer = createVisualBuffer(GRID_SIZE * GRID_SIZE);
+  const eventBuffer = createRingBuffer(1024);
   events = new RingWriter(eventBuffer);
-  visuals = new VisualReader(visualBuffer);
   const seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1; // fresh every session
-  const node = new AudioWorkletNode(ctx, 'medium', {
+  const node = new AudioWorkletNode(ctx, 'water', {
     numberOfInputs: 0,
     numberOfOutputs: 1,
     outputChannelCount: [2],
-    processorOptions: { eventBuffer, visualBuffer, seed, size: GRID_SIZE },
+    processorOptions: { eventBuffer, seed },
   });
   node.connect(ctx.destination);
   node.onprocessorerror = () => {
@@ -58,112 +46,35 @@ async function start() {
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 2048;
   node.connect(analyser);
-  // `liveEnergy` reads shared memory directly, so it works even when the page
-  // is hidden and animation frames are paused.
-  const liveFrame = new Float32Array(visualBuffer, 8);
-  window.waterDebug = {
-    ctx, node, analyser,
-    peak: () => peakOf(analyser),
-    frame: () => lastFrame,
-    liveEnergy: () => liveFrame[0],
-  };
+  window.waterDebug = { ctx, node, analyser, peak: () => peakOf(analyser), stones: () => stones };
 
+  setStones(buildPitches({ scale: SCALES.pentatonicMajor, root: 60, low: 48, high: 84 }), 'scattered');
   await ctx.resume();
-  sendAllParams();
-  status.textContent = `${ctx.sampleRate} Hz · ${GRID_SIZE}×${GRID_SIZE} · click to drop, drag to disturb`;
-  requestAnimationFrame(draw);
+  status.textContent = `${ctx.sampleRate} Hz · ${stones.count} stones · click to drop, drag to disturb`;
+  requestAnimationFrame(frame);
 }
 
-// ---- physics controls (dev knobs, not instrument features) -----------------
+// ---- stones ---------------------------------------------------------------------
 
-const PARAM_INDEX = Object.fromEntries(Object.keys(PARAMS).map((k, i) => [k, i]));
-const CONTROLS = [
-  { key: 'decay', label: 'decay', unit: 's', log: true, hint: 'how long broad motion rings' },
-  { key: 'hfDecay', label: 'fine-ripple decay', unit: 's', log: true, hint: 'how long sharp detail lasts (never longer than decay)' },
-  { key: 'waveSpeed', label: 'wave speed', unit: 'cells/s', log: true, hint: 'how fast ripples travel — also shifts the pitch of every resonance' },
-  { key: 'inputGain', label: 'input strength', unit: '×', log: false, hint: 'how hard each gesture pushes' },
-  { key: 'outputGain', label: 'volume', unit: '×', log: false, hint: 'listening level' },
-];
-const SLIDER_STEPS = 1000;
-const values = Object.fromEntries(CONTROLS.map((c) => [c.key, PARAMS[c.key].def]));
-const sliders = {};
-
-function toSlider(c, v) {
-  const { min, max } = PARAMS[c.key];
-  const f = c.log ? Math.log(v / min) / Math.log(max / min) : (v - min) / (max - min);
-  return Math.round(f * SLIDER_STEPS);
+function setStones(pitches, layout) {
+  const { xs, ys } = stonePositions(pitches.length, layout);
+  stones = { xs, ys, hzs: pitches.map((p) => p.hz), count: pitches.length };
+  sendStones();
 }
 
-function fromSlider(c, s) {
-  const { min, max } = PARAMS[c.key];
-  const f = s / SLIDER_STEPS;
-  return c.log ? min * Math.pow(max / min, f) : min + f * (max - min);
-}
-
-function format(c, v) {
-  const digits = v >= 1000 ? 0 : v >= 10 ? 1 : 2;
-  return `${v.toFixed(digits)} ${c.unit}`;
-}
-
-function buildControls() {
-  const host = document.getElementById('controls');
-  for (const c of CONTROLS) {
-    const row = document.createElement('label');
-    row.className = 'control';
-    row.title = c.hint;
-    const name = document.createElement('span');
-    name.textContent = c.label;
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = 0;
-    input.max = SLIDER_STEPS;
-    input.value = toSlider(c, values[c.key]);
-    const readout = document.createElement('output');
-    readout.textContent = format(c, values[c.key]);
-    const hint = document.createElement('small');
-    hint.textContent = c.hint;
-    input.addEventListener('input', () => {
-      values[c.key] = fromSlider(c, Number(input.value));
-      readout.textContent = format(c, values[c.key]);
-      sendParam(c.key);
-    });
-    row.append(name, input, readout, hint);
-    host.append(row);
-    sliders[c.key] = { input, readout };
-  }
-  document.getElementById('defaults').addEventListener('click', () => {
-    for (const c of CONTROLS) {
-      values[c.key] = PARAMS[c.key].def;
-      sliders[c.key].input.value = toSlider(c, values[c.key]);
-      sliders[c.key].readout.textContent = format(c, values[c.key]);
-      sendParam(c.key);
-    }
-  });
-}
-
-// Parameters are state, not events: if the queue is full the latest value is
-// kept here and retried every animation frame until it gets through.
-const unsent = new Set();
-
-function sendParam(key) {
+// Each stone is one event, then a commit makes them live together. If the
+// queue is full, try the whole set again next frame.
+function sendStones() {
   if (!events) return;
-  if (events.push(EV_PARAM, PARAM_INDEX[key], values[key])) unsent.delete(key);
-  else unsent.add(key);
+  for (let i = 0; i < stones.count; i++) {
+    if (!events.push(EV_STONE, i, stones.xs[i], stones.ys[i], stones.hzs[i])) { stonesUnsent = true; return; }
+  }
+  stonesUnsent = !events.push(EV_STONES_COMMIT, stones.count);
 }
 
-function retryUnsentParams() {
-  for (const key of unsent) sendParam(key);
-}
+// ---- gestures ---------------------------------------------------------------------
 
-function sendAllParams() {
-  for (const c of CONTROLS) sendParam(c.key);
-}
-
-buildControls();
-
-// ---- gestures ---------------------------------------------------------------
-
-let drag = null; // { x, y, t } of the last pointer sample while pressed
+let drag = null; // last pointer sample while pressed
 
 surface.addEventListener('pointerdown', (e) => {
   if (!events) return;
@@ -180,14 +91,8 @@ surface.addEventListener('pointermove', (e) => {
   const p = toSurface(e);
   const dt = (e.timeStamp - drag.t) / 1000;
   if (dt < 0.004) return; // let very fast event streams accumulate a little
-  const speed = Math.hypot(p.x - drag.x, p.y - drag.y) / dt; // surface-widths per second
-  if (speed > 0) {
-    // Each segment's wake lasts twice the time between samples, so segments
-    // overlap by half and add up to a steady stream.
-    // (Capped generously so slow pointer streams still overlap, not burst.)
-    const seconds = Math.min(0.25, Math.max(0.008, 2 * dt));
-    events.push(EV_STROKE, drag.x, drag.y, p.x, p.y, Math.min(16, speed), seconds);
-  }
+  const speed = Math.sqrt((p.x - drag.x) ** 2 + ((p.y - drag.y) * ASPECT) ** 2) / dt; // surface-widths per second
+  if (speed > 0) events.push(EV_STROKE, drag.x, drag.y, p.x, p.y, Math.min(16, speed));
   drag = { x: p.x, y: p.y, t: e.timeStamp };
 });
 
@@ -203,93 +108,24 @@ function toSurface(e) {
   };
 }
 
-// ---- drawing ----------------------------------------------------------------
+// ---- drawing (placeholder until step 4) -------------------------------------------
 
 const g = surface.getContext('2d');
-const grid = document.createElement('canvas');
-grid.width = grid.height = GRID_SIZE;
-const gridCtx = grid.getContext('2d');
-const image = gridCtx.createImageData(GRID_SIZE, GRID_SIZE);
-const shown = new Float32Array(GRID_SIZE * GRID_SIZE);
-const palette = buildPalette();
-let lastFrame = null;
-let energyLevel = 0, outputLevel = 0;
 
-function draw() {
-  if (unsent.size) retryUnsentParams();
-  const frame = visuals.read();
-  if (frame) {
-    lastFrame = frame;
-    for (let i = 0; i < shown.length; i++) shown[i] = 0.5 * shown[i] + 0.5 * frame[FRAME_HEADER + i];
-    energyLevel = meterLevel(frame[0] / DROP_ENERGY, -60, 20);
-    outputLevel = Math.max(meterLevel(frame[1] * frame[1], -60, 0), outputLevel * 0.9);
-  }
-
-  const px = image.data;
-  let mean = 0;
-  for (let i = 0; i < shown.length; i++) mean += shown[i];
-  mean /= shown.length;
-  const base = (10 * Math.log10(mean / DENSITY_REF + 1e-30) + RANGE_DB) / RANGE_DB;
-  for (let i = 0; i < shown.length; i++) {
-    const local = mean > 0 ? Math.log2(shown[i] / mean + 1e-6) : 0;
-    const level = Math.min(1, Math.max(0, base > 0 ? base * 0.85 + CONTRAST * local * Math.min(1, 1.5 * base) : 0));
-    const c = palette[Math.round(level * 255)];
-    px[i * 4] = c[0]; px[i * 4 + 1] = c[1]; px[i * 4 + 2] = c[2]; px[i * 4 + 3] = 255;
-  }
-  gridCtx.putImageData(image, 0, 0);
-
-  fitCanvas();
-  const w = surface.width, h = surface.height;
-  g.imageSmoothingEnabled = true;
-  g.imageSmoothingQuality = 'high';
-  g.drawImage(grid, 0, 0, w, h);
-
-  // Listening points: where the medium is heard.
-  g.strokeStyle = 'rgba(201, 214, 226, 0.35)';
-  g.lineWidth = Math.max(1, w / 400);
-  for (const [lx, ly] of LISTEN_POINTS) {
-    // Same mapping as the medium: [0,1] spans the centres of the edge cells.
-    const cx = (lx * (GRID_SIZE - 1) + 0.5) / GRID_SIZE, cy = (ly * (GRID_SIZE - 1) + 0.5) / GRID_SIZE;
-    g.beginPath();
-    g.arc(cx * w, cy * h, w / 80, 0, Math.PI * 2);
-    g.stroke();
-  }
-
-  energyBar.style.width = `${(energyLevel * 100).toFixed(1)}%`;
-  outputBar.style.width = `${(outputLevel * 100).toFixed(1)}%`;
-  outputBar.classList.toggle('hot', lastFrame && lastFrame[1] > 0.9);
-  requestAnimationFrame(draw);
-}
-
-function fitCanvas() {
+function frame() {
+  if (stonesUnsent) sendStones();
   const dpr = window.devicePixelRatio || 1;
-  const size = Math.round(surface.clientWidth * dpr);
-  if (surface.width !== size) surface.width = surface.height = size;
-}
-
-function meterLevel(powerRatio, minDb, maxDb) {
-  const db = 10 * Math.log10(powerRatio + 1e-30);
-  return Math.min(1, Math.max(0, (db - minDb) / (maxDb - minDb)));
-}
-
-function buildPalette() {
-  // still → deep → moving → bright crest
-  const stops = [
-    [0.0, [15, 24, 34]],
-    [0.35, [18, 52, 96]],
-    [0.7, [36, 150, 184]],
-    [1.0, [225, 246, 255]],
-  ];
-  const out = [];
-  for (let i = 0; i < 256; i++) {
-    const t = i / 255;
-    let k = 0;
-    while (k < stops.length - 2 && t > stops[k + 1][0]) k++;
-    const [t0, c0] = stops[k], [t1, c1] = stops[k + 1];
-    const f = (t - t0) / (t1 - t0);
-    out.push(c0.map((v, j) => Math.round(v + (c1[j] - v) * f)));
+  const w = Math.round(surface.clientWidth * dpr), h = Math.round(surface.clientHeight * dpr);
+  if (surface.width !== w || surface.height !== h) { surface.width = w; surface.height = h; }
+  g.fillStyle = '#0f1822';
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(201, 214, 226, 0.55)';
+  for (let i = 0; i < stones.count; i++) {
+    g.beginPath();
+    g.arc(stones.xs[i] * w, stones.ys[i] * h, Math.max(2, w / 160), 0, Math.PI * 2);
+    g.fill();
   }
-  return out;
+  requestAnimationFrame(frame);
 }
 
 function peakOf(analyser) {

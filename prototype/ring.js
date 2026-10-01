@@ -8,8 +8,10 @@
 
 export const EVENT_FLOATS = 8;
 export const EV_DROP = 1; // x, y, strength
-export const EV_STROKE = 2; // x0, y0, x1, y1, strength, seconds
+export const EV_STROKE = 2; // x0, y0, x1, y1, speed (a drag segment)
 export const EV_PARAM = 3; // paramIndex, value
+export const EV_STONE = 4; // index, x, y, hz — staged until EV_STONES_COMMIT
+export const EV_STONES_COMMIT = 5; // count — the staged stones go live together
 
 const HEADER_BYTES = 8;
 

@@ -45,8 +45,10 @@ export class Stones {
   }
 
   // Place and tune the stones. xs, ys in [0, 1]; hzs the pitches. Retuning only
-  // changes the stones — the water is never touched. A stone placed where the
-  // water is already high waits for it to settle before it can ring.
+  // changes the stones — the water is never touched. A newly added stone that
+  // lands where the water is already high waits for it to settle; a stone that
+  // was already there keeps listening as it moves, so dragging it through
+  // moving water rings it as crests pass over it.
   // A stone with a non-finite position or an unusable pitch is kept in its
   // slot (so the others keep their places) but disabled.
   setStones(surface, xs, ys, hzs, count) {
@@ -58,17 +60,35 @@ export class Stones {
       this.enabled[i] = ok ? 1 : 0;
       const x = ok ? xs[i] : 0.5, y = ok ? ys[i] : 0.5;
       const gx = surface.toGridX(x), gy = surface.toGridY(y);
-      const moved = i >= this.count || gx !== this.gx[i] || gy !== this.gy[i];
+      const added = i >= this.count;
       this.x[i] = x; this.y[i] = y;
       this.gx[i] = gx; this.gy[i] = gy;
       this.hz[i] = ok ? hzs[i] : 0;
-      if (moved) {
+      if (added) {
         const h = surface.heightAt(gx, gy);
         this.prevH[i] = h;
         this.state[i] = h < this.threshold * REARM_FRACTION ? ARMED : SPENT;
       }
     }
     this.count = n;
+  }
+
+  // Move one existing stone (e.g. while the performer drags it). It keeps
+  // listening, so it rings as it passes through crests.
+  moveStone(surface, i, x, y) {
+    if (!Number.isInteger(i) || i < 0 || i >= this.count || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    this.x[i] = x < 0 ? 0 : x > 1 ? 1 : x;
+    this.y[i] = y < 0 ? 0 : y > 1 ? 1 : y;
+    this.gx[i] = surface.toGridX(this.x[i]);
+    this.gy[i] = surface.toGridY(this.y[i]);
+    // Read the water at the new spot, so a crest's peak is never fitted from
+    // samples taken in two different places.
+    const h = surface.heightAt(this.gx[i], this.gy[i]);
+    this.prevH[i] = h;
+    if (this.state[i] === RISING) {
+      if (h < this.threshold) this.state[i] = h < this.threshold * REARM_FRACTION ? ARMED : SPENT; // moved off the crest
+      else { this.peakH[i] = h; this.beforePeakH[i] = h; }
+    }
   }
 
   // Run once per simulation step, after the surface steps. Writes strikes into

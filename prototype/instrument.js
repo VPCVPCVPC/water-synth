@@ -6,9 +6,9 @@
 import { Engine, ENGINE_PARAMS, ENGINE_PARAM_KEYS } from './engine.js';
 import { Bells, BELL_PARAMS } from './bells.js';
 import { MAX_STONES } from './stones.js';
-import { EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP } from './ring.js';
+import { EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE } from './ring.js';
 import { GestureLooper, LOOPER_PARAMS, GESTURE_DROP, GESTURE_TRAIL } from './looper.js';
-import { FRAME_FLASH, FRAME_HEIGHTS, frameLength } from './visuals.js';
+import { FRAME_FLASH, FRAME_LOOPS, FRAME_HEIGHTS, frameLength } from './visuals.js';
 
 // Every knob, in the order the page sends parameter indices.
 export const PARAMS = { ...ENGINE_PARAMS, ...BELL_PARAMS, ...LOOPER_PARAMS };
@@ -64,6 +64,7 @@ export class Instrument {
     frame[0] = this.frameEnergy;
     frame[1] = this.outputPeak;
     for (let i = 0; i < MAX_STONES; i++) { frame[FRAME_FLASH + i] = this.flash[i]; this.flash[i] = 0; }
+    this.looper.writeStatus(frame, FRAME_LOOPS);
     this.engine.surface.snapshot(frame, FRAME_HEIGHTS);
     this.outputPeak = 0;
   }
@@ -88,6 +89,7 @@ export class Instrument {
         this.looper.record(GESTURE_TRAIL, d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5], e.simStep + 1);
         break;
       case EV_LOOP: this.looper.action(d[o + 1], d[o + 2]); break;
+      case EV_STONE_MOVE: e.stones.moveStone(e.surface, d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_PARAM: this.setParamIndex(d[o + 1], d[o + 2]); break;
       case EV_STONE: {
         const i = d[o + 1];

@@ -8,7 +8,7 @@ import { buildPitches, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
 import { EV_DROP, EV_STROKE, EV_LOOP, EV_PARAM } from './ring.js';
 import { PARAM_KEYS } from './instrument.js';
-import { LOOP_RECORD, LOOP_PLAY_STOP, LOOP_MUTE, LOOP_CLEAR, LOOP_EVENTS, MAX_LOOP_SECONDS, EMPTY, PLAYING, STOPPED } from './looper.js';
+import { LOOP_RECORD, LOOP_PLAY_STOP, LOOP_MUTE, LOOP_CLEAR, LOOP_CLEAR_ALL, LOOP_EVENTS, MAX_LOOP_SECONDS, EMPTY, PLAYING, STOPPED } from './looper.js';
 import { performance } from 'node:perf_hooks';
 
 let failures = 0;
@@ -122,18 +122,43 @@ console.log('\n2. Overdub, mute, stop/play and clear');
 
   r.loop(0, LOOP_PLAY_STOP);
   const stoppedAt = r.replays.length;
-  r.runTo((recStart + 8 * len) / SIM_RATE + 0.05);
+  r.runTo((recStart + 7 * len + 333) / SIM_RATE);
   const stopped = r.inst.looper.state[0] === STOPPED && r.replays.length === stoppedAt;
+  const playAt = r.step() + 1;
   r.loop(0, LOOP_PLAY_STOP);
-  r.runTo((recStart + 9 * len) / SIM_RATE + 0.05);
+  r.runTo((playAt + len) / SIM_RATE - 0.001);
   const resumed = r.replays.slice(stoppedAt);
-  report(stopped && resumed.length === 2 && resumed.every((x) => [r.inst.looper.time[0], r.inst.looper.time[1]].includes((x.step - recStart) % len)),
-    'stop silences, play resumes in phase', `after play: ${resumed.length} replays`);
+  const fromTop = resumed.length === 2 && resumed.every((x) => [r.inst.looper.time[0], r.inst.looper.time[1]].includes(x.step - playAt));
+  report(stopped && fromTop, 'stop silences; play restarts the loop from its top', `after play: replays at +${resumed.map((x) => x.step - playAt).join(', +')} ms`);
 
   r.loop(0, LOOP_CLEAR);
   const cleared = r.replays.length;
   r.runTo((recStart + 11 * len) / SIM_RATE);
-  report(r.inst.looper.state[0] === EMPTY && r.replays.length === cleared, 'clear empties the layer');
+  report(r.inst.looper.state[0] === EMPTY && r.replays.length === cleared, 'clear erases the layer completely');
+}
+{
+  // Clear all: every layer and the shared grid; the next take starts from scratch.
+  const r = rig();
+  r.param('quantize', 1); r.param('bpm', 120);
+  r.runTo(5, [[0.1, () => r.loop(0, LOOP_RECORD)], [0.3, () => r.drop(0.3, 0.3)], [2.1, () => r.loop(0, LOOP_RECORD)],
+    [2.2, () => r.loop(1, LOOP_RECORD)], [2.5, () => r.drop(0.6, 0.6)], [4.1, () => r.loop(1, LOOP_RECORD)]]);
+  r.loop(0, LOOP_CLEAR_ALL);
+  const lp = r.inst.looper;
+  const allEmpty = [0, 1, 2, 3].every((l) => lp.state[l] === EMPTY && lp.count[l] === 0) && lp.transportOrigin === -1;
+  let fresh = -1;
+  r.runTo(7, [[5.5, () => { r.loop(2, LOOP_RECORD); fresh = r.step() + 1; }], [5.8, () => r.drop(0.5, 0.5)], [7.0, () => r.loop(2, LOOP_RECORD)]]);
+  report(allEmpty && lp.origin[2] === fresh, 'clear all erases every layer and the bar grid; the next take starts afresh');
+}
+{
+  // A quantized loop restarted mid-bar waits for the next bar.
+  const r = rig();
+  r.param('quantize', 1); r.param('bpm', 120); r.param('quantizeStrength', 1);
+  r.runTo(2.3, [[0.1, () => r.loop(0, LOOP_RECORD)], [0.1, () => r.drop(0.4, 0.4)], [2.1, () => r.loop(0, LOOP_RECORD)], [2.2, () => r.loop(0, LOOP_PLAY_STOP)]]);
+  const lp = r.inst.looper, origin = lp.transportOrigin, before = r.replays.length;
+  r.runTo(9, [[5.3, () => r.loop(0, LOOP_PLAY_STOP)]]);
+  const first = r.replays[before];
+  report(first && (first.step - origin) % 2000 === 0 && first.step >= 5300, 'a quantized loop restarted mid-bar comes in on the next bar',
+    first ? `first replay ${first.step - origin} ms after the grid origin` : 'no replay');
 }
 
 // ---- 3. Quantize ------------------------------------------------------------------

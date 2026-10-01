@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Water Synth Prototype</title>
   <style>
     :root {
@@ -12,80 +13,144 @@
       --surface: #0e1e30;
       --edge: #1e2c3a;
       --accent: #2a8fb0;
+      --rec: #d9534f;
       --hot: #d9824b;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg);
-      font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif; }
-    main { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px; }
-    .stage { width: min(100%, 860px); display: flex; flex-direction: column; gap: 8px; }
+      font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif;
+      -webkit-text-size-adjust: 100%; touch-action: manipulation; }
+    main { display: flex; flex-direction: column; align-items: center; gap: 10px;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+        max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .stage { width: min(100%, 980px); width: min(100%, 980px, calc((100dvh - 130px) * 128 / 97));
+      display: flex; flex-direction: column; gap: 6px; -webkit-user-select: none; user-select: none; }
     #surface { width: 100%; aspect-ratio: 128 / 97; display: block;
-      background: var(--surface); border: 1px solid var(--edge); border-radius: 6px;
-      touch-action: none; cursor: crosshair; }
+      background: var(--surface); border: 1px solid var(--edge); border-radius: 8px;
+      touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none; }
+    #surface.moving { cursor: grab; }
     .meter { display: grid; grid-template-columns: 4.5em 1fr; align-items: center; gap: 8px;
       color: var(--muted); font-size: 12px; }
     .track { height: 4px; background: var(--edge); border-radius: 2px; overflow: hidden; }
     .fill { height: 100%; width: 0; background: var(--accent); }
     .fill.hot { background: var(--hot); }
-    #status { color: var(--muted); font-size: 12px; min-height: 1.4em; }
-    .panel { width: min(100%, 860px); display: grid; gap: 16px;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-    fieldset { border: 1px solid var(--edge); border-radius: 6px; margin: 0; padding: 10px 12px 12px;
+    #status { color: var(--muted); font-size: 12px; min-height: 1.4em; text-align: center;
+      -webkit-user-select: none; user-select: none; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    /* Controls: a drawer on small screens, always open on large ones. */
+    #drawer { width: min(100%, 980px); }
+    #drawer > summary { list-style: none; cursor: pointer; text-align: center; color: var(--muted);
+      padding: 10px; border: 1px solid var(--edge); border-radius: 8px; min-height: 44px; }
+    #drawer > summary::-webkit-details-marker { display: none; }
+    #drawer[open] > summary { margin-bottom: 12px; }
+    .panel { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    fieldset { border: 1px solid var(--edge); border-radius: 8px; margin: 0; padding: 10px 12px 12px;
       display: flex; flex-direction: column; gap: 10px; min-width: 0; }
     legend { color: var(--muted); font-size: 12px; padding: 0 4px; }
     .field { display: grid; grid-template-columns: 6.5em 1fr; align-items: center; gap: 8px; }
-    .field > span { color: var(--fg); }
     select, input[type=number], button { background: #111a24; color: var(--fg); border: 1px solid var(--edge);
-      border-radius: 4px; padding: 4px 6px; font: inherit; min-width: 0; }
+      border-radius: 6px; padding: 6px 8px; font: inherit; min-width: 0; min-height: 36px; }
     button { cursor: pointer; }
+    button.on { border-color: var(--accent); color: #fff; background: #123247; }
+    button.rec { border-color: var(--rec); color: #fff; background: #3a1716; }
+    button.confirm { border-color: var(--hot); color: #fff; }
     .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
     .control { display: grid; grid-template-columns: 6.5em 1fr 6.5em; align-items: center; column-gap: 8px; }
-    .control input { width: 100%; accent-color: var(--accent); min-width: 0; }
+    .control input[type=range] { width: 100%; accent-color: var(--accent); min-width: 0; min-height: 28px; }
     .control output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
     .control small, .note { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+    .layer { display: grid; grid-template-columns: 1.5em 1fr; gap: 4px 8px; align-items: center; }
+    .layer .name { color: var(--muted); font-size: 12px; }
+    .layer .buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .layer .info { grid-column: 2; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+      color: var(--muted); font-size: 11px; }
+    .layer .bar { height: 4px; background: var(--edge); border-radius: 2px; overflow: hidden; }
+    .layer .bar > div { height: 100%; width: 0; background: var(--accent); }
+    .layer.recording .bar > div { background: var(--rec); }
+    .full { color: var(--hot); }
+    .quantized[hidden] { display: none; }
+    @media (pointer: coarse) {
+      /* 16px stops iOS Safari zooming in when a field is focused. */
+      select, input, button { min-height: 44px; font-size: 16px; }
+      .control input[type=range] { min-height: 36px; }
+    }
     #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-      background: rgba(11, 16, 22, 0.88); color: var(--fg); font-size: 18px; border: 0;
-      cursor: pointer; width: 100%; border-radius: 0; }
+      background: rgba(11, 16, 22, 0.9); color: var(--fg); font-size: 20px; border: 0;
+      cursor: pointer; width: 100%; border-radius: 0; z-index: 10; }
     #start[hidden] { display: none; }
   </style>
 </head>
 <body>
   <main>
     <div class="stage">
-      <canvas id="surface" aria-label="Water surface: click to drop, drag to disturb"></canvas>
+      <canvas id="surface" aria-label="Water surface: touch to drop, drag to disturb"></canvas>
       <div class="meter"><span>output</span><div class="track"><div id="output" class="fill"></div></div></div>
     </div>
-    <div id="status"></div>
+    <div id="status" aria-live="polite"></div>
 
-    <div class="panel">
-      <fieldset>
-        <legend>Tuning</legend>
-        <label class="field"><span>scale</span><select id="scale"></select></label>
-        <label class="field"><span>root</span><select id="root"></select></label>
-        <label class="field"><span>lowest</span><select id="low"></select></label>
-        <label class="field"><span>highest</span><select id="high"></select></label>
-        <div class="field"><span>A4 =</span>
-          <div class="row"><input id="ref" type="number" min="400" max="480" step="0.1" style="width: 6em"> Hz
-            <button id="ref440" type="button">440</button><button id="ref432" type="button">432</button></div>
-        </div>
-        <div id="tuning-note" class="note"></div>
-      </fieldset>
+    <details id="drawer" open>
+      <summary>Controls</summary>
+      <div class="panel">
+        <fieldset>
+          <legend>Loops</legend>
+          <div id="layers"></div>
+          <div class="row">
+            <button id="clear-all" type="button">clear all loops</button>
+            <label class="row" style="color: var(--muted); font-size: 12px">
+              <input id="quantize" type="checkbox"> quantize (off by default)</label>
+          </div>
+          <div class="quantized" hidden>
+            <div class="field"><span>BPM</span><input id="bpm" type="number" min="40" max="240" step="1"></div>
+            <div class="field"><span>grid</span><select id="grid"></select></div>
+            <div id="quantize-controls" style="display: contents"></div>
+            <div class="note">Quantize moves when your recorded touches land toward the beat
+              grid; the water still decides when stones ring. Live touches are never delayed.</div>
+          </div>
+        </fieldset>
 
-      <fieldset>
-        <legend>Water</legend>
-        <div id="water-controls" style="display: contents"></div>
-      </fieldset>
+        <fieldset>
+          <legend>Water</legend>
+          <div id="water-controls" style="display: contents"></div>
+        </fieldset>
 
-      <fieldset>
-        <legend>Bells</legend>
-        <div id="bells-controls" style="display: contents"></div>
-        <label class="row" style="color: var(--muted); font-size: 12px">
-          <input id="labels" type="checkbox"> show note names (dev aid)</label>
-        <button id="defaults" type="button">water &amp; bell knobs back to defaults</button>
-      </fieldset>
-    </div>
+        <fieldset>
+          <legend>Stones</legend>
+          <div class="row">
+            <button id="move" type="button" aria-pressed="false">move stones</button>
+            <button id="randomize" type="button">randomize</button>
+            <button id="release" type="button">release placed</button>
+          </div>
+          <div id="stone-controls" style="display: contents"></div>
+          <div class="note" id="stone-note">In "move stones", drag a stone to place it; placed stones stay put
+            when you retune or randomize. Dragging a stone through moving water rings it.</div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Tuning</legend>
+          <label class="field"><span>scale</span><select id="scale"></select></label>
+          <label class="field"><span>root</span><select id="root"></select></label>
+          <label class="field"><span>lowest</span><select id="low"></select></label>
+          <label class="field"><span>highest</span><select id="high"></select></label>
+          <div class="field"><span>A4 =</span>
+            <div class="row"><input id="ref" type="number" min="400" max="480" step="0.1" style="width: 6em"> Hz
+              <button id="ref440" type="button">440</button><button id="ref432" type="button">432</button></div>
+          </div>
+          <div id="tuning-note" class="note"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Bells</legend>
+          <div id="bells-controls" style="display: contents"></div>
+          <label class="row" style="color: var(--muted); font-size: 12px">
+            <input id="labels" type="checkbox"> show note names (dev aid)</label>
+          <button id="defaults" type="button">water &amp; bell knobs back to defaults</button>
+        </fieldset>
+      </div>
+    </details>
   </main>
-  <button id="start">Click to wake the water</button>
+  <button id="start">Touch to wake the water</button>
   <script type="module" src="main.js"></script>
 </body>
 </html>

@@ -30,3 +30,6 @@ tests/output/
 # Local config
 .env
 .claude/settings.local.json
+
+# Local HTTPS certificates for testing on devices (made with mkcert)
+prototype/certs/

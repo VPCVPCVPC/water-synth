@@ -32,7 +32,10 @@ export const GESTURE_DROP = 1, GESTURE_TRAIL = 2;
 // Layer states.
 export const EMPTY = 0, RECORDING = 1, PLAYING = 2, OVERDUB = 3, STOPPED = 4;
 // Actions the page sends.
-export const LOOP_RECORD = 1, LOOP_PLAY_STOP = 2, LOOP_MUTE = 3, LOOP_CLEAR = 4;
+// Mute silences a loop and keeps its place. Stop then play restarts it from
+// its top (at the next bar if it's on the quantize grid). Clear erases a
+// layer completely; clear-all erases every layer and the shared bar grid.
+export const LOOP_RECORD = 1, LOOP_PLAY_STOP = 2, LOOP_MUTE = 3, LOOP_CLEAR = 4, LOOP_CLEAR_ALL = 5;
 
 export const LOOPER_PARAMS = {
   quantize: { min: 0, max: 1, def: 0 }, // 0 off, 1 on
@@ -59,6 +62,8 @@ export class GestureLooper {
     this.length = new Float64Array(LOOP_LAYERS); // steps (0 while the first take runs)
     this.cursor = new Int32Array(LOOP_LAYERS); // next event to play
     this.lastPos = new Float64Array(LOOP_LAYERS);
+    this.onGrid = new Uint8Array(LOOP_LAYERS); // recorded on the shared bar grid
+    this.startAt = new Float64Array(LOOP_LAYERS); // a restarted loop waits until this step
     this.scratchTime = new Float64Array(LOOP_EVENTS);
     this.scratchKind = new Uint8Array(LOOP_EVENTS);
     this.scratchSkip = new Uint8Array(LOOP_EVENTS);
@@ -85,6 +90,11 @@ export class GestureLooper {
 
   // An action from the page on one layer.
   action(layer, act) {
+    if (act === LOOP_CLEAR_ALL) {
+      for (let l = 0; l < LOOP_LAYERS; l++) this.clear(l);
+      this.transportOrigin = -1;
+      return;
+    }
     if (!Number.isInteger(layer) || layer < 0 || layer >= LOOP_LAYERS) return;
     const s = this.state[layer], now = this.step + 1;
     switch (act) {
@@ -92,21 +102,19 @@ export class GestureLooper {
         if (s === EMPTY) this.startTake(layer, now);
         else if (s === RECORDING) this.finishTake(layer, now);
         else if (s === OVERDUB) this.state[layer] = PLAYING;
-        else this.state[layer] = OVERDUB; // playing or stopped: layer more on top
+        else if (s === STOPPED) { this.restart(layer, now); this.state[layer] = OVERDUB; }
+        else this.state[layer] = OVERDUB; // playing: layer more on top
         break;
       case LOOP_PLAY_STOP:
         if (s === PLAYING || s === OVERDUB) this.state[layer] = STOPPED;
-        else if (s === STOPPED) this.state[layer] = PLAYING;
+        else if (s === STOPPED) this.restart(layer, now);
         else if (s === RECORDING) this.finishTake(layer, now);
         break;
       case LOOP_MUTE:
         if (s !== EMPTY) this.muted[layer] ^= 1;
         break;
       case LOOP_CLEAR:
-        this.state[layer] = EMPTY;
-        this.count[layer] = 0;
-        this.length[layer] = 0;
-        this.muted[layer] = 0;
+        this.clear(layer);
         if (this.allEmpty()) this.transportOrigin = -1;
         break;
     }
@@ -145,7 +153,8 @@ export class GestureLooper {
     for (let l = 0; l < LOOP_LAYERS; l++) {
       const s = this.state[l];
       if (s === RECORDING && step - this.takeStart[l] >= MAX_LOOP_SECONDS * SIM_RATE) this.finishTake(l, step);
-      if (s !== PLAYING && s !== OVERDUB && s !== STOPPED) continue;
+      if (s !== PLAYING && s !== OVERDUB) continue;
+      if (step < this.startAt[l]) continue; // restarted: waiting for its downbeat
       const len = this.length[l];
       const pos = mod(step - this.origin[l], len);
       if (pos < this.lastPos[l]) this.cursor[l] = 0; // wrapped
@@ -155,7 +164,7 @@ export class GestureLooper {
       while (c < n && this.time[base + c] <= pos) {
         const i = base + c;
         if (this.skip[i]) this.skip[i] = 0;
-        else if (s !== STOPPED && !this.muted[l] && this.time[i] > pos - 1) {
+        else if (!this.muted[l] && this.time[i] > pos - 1) {
           // A snapped pile-up can't flood the water's gesture queue.
           if (engine.queueFull()) this.dropped++;
           else this.fire(i, engine, at);
@@ -174,6 +183,30 @@ export class GestureLooper {
     else engine.trail(p[o], p[o + 1], p[o + 2], p[o + 3], p[o + 4], at);
   }
 
+  // Play a stopped loop again from its top: now, or at the next bar of the
+  // shared grid if the loop was recorded on it.
+  restart(layer, now) {
+    let start = now;
+    if (this.onGrid[layer] && this.transportOrigin >= 0) {
+      const bar = this.barSteps();
+      start = this.transportOrigin + Math.ceil((now - this.transportOrigin) / bar) * bar;
+    }
+    start = Math.round(start);
+    this.origin[layer] = start;
+    this.startAt[layer] = start;
+    this.cursor[layer] = 0;
+    this.lastPos[layer] = -1;
+    this.state[layer] = PLAYING;
+  }
+
+  clear(layer) {
+    this.state[layer] = EMPTY;
+    this.count[layer] = 0;
+    this.length[layer] = 0;
+    this.muted[layer] = 0;
+    this.startAt[layer] = 0;
+  }
+
   startTake(layer, now) {
     this.takeStart[layer] = now;
     this.count[layer] = 0;
@@ -183,9 +216,12 @@ export class GestureLooper {
       // Quantized loops share one bar grid so they stay in time together.
       if (this.transportOrigin < 0) this.transportOrigin = now;
       this.origin[layer] = this.transportOrigin;
+      this.onGrid[layer] = 1;
     } else {
       this.origin[layer] = now;
+      this.onGrid[layer] = 0;
     }
+    this.startAt[layer] = 0;
     this.state[layer] = RECORDING;
   }
 
@@ -275,6 +311,20 @@ export class GestureLooper {
     const k = Math.round(t / g);
     const target = k * g + ((((k % 2) + 2) % 2) === 1 ? this.swing * g : 0);
     return Math.round(t + this.quantizeStrength * (target - t));
+  }
+
+  // Layer status for the page (see visuals.js LOOP_FIELDS).
+  writeStatus(frame, offset) {
+    for (let l = 0; l < LOOP_LAYERS; l++) {
+      const o = offset + l * 6, s = this.state[l];
+      frame[o] = s;
+      frame[o + 1] = this.muted[l];
+      frame[o + 2] = s === RECORDING ? this.step - this.takeStart[l] : this.length[l];
+      frame[o + 3] = s === PLAYING || s === OVERDUB
+        ? (this.step < this.startAt[l] ? 0 : mod(this.step - this.origin[l], this.length[l] || 1)) : 0;
+      frame[o + 4] = this.count[l] / LOOP_EVENTS;
+      frame[o + 5] = this.step < this.startAt[l] ? 1 : 0;
+    }
   }
 
   allEmpty() {

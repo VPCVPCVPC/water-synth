@@ -13,6 +13,7 @@ export const EV_PARAM = 3; // paramIndex, value
 export const EV_STONE = 4; // index, x, y, hz — staged until EV_STONES_COMMIT
 export const EV_STONES_COMMIT = 5; // count — the staged stones go live together
 export const EV_LOOP = 6; // layer, action (looper.js LOOP_*)
+export const EV_STONE_MOVE = 7; // index, x, y — move one stone now (no commit needed)
 
 const HEADER_BYTES = 8;
 

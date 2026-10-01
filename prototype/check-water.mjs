@@ -210,6 +210,26 @@ console.log('\n6. Reflections off the walls ring stones on time');
     `${strikes.length} strikes; echo ${(gap * 1000).toFixed(0)} ms after the direct wave, ${(predicted * 1000).toFixed(0)} ms predicted`);
 }
 
+// ---- 6b. A stone dragged through moving water rings ----------------------------
+console.log('\n6b. Moving a stone through ripples rings it');
+{
+  // One drop in the middle; a stone starts in still water at the far left and
+  // is swept toward the middle as the ring spreads, crossing its crest.
+  const e = testEngine({ seed: 1 });
+  e.setStones([0.05], [0.5], [440], 1);
+  e.setParam('threshold', 0.01);
+  const strikes = run(e, 1.2, {
+    before: (en) => en.surface.drop(0.5, 0.5, 1, 1.5),
+    during: (en, t) => en.stones.moveStone(en.surface, 0, Math.min(0.5, 0.05 + t * 0.6), 0.5),
+  });
+  const still = testEngine({ seed: 1 });
+  still.setStones([0.05], [0.5], [440], 1);
+  still.setParam('threshold', 0.01);
+  const unmoved = run(still, 0.15, { before: (en) => en.surface.drop(0.5, 0.5, 1, 1.5) });
+  report(strikes.length > 0 && unmoved.length === 0, 'a stone swept into the spreading ring rings as it meets the crest',
+    `${strikes.length} strikes while moving (none before the ring could reach it unmoved)`);
+}
+
 // ---- 7. Only scale notes, only in range ---------------------------------------
 console.log('\n7. Every note is in the scale and the range');
 {

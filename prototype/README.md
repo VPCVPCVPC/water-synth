@@ -5,7 +5,8 @@ water you can watch, with tuned stones in it. You disturb the water; ripples
 travel, reflect and meet; when a crest reaches a stone, the stone rings like a
 water-struck bell at its pitch in the scale you've set. You don't pick notes
 directly — the water does. Loops record your touches and replay them into the
-moving water. No plugin here, and only two gestures (drop and drag).
+moving water; tapes record the sound itself. A voice editor shapes what the
+stones sound like. No plugin here, and only two gestures (drop and drag).
 
 ## Run it
 
@@ -83,7 +84,8 @@ and plays a different phrase.
 - **mute** silences a loop and keeps its place; **stop** then **play**
   restarts it from its top (at the next bar if quantize is on).
 - **clear** (tap twice) erases a layer completely; **clear all loops** (tap
-  twice) erases every layer and the beat grid — a fresh start. Clearing never
+  twice) erases every layer and the beat grid — a fresh start (the grid stays
+  while a tape is still on it). Clearing never
   touches the water: what's already moving rings out.
 - A layer holds 4096 gestures; if one fills, it says so and stops recording.
 - **Quantize** (off by default) moves when your *recorded* touches land toward
@@ -118,46 +120,91 @@ scale note in the range. Note names are relative to A4 at the chosen reference
 never touches the water. A stone still ringing keeps its old pitch until it's
 next struck, then its old ring crossfades out over 100 ms.
 
-**Bells** — bell decay (how long a struck stone rings, including stones already
-ringing) and volume. **Show note names** is a dev aid, off by default. (The
-voice editor comes in the second half of Phase 1c.)
+**Tapes** — "a tape beside the pond": four tracks that record the water's
+*sound* and play it back fixed, like a loop pedal (every pass the same — the
+one part that isn't the water). **record** starts a take, **finish** ends it
+and it plays; **overdub** adds more on top (heard live once, replayed from the
+next pass). A tape records the water, never another tape. **mute**, **stop**
+and **clear** fade out over 0.3 s rather than cut; the loop wraps without a
+click. Each track has its own length (up to 30 s), so tapes drift against each
+other — unless quantize is on: then a take sits on the loops' bar grid and
+**finish** waits for the next bar line. Clearing every loop keeps the grid
+while a tape is still on it. **tape level** sets the tapes under (or over) the
+water. Overdubs add up with no decay, so a much-overdubbed tape gets louder.
+
+**Voice** — what a struck stone sounds like. Every stone shares one voice;
+**edit one stone**, then tap a stone, to edit just that one (the pond is quiet
+while you pick; a tap away from every stone cancels and plays as usual):
+**give it its own voice** (a copy of the shared one; it gets an amber rim on
+the pond, and the stone you're editing an amber ring), **back to the shared
+voice** undoes it, **back to all stones** returns the editor to the shared
+voice. No presets. A stone's own voice belongs to its slot (stone 1 is the
+lowest note): if a retune leaves fewer stones it's kept, hidden, and comes back
+when the stones do — possibly on a different note.
+- *Bell*: level, decay, tone (upper partials), clang (bar-like ↔ clangy
+  partials), tick (the water touching the stone).
+- *Strike*: dynamics (how much louder a hard strike is) and strike brightness.
+- *Water-held sustain*: while the water around a stone keeps moving, its note
+  decays more slowly; as the water calms it lets go. The water holds the note,
+  never you.
+- *Synth layer* (folded away; off until you raise its level): two oscillators (sine →
+  triangle → saw → square), osc 2's pitch and detune, their mix, a low-pass
+  that follows the stone's pitch and opens with each strike (cutoff, resonance,
+  filter envelope and its decay), attack and decay. No note-off: it fades on
+  its own like the bell.
+
+Edits reach stones that are already ringing. **… voice back to defaults**
+resets only the voice the knobs show. **Volume** and **water knobs back to
+defaults** are with the water; **show note names** is a dev aid, off by
+default.
 
 The output meter turns orange when the limiter is working.
 
-## Listening check 1 — what to evaluate
+## Listening check 2 — what to evaluate
 
-Defaults: your Phase 1b settings (slow flow, long water decay, some splash),
-C major pentatonic, C3–C6, 16 stones, today's bell.
+Listening check 1 passed ("it seems good"). Defaults are unchanged: with the
+voice editor untouched you hear exactly the Phase 1c bell.
 
-1. **Loops:** record a few touches and let them loop. Does each pass feel like
-   the same gesture landing in different water — rich layers — or does it
-   fight the water or turn mushy?
-2. Layer loops of different lengths. Do they drift against each other in a
-   good way?
-3. **Quantize:** turn it on, record, and try lean vs snap. Does it keep the
-   water feeling free, or does it start to feel like a step sequencer?
-4. **Mute vs stop/restart:** both useful?
-5. **Stones:** move a few by hand, randomize, change spread. Does arranging
-   the pond feel like composing? Does dragging a stone through ripples work
-   as a way to play?
-6. **Touch:** on the iPad (or phone), play with several fingers. Natural?
-   Is anything too small to hit, or does the page scroll or zoom when it
-   shouldn't?
-7. Portrait vs landscape on the phone.
-8. CPU on the device: any stutter?
-9. **Rest:** with several loops running and splash at its new default, does
-   the water still get room to settle between phrases, or does it become a
-   constant wash? Does the output meter turn orange?
-10. **Many fingers:** loudness rises steeply with drag speed — with five
-    fingers dragging, does it get harsh or overload?
-11. **Move mode on touch:** is it always clear whether you're playing the
-    water or moving stones?
-12. **Placed stones and retune:** after arranging stones by hand, change the
-    scale or the lowest note — each place keeps its spot but its note changes.
-    Does that feel right, or should a note follow the stone you placed?
-13. **Rearranging during play:** stones keep listening as they move, so
-    randomizing or changing spread while the water is busy can ring the stones
-    that land on crests. Welcome, or should a rearranged stone wait for calm water?
+1. **Bell knobs:** try decay, tone, clang and tick. Is there a bell you like
+   better than the default? Should any of them have a wider or narrower range?
+2. **Strike:** turn dynamics and strike brightness down. With both at zero
+   every strike sounds the same — does the water lose its say in *how hard*?
+   Should those knobs have a floor?
+3. **Water-held sustain:** turn it up and play — loops help, since moving
+   water is what holds a note. Do notes bloom and sustain while ripples cross
+   their stones, then let go as the water calms? Does a long-running loop with
+   hold on keep getting louder or harsher (the output meter turning orange)?
+4. **Synth layer:** raise synth level. Does the bell + synth blend work, or
+   does the synth bury the water's character? Try a slow attack (it can be up
+   to 2 s): still the water playing, or a pad that ignores it?
+5. While a note rings, sweep cutoff and synth level: smooth, or stepped?
+6. High saw or square notes (above about C6): any metallic, inharmonic shimmer?
+7. Synth decay doesn't shorten for high stones the way the bell's does. Do
+   high synth notes ring too long?
+8. **One stone's own voice:** give one or two stones their own voice. Does
+   that feel like composing the pond? Is it clear on the pond which stones are
+   which, and which one you're editing?
+9. Give a stone its own voice, then change the scale so there are fewer
+   stones, then more again. The voice belongs to the stone's slot, so it may
+   come back on a different note. Right, or should overrides clear?
+10. **Tapes:** record a phrase, let it loop, record another track. Does "a
+    tape beside the pond" sit well with the water, or does fixed audio fight
+    it? Overdub: useful?
+11. A tape records only the water, never other tapes (so tapes can't be
+    bounced together). Right, or should a tape be able to capture the whole mix?
+12. Stop, mute and clear all fade over 0.3 s. Right length? Overdubs add up
+    with no decay — should older layers fade a little each overdub pass?
+13. With quantize on, tapes follow the loops' bar grid: a take starts on it
+    and **finish** waits for the next bar line. Should tapes follow the grid
+    at all — and if so, is the wait clear?
+14. Tapes, loops and the water together: does it get too loud? **tape level**
+    sets the tapes under (or over) the water. (The tape mix has a soft clip
+    above 0.9; the orange meter shows it.)
+15. Did the voice editor pull you away from playing the water? Which knobs
+    would you never touch mid-performance?
+16. After shaping a voice, did you want to keep it for next time? (Saving
+    voices is your open decision.)
+17. On the iPad/phone: are the voice and tape controls usable in the drawer?
 
 ### Decisions for Dash
 
@@ -168,8 +215,8 @@ C major pentatonic, C3–C6, 16 stones, today's bell.
 - **Retunes** — a ringing stone crossfades its old pitch out over 100 ms when
   next struck; the alternative is to let the old ring decay under the new one.
 - **Whether the water can move stones** (you can; the water can't, yet).
-- **Bell partials** and **velocity range** (30 dB) — taste; the voice editor
-  will open these up.
+- **Saving voices** — not yet (your call, Oct 2026); revisit after this check.
+- **Overrides on re-layout** — they belong to a stone's slot (question 9).
 
 ### Provisional choices (not decisions)
 
@@ -179,6 +226,11 @@ C major pentatonic, C3–C6, 16 stones, today's bell.
 - One stone per scale note in the range; at most 128.
 - Each stone panned by its left–right position (range 0.2–0.8).
 - Loops: 4 layers, up to 60 s each, 4096 gestures per layer.
+- Tapes: 4 tracks, up to 30 s each (stereo, about 46 MB at 48 kHz), 0.3 s
+  fades, 10 ms seam crossfade and overdub punch.
+- Water-held sustain slows decay to at most 5% speed (it always ends), and
+  measures the water at each stone against the ring threshold — so the
+  sensitivity knob also changes how easily the water holds a note.
 - Drops vary slightly (position, strength, size); most variation comes from
   the water already moving.
 
@@ -209,7 +261,7 @@ C major pentatonic, C3–C6, 16 stones, today's bell.
 cd prototype && npm run check
 ```
 
-About three minutes; five files:
+About four minutes; seven files (the voices CPU budget is a process of its own):
 
 - `check-tuning.mjs` — references (440, 432, any), scale building, maqam Rast,
   a non-octave scale, labels, bad input.
@@ -237,6 +289,19 @@ About three minutes; five files:
   over 30 s of looped drops in water that never calms; bit-identical at any
   block size; extremes; bad input; a faded bell, a silent synth layer and a
   guarded block segment; CPU.
+- `check-voices-cpu.mjs` — the voice engine's CPU budget, in its own process (a
+  workload that costs 510 µs per block cold costs ~40% more once this suite has
+  rendered its earlier sections, and that is not the engine's doing). Run by
+  `check-voices.mjs`; also runs standalone.
+- `check-tape.mjs` — the audio looper: a take records the instrument's output
+  and plays it back fixed (every pass identical, and it does not follow the
+  water as it sounds now); tapes never record another tape's playback; overdub is
+  heard live once and replays from the next pass; mute, stop and clear fade
+  rather than cut; the loop seam is crossfaded; takes sit on the gesture
+  looper's bar grid when quantize is on; the status frame; bit-identical at
+  block sizes 1…8192 and the same loudness over time at 44.1/48/96 kHz; limits
+  and bad input; the whole path through the instrument (the knob, `EV_TAPE`,
+  the frame); CPU.
 - `check-looper.mjs` — loops replay every gesture at the same place each pass
   while each pass plays a different phrase; overdub, mute, stop/restart,
   clear and clear all; quantize snap/lean/swing and whole bars on a shared
@@ -255,6 +320,7 @@ About three minutes; five files:
 | `tuning-limits.js` | What the page lets you choose (checked to always give playable stones). |
 | `engine.js` | Water + stones on one fixed clock; gestures; splash. |
 | `voice.js` | Voice parameters: one shared voice, an optional override per stone. |
+| `tape.js` | The audio looper: several tape tracks of the water's sound. |
 | `bells.js` | One voice per stone: the water-struck bell and the synth layer; water-held sustain. |
 | `instrument.js` | Everything for one audio stream; page events; visuals frames. |
 | `water-worklet.js` | Runs the instrument on the browser's audio thread. |
@@ -330,6 +396,18 @@ Collected from the real-time safety, DSP and tuning reviews of Phases 1a and 1b.
   (counting sort); budget recorded gestures per block and stop firing into a
   full gesture queue — MIDI, OSC and camera sources can burst. Benchmark a
   combined worst case (looper burst + water burst + retune burst in one block).
+- **Tapes:** positions (`now`, `origin`, `startAt`, `takeEnd`, `deadline`) as
+  int64 sample counts with an integer `mod`; validate the track and action
+  floats from the ring before any int cast. Preallocate the tape memory and the
+  mix scratch in `prepareToPlay` and touch every page there (no first-write
+  page faults on the audio thread); a sample-rate change reallocates off the
+  audio thread and clears (or resamples) the tapes. Memory is 4 tracks × 30 s ×
+  2 channels — 46 MB at 48 kHz but 184 MB at 192 kHz, too much for an iOS AUv3:
+  cap tape memory in seconds × rate, store int16/half floats, or allocate a
+  track only when armed (off the audio thread, handed over lock-free). A
+  quantized take's gap is never zeroed in one block (it's cleared as the
+  playhead passes); a restart mid-fade keeps the old tail fading. The grid
+  release callback from `erase()` stays on the audio thread (bounded).
 - **Tuning:** stones must stay within audible, playable pitches (8 Hz to below
   0.45·fs); the page limits the range to C1–C8. A Scala importer (Phase 4)
   must decide how to treat out-of-order or ≥-period degrees.

@@ -71,6 +71,9 @@ export class GestureLooper {
     this.recordBudget = RECORD_BUDGET;
     this.scratchP = new Float32Array(LOOP_EVENTS * 5);
     this.transportOrigin = -1; // shared bar grid, set by the first quantized take
+    // Anything else on the grid (the tapes): its usesGrid() keeps the grid
+    // alive while it holds a tape on it.
+    this.gridUser = null;
     this.quantize = LOOPER_PARAMS.quantize.def;
     this.bpm = LOOPER_PARAMS.bpm.def;
     this.grid = LOOPER_PARAMS.grid.def;
@@ -92,7 +95,7 @@ export class GestureLooper {
   action(layer, act) {
     if (act === LOOP_CLEAR_ALL) {
       for (let l = 0; l < LOOP_LAYERS; l++) this.clear(l);
-      this.transportOrigin = -1;
+      this.releaseGrid();
       return;
     }
     if (!Number.isInteger(layer) || layer < 0 || layer >= LOOP_LAYERS) return;
@@ -115,7 +118,7 @@ export class GestureLooper {
         break;
       case LOOP_CLEAR:
         this.clear(layer);
-        if (this.allEmpty()) this.transportOrigin = -1;
+        this.releaseGrid();
         break;
     }
   }
@@ -236,7 +239,7 @@ export class GestureLooper {
     len = Math.max(1, Math.round(len));
     if (this.count[layer] === 0) { // nothing recorded: nothing to loop
       this.state[layer] = EMPTY;
-      if (this.allEmpty()) this.transportOrigin = -1;
+      this.releaseGrid();
       return;
     }
     this.length[layer] = len;
@@ -325,6 +328,11 @@ export class GestureLooper {
       frame[o + 4] = this.count[l] / LOOP_EVENTS;
       frame[o + 5] = this.step < this.startAt[l] ? 1 : 0;
     }
+  }
+
+  // Forget the bar grid once nothing is on it any more: no loop, and no tape.
+  releaseGrid() {
+    if (this.allEmpty() && !(this.gridUser && this.gridUser.usesGrid())) this.transportOrigin = -1;
   }
 
   allEmpty() {

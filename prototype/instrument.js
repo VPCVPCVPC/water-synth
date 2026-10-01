@@ -9,13 +9,15 @@ import { MAX_STONES, StrikeBuffer } from './stones.js';
 import { VOICE_PARAMS, VOICE_KEYS, SHARED } from './voice.js';
 import {
   EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE, EV_VOICE, EV_VOICE_OVERRIDE,
+  EV_TAPE,
 } from './ring.js';
 import { GestureLooper, LOOPER_PARAMS, GESTURE_DROP, GESTURE_TRAIL } from './looper.js';
-import { FRAME_FLASH, FRAME_LOOPS, FRAME_HEIGHTS, frameLength } from './visuals.js';
+import { TapeDeck, TAPE_PARAMS } from './tape.js';
+import { FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_HEIGHTS, frameLength } from './visuals.js';
 
 // Every instrument-wide knob, in the order the page sends parameter indices.
 // Voice parameters travel separately (EV_VOICE), by index into VOICE_KEYS.
-export const PARAMS = { ...ENGINE_PARAMS, ...BELL_PARAMS, ...LOOPER_PARAMS };
+export const PARAMS = { ...ENGINE_PARAMS, ...BELL_PARAMS, ...LOOPER_PARAMS, ...TAPE_PARAMS };
 export { VOICE_PARAMS, VOICE_KEYS, SHARED };
 // Water-held sustain follows the water every few simulation steps. Each such
 // tick ends an audio segment, and every stone can ring once per simulation
@@ -23,6 +25,7 @@ export { VOICE_PARAMS, VOICE_KEYS, SHARED };
 const HOLD_STEPS = 4;
 const SEGMENT_STRIKES = HOLD_STEPS * MAX_STONES;
 const BELL_KEYS_END = Object.keys(ENGINE_PARAMS).length + Object.keys(BELL_PARAMS).length;
+const LOOPER_KEYS_END = BELL_KEYS_END + Object.keys(LOOPER_PARAMS).length;
 export const PARAM_KEYS = Object.keys(PARAMS);
 
 export class Instrument {
@@ -31,6 +34,9 @@ export class Instrument {
     this.bells = new Bells({ sampleRate });
     this.looper = new GestureLooper();
     this.engine.stepListener = this.looper;
+    // The tapes share the gesture looper's bar grid when quantize is on.
+    this.tape = new TapeDeck({ sampleRate, grid: this.looper });
+    this.looper.gridUser = this.tape;
     this.fs = sampleRate;
     // Stones arrive one event at a time and go live together on commit, so a
     // half-delivered retune never sounds. A commit only applies if every
@@ -54,7 +60,8 @@ export class Instrument {
     if (!Number.isInteger(i) || i < 0 || i >= PARAM_KEYS.length) return;
     if (i < ENGINE_PARAM_KEYS.length) this.engine.setParamIndex(i, value);
     else if (i < BELL_KEYS_END) this.bells.setParam(PARAM_KEYS[i], value);
-    else this.looper.setParam(PARAM_KEYS[i], value);
+    else if (i < LOOPER_KEYS_END) this.looper.setParam(PARAM_KEYS[i], value);
+    else this.tape.setParam(PARAM_KEYS[i], value);
   }
 
   // An instrument knob, or a voice parameter by name (sets the shared voice).
@@ -81,6 +88,7 @@ export class Instrument {
     frame[1] = this.outputPeak;
     for (let i = 0; i < MAX_STONES; i++) { frame[FRAME_FLASH + i] = this.flash[i]; this.flash[i] = 0; }
     this.looper.writeStatus(frame, FRAME_LOOPS);
+    this.tape.writeStatus(frame, FRAME_TAPES);
     this.engine.surface.snapshot(frame, FRAME_HEIGHTS);
     this.outputPeak = 0;
   }
@@ -109,6 +117,7 @@ export class Instrument {
       case EV_PARAM: this.setParamIndex(d[o + 1], d[o + 2]); break;
       case EV_VOICE: this.bells.voices.set(d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_VOICE_OVERRIDE: this.bells.voices.override(d[o + 1], d[o + 2] === 1); break;
+      case EV_TAPE: this.tape.action(d[o + 1], d[o + 2]); break;
       case EV_STONE: {
         const i = d[o + 1];
         if (Number.isInteger(i) && i >= 0 && i < MAX_STONES) {
@@ -133,7 +142,10 @@ export class Instrument {
   process(outL, outR, n) {
     for (let i = 0; i < n; i++) outL[i] = outR[i] = 0;
     if (!Number.isInteger(n) || n <= 0) return;
-    const e = this.engine, stones = e.stones, bells = this.bells;
+    const e = this.engine, stones = e.stones, bells = this.bells, tape = this.tape;
+    // The tapes run on the same stream position the water does, so their loop
+    // positions never depend on how the stream is split into blocks.
+    tape.now = e.sample;
     this.strikes.clear();
     bells.applyPending();
     this.looper.beginBlock();
@@ -168,6 +180,9 @@ export class Instrument {
       if (e.simStep >= tick) bells.updateHold(stones);
     }
     bells.endBlock(outL, outR, n);
+    // The tapes record what the water just played (never another tape) and add
+    // their own playback on top.
+    tape.process(outL, outR, n);
     let p = this.outputPeak;
     for (let i = 0; i < n; i++) {
       const a = outL[i] < 0 ? -outL[i] : outL[i], b = outR[i] < 0 ? -outR[i] : outR[i];

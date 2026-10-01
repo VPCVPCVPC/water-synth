@@ -16,6 +16,7 @@ export const EV_LOOP = 6; // layer, action (looper.js LOOP_*)
 export const EV_STONE_MOVE = 7; // index, x, y — move one stone now (no commit needed)
 export const EV_VOICE = 8; // target (−1 shared voice, else a stone), paramIndex (voice.js VOICE_KEYS), value
 export const EV_VOICE_OVERRIDE = 9; // stone, on (1: its own voice, copied from the shared one; 0: back to shared)
+export const EV_TAPE = 10; // track, action (tape.js TAPE_*: record, play/stop, mute, clear, clear all)
 
 const HEADER_BYTES = 8;
 

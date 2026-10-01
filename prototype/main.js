@@ -4,12 +4,17 @@
 
 import {
   createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE,
-  EV_VOICE,
+  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE,
 } from './ring.js';
-import { createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_HEIGHTS, LOOP_FIELDS } from './visuals.js';
+import {
+  createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_HEIGHTS, LOOP_FIELDS,
+} from './visuals.js';
 import { buildPitches, noteLabel, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
-import { PARAMS as INSTRUMENT_PARAMS, PARAM_KEYS, VOICE_PARAMS, VOICE_KEYS, SHARED } from './instrument.js';
+import { PARAMS, PARAM_KEYS, VOICE_PARAMS, VOICE_KEYS, SHARED } from './instrument.js';
+import {
+  TAPE_TRACKS, TAPE_FIELDS, TAPE_RECORD, TAPE_PLAY_STOP, TAPE_MUTE, TAPE_CLEAR, TAPE_CLEAR_ALL,
+} from './tape.js';
 import { REFERENCE_SPEED, SURFACE_W, SURFACE_H, SIM_RATE } from './surface.js';
 import { MAX_STONES } from './stones.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
@@ -100,6 +105,7 @@ function retune() {
   setTuningNote(`${pitches.length} stones`);
   stones = { ...placeStones(pitches.length), hzs: pitches.map((p) => p.hz), labels: pitches.map((p) => p.label), count: pitches.length };
   sendStones();
+  refreshVoice(); // a stone the editor was on may be gone
 }
 
 // Scattered positions, except stones placed by hand, which stay put.
@@ -177,6 +183,8 @@ function buildStoneControls() {
   const move = document.getElementById('move');
   move.addEventListener('click', () => {
     moveMode = !moveMode;
+    if (moveMode) pickMode = false; // one pond gesture at a time
+    refreshVoice(); // also tells the pond's label which mode it's in
     move.classList.toggle('on', moveMode);
     move.setAttribute('aria-pressed', moveMode ? 'true' : 'false');
     move.textContent = moveMode ? 'done moving' : 'move stones';
@@ -195,8 +203,7 @@ function buildStoneControls() {
 
 // ---- knobs ---------------------------------------------------------------------------
 
-// Instrument knobs and the shared voice's parameters, by name.
-const PARAMS = { ...INSTRUMENT_PARAMS, ...VOICE_PARAMS };
+// Instrument-wide knobs (the water, the looper, the tapes, the output).
 const values = Object.fromEntries(Object.keys(PARAMS).map((k) => [k, PARAMS[k].def]));
 const SLIDER_STEPS = 1000;
 const logMap = (k) => ({
@@ -222,10 +229,10 @@ const KNOBS = [
     show: (v) => `${Math.round(sensitivityMap.to(v) * 100)} / 100`, hint: 'how much of the water the stones hear — and so how long phrases last' },
   { group: 'water', key: 'splash', label: 'splash', map: linMap('splash'),
     show: (v) => `${Math.round((v / PARAMS.splash.max) * 100)}%`, hint: 'ringing stones send ripples back into the water (never more than you put in)' },
-  { group: 'bells', key: 'bellDecay', label: 'bell decay', map: logMap('bellDecay'),
-    show: (v) => `${v.toFixed(1)} s`, hint: 'how long a struck stone rings' },
-  { group: 'bells', key: 'volume', label: 'volume', map: linMap('volume'),
+  { group: 'water', key: 'volume', label: 'volume', map: linMap('volume'),
     show: (v) => `${v.toFixed(2)}×`, hint: 'listening level' },
+  { group: 'tapes', key: 'tapeLevel', label: 'tape level', map: linMap('tapeLevel'),
+    show: (v) => `${v.toFixed(2)}×`, hint: 'the tapes under (or over) the water' },
   { group: 'quantize', key: 'quantizeStrength', label: 'strength', map: linMap('quantizeStrength'),
     show: (v) => (v >= 0.995 ? 'snap' : v <= 0.005 ? 'as played' : `lean ${Math.round(v * 100)}%`), hint: 'how far recorded touches move toward the grid' },
   { group: 'quantize', key: 'swing', label: 'swing', map: linMap('swing'),
@@ -247,7 +254,11 @@ function slider({ label, hint, get, set, to, from, show }) {
   small.textContent = hint;
   input.addEventListener('input', () => { set(from(Number(input.value) / SLIDER_STEPS)); refreshReadouts(); readout.textContent = show(get()); });
   el.append(name, input, readout, small);
-  const row = { el, refresh: () => { input.value = Math.round(to(get()) * SLIDER_STEPS); readout.textContent = show(get()); }, readout, show, get };
+  const row = {
+    el, readout, show, get,
+    refresh: () => { input.value = Math.round(to(get()) * SLIDER_STEPS); readout.textContent = show(get()); },
+    setDisabled: (off) => { input.disabled = off; el.classList.toggle('off', off); },
+  };
   row.refresh();
   return row;
 }
@@ -262,9 +273,85 @@ function buildKnobs() {
     document.getElementById(`${k.group}-controls`).append(row.el);
   }
   document.getElementById('defaults').addEventListener('click', () => {
-    for (const k of KNOBS) if (k.group !== 'quantize') { values[k.key] = PARAMS[k.key].def; sendParam(k.key); }
+    for (const k of KNOBS) if (k.group === 'water') { values[k.key] = PARAMS[k.key].def; sendParam(k.key); }
     for (const row of knobs) row.refresh();
   });
+}
+
+// ---- the voice editor's controls --------------------------------------------------------
+
+const voiceKnobs = [];
+let playingStatus = '';
+let pickMode = false;
+let refreshVoice = () => {};
+
+function buildVoiceControls() {
+  for (const k of VOICE_KNOBS) {
+    const row = slider({
+      label: k.label, hint: k.hint,
+      get: () => voiceValue(k.key), set: (v) => setVoiceValue(k.key, v),
+      to: k.map.to, from: k.map.from, show: k.show,
+    });
+    voiceKnobs.push(row);
+    document.getElementById(`${k.group}-controls`).append(row.el);
+  }
+  const pick = document.getElementById('voice-pick');
+  const all = document.getElementById('voice-all');
+  const own = document.getElementById('voice-own');
+  const label = document.getElementById('voice-target');
+  const ownReset = document.getElementById('voice-defaults');
+  ownReset.addEventListener('click', () => {
+    // Only the voice the knobs show — and only if they're live.
+    const target = voiceTarget === SHARED ? SHARED : overridden.has(voiceTarget) ? voiceTarget : null;
+    if (target === null) return;
+    for (const k of VOICE_KEYS) { voiceValues.get(target)[k] = VOICE_PARAMS[k].def; sendVoiceTo(target, k); }
+    for (const row of voiceKnobs) row.refresh();
+  });
+  refreshVoice = () => {
+    const one = voiceTarget !== SHARED && voiceTarget < stones.count;
+    if (!one && voiceTarget !== SHARED) { voiceTarget = SHARED; pickMode = false; }
+    const isOwn = one && overridden.has(voiceTarget);
+    voiceMarks++;
+    const text = one
+      ? `stone ${voiceTarget + 1} · ${stones.labels[voiceTarget]}${isOwn ? ' · its own voice' : ' · still follows the shared voice'}`
+      : 'all stones';
+    if (label.textContent !== text) label.textContent = text; // aria-live: announce changes only
+    ownReset.disabled = one && !isOwn;
+    ownReset.textContent = one ? 'this stone\'s voice back to defaults' : 'shared voice back to defaults';
+    own.disabled = !one;
+    all.hidden = !one;
+    own.textContent = isOwn ? 'back to the shared voice' : 'give it its own voice';
+    own.classList.toggle('on', isOwn);
+    for (const row of voiceKnobs) { row.setDisabled(one && !isOwn); row.refresh(); }
+    pick.classList.toggle('on', pickMode);
+    pick.setAttribute('aria-pressed', pickMode ? 'true' : 'false');
+    pick.textContent = pickMode ? 'tap a stone… (cancel)' : one ? 'pick another stone' : 'edit one stone';
+    if (pickMode) status.textContent = 'tap a stone to edit its voice — the pond is quiet until you do';
+    else if (status.textContent.startsWith('tap a stone')) status.textContent = playingStatus;
+    surface.setAttribute('aria-label', pickMode ? 'Water surface: tap a stone to edit its voice'
+      : moveMode ? 'Water surface: drag a stone to move it' : 'Water surface: touch to drop, drag to disturb');
+  };
+  pick.addEventListener('click', () => {
+    pickMode = !pickMode;
+    if (pickMode && moveMode) document.getElementById('move').click(); // one pond gesture at a time
+    refreshVoice();
+  });
+  all.addEventListener('click', () => { voiceTarget = SHARED; pickMode = false; refreshVoice(); });
+  own.addEventListener('click', () => {
+    if (voiceTarget === SHARED) return;
+    if (overridden.has(voiceTarget)) {
+      overridden.delete(voiceTarget);
+      voiceValues.delete(voiceTarget);
+      sendOverride(voiceTarget, 0);
+    } else {
+      // An override starts as a copy of the shared voice, as the audio thread makes it.
+      voiceValues.set(voiceTarget, { ...voiceValues.get(SHARED) });
+      overridden.add(voiceTarget);
+      sendOverride(voiceTarget, 1);
+    }
+    refreshVoice();
+  });
+  refreshVoice();
 }
 
 function refreshReadouts() {
@@ -275,11 +362,105 @@ function refreshReadouts() {
 const unsent = new Set();
 function sendParam(key) {
   if (!events) return;
-  const sent = PARAM_KEYS.includes(key)
-    ? events.push(EV_PARAM, PARAM_KEYS.indexOf(key), values[key])
-    : events.push(EV_VOICE, SHARED, VOICE_KEYS.indexOf(key), values[key]);
-  if (sent) unsent.delete(key);
+  if (events.push(EV_PARAM, PARAM_KEYS.indexOf(key), values[key])) unsent.delete(key);
   else unsent.add(key);
+}
+
+// ---- the voice editor ------------------------------------------------------------------
+//
+// The voice the editor is changing: SHARED (every stone) or one stone's own.
+// The page keeps its own copy of each voice's values — the audio thread owns the
+// real ones and clamps whatever it is sent — and an override starts as a copy of
+// the shared voice, exactly as the audio thread makes it.
+
+let voiceTarget = SHARED;
+const voiceValues = new Map([[SHARED, Object.fromEntries(VOICE_KEYS.map((k) => [k, VOICE_PARAMS[k].def]))]]);
+const overridden = new Set(); // stones the page has given their own voice
+let voiceMarks = 0; // bumped whenever the pond's voice marks may change (for the redraw check)
+
+// A stone the page has not given its own voice shows (and would follow) the
+// shared one; its knobs are disabled, so nothing can be sent for it.
+const voiceOf = (target) => voiceValues.get(target) || voiceValues.get(SHARED);
+const voiceValue = (key) => voiceOf(voiceTarget)[key];
+// Voice events go out in the order they were made, through one queue that
+// holds only the latest wish for each override and each knob: re-queueing an
+// entry moves it to the back. If the ring is full, the rest wait for the next
+// frame — in order, so a stone's edits never arrive before its override (the
+// audio thread ignores edits to a stone without one).
+const voiceQueue = new Map(); // "o:stone" → on (0/1); "v:target:key" → [target, key]
+function queueVoice(id, item) {
+  voiceQueue.delete(id);
+  voiceQueue.set(id, item);
+  flushVoice();
+}
+function flushVoice() {
+  if (!events) return;
+  for (const [id, item] of voiceQueue) {
+    let sent = true;
+    if (id[0] === 'o') sent = events.push(EV_VOICE_OVERRIDE, Number(id.slice(2)), item);
+    else {
+      const voice = voiceValues.get(item[0]);
+      if (voice) sent = events.push(EV_VOICE, item[0], VOICE_KEYS.indexOf(item[1]), voice[item[1]]); // else: gone, nothing to send
+    }
+    if (!sent) return;
+    voiceQueue.delete(id);
+  }
+}
+function sendVoiceTo(target, key) { queueVoice(`v:${target}:${key}`, [target, key]); }
+function sendOverride(stone, on) {
+  queueVoice(`o:${stone}`, on);
+  // Its values follow the override, so both sides agree however the override
+  // toggles arrived.
+  if (on) for (const k of VOICE_KEYS) sendVoiceTo(stone, k);
+}
+function sendVoice(key) { sendVoiceTo(voiceTarget, key); }
+function setVoiceValue(key, v) {
+  const voice = voiceValues.get(voiceTarget);
+  if (!voice) return; // not an override: its knobs are disabled
+  voice[key] = v;
+  sendVoice(key);
+}
+
+// A voice knob's value maps are the voice's own ranges.
+const voiceLin = (key) => ({
+  to: (v) => (v - VOICE_PARAMS[key].min) / (VOICE_PARAMS[key].max - VOICE_PARAMS[key].min),
+  from: (f) => VOICE_PARAMS[key].min + f * (VOICE_PARAMS[key].max - VOICE_PARAMS[key].min),
+});
+const voiceLog = (key) => ({
+  to: (v) => Math.log(v / VOICE_PARAMS[key].min) / Math.log(VOICE_PARAMS[key].max / VOICE_PARAMS[key].min),
+  from: (f) => VOICE_PARAMS[key].min * Math.pow(VOICE_PARAMS[key].max / VOICE_PARAMS[key].min, f),
+});
+const pct = (v) => `${Math.round(v * 100)}%`;
+const VOICE_KNOBS = [
+  // The bell: partials, decay, tick and brightness.
+  { group: 'voice-bell', key: 'bellLevel', label: 'bell level', map: voiceLin('bellLevel'), show: (v) => v.toFixed(2), hint: 'how loud the bell is' },
+  { group: 'voice-bell', key: 'bellDecay', label: 'bell decay', map: voiceLog('bellDecay'), show: (v) => `${v.toFixed(1)} s`, hint: 'how long a struck stone rings' },
+  { group: 'voice-bell', key: 'bellTone', label: 'bell tone', map: voiceLin('bellTone'), show: (v) => v.toFixed(2), hint: 'how loud the upper partials are' },
+  { group: 'voice-bell', key: 'bellPartials', label: 'clang', map: voiceLin('bellPartials'), show: (v) => (v < 0.02 ? 'bar-like' : v > 0.98 ? 'clangy' : pct(v)), hint: 'bar-like and tuneful ↔ clangy free-bar partials' },
+  { group: 'voice-bell', key: 'tick', label: 'tick', map: voiceLin('tick'), show: (v) => v.toFixed(2), hint: 'the water touching the stone' },
+  // How a strike shapes it.
+  { group: 'voice-strike', key: 'dynamics', label: 'dynamics', map: voiceLin('dynamics'), show: (v) => `${v.toFixed(0)} dB`, hint: 'how much louder a hard strike is than a soft one' },
+  { group: 'voice-strike', key: 'strikeBright', label: 'strike brightness', map: voiceLin('strikeBright'), show: (v) => pct(v), hint: 'how much brighter a harder strike is' },
+  // The water holds the note.
+  { group: 'voice-sustain', key: 'hold', label: 'water-held sustain', map: voiceLin('hold'), show: (v) => (v < 0.02 ? 'off' : pct(v)), hint: "how much the moving water slows the note's decay — the water holds it, never the player" },
+  // The synth layer, silent until its level is raised.
+  { group: 'voice-synth', key: 'synthLevel', label: 'synth level', map: voiceLin('synthLevel'), show: (v) => (v < 0.01 ? 'off' : v.toFixed(2)), hint: 'the synth layer under the bell (0 = the bell alone)' },
+  { group: 'voice-synth', key: 'osc1Shape', label: 'osc 1 shape', map: voiceLin('osc1Shape'), show: (v) => shapeName(v), hint: 'sine → triangle → saw → square (morphs between)' },
+  { group: 'voice-synth', key: 'osc2Shape', label: 'osc 2 shape', map: voiceLin('osc2Shape'), show: (v) => shapeName(v), hint: 'sine → triangle → saw → square (morphs between)' },
+  { group: 'voice-synth', key: 'osc2Pitch', label: 'osc 2 pitch', map: voiceLin('osc2Pitch'), show: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(0)} st`, hint: "semitones from the stone's pitch" },
+  { group: 'voice-synth', key: 'osc2Detune', label: 'osc 2 detune', map: voiceLin('osc2Detune'), show: (v) => `${v.toFixed(0)}¢`, hint: 'cents, against osc 1' },
+  { group: 'voice-synth', key: 'oscMix', label: 'osc mix', map: voiceLin('oscMix'), show: (v) => (v < 0.02 ? 'osc 1' : v > 0.98 ? 'osc 2' : pct(v)), hint: 'osc 1 only ↔ osc 2 only' },
+  { group: 'voice-synth', key: 'cutoff', label: 'cutoff', map: voiceLin('cutoff'), show: (v) => `${v.toFixed(1)} oct`, hint: "the low-pass, octaves above the stone's pitch" },
+  { group: 'voice-synth', key: 'resonance', label: 'resonance', map: voiceLin('resonance'), show: (v) => v.toFixed(2), hint: 'how much the filter rings at its cutoff' },
+  { group: 'voice-synth', key: 'filterEnv', label: 'filter envelope', map: voiceLin('filterEnv'), show: (v) => `${v.toFixed(1)} oct`, hint: 'how far a strike opens the filter' },
+  { group: 'voice-synth', key: 'filterDecay', label: 'filter decay', map: voiceLog('filterDecay'), show: (v) => `${v.toFixed(2)} s`, hint: 'how long the opening takes to close' },
+  { group: 'voice-synth', key: 'attack', label: 'attack', map: voiceLog('attack'), show: (v) => `${(v * 1000).toFixed(0)} ms`, hint: "the layer's fade-in" },
+  { group: 'voice-synth', key: 'synthDecay', label: 'synth decay', map: voiceLog('synthDecay'), show: (v) => `${v.toFixed(1)} s`, hint: 'how long the layer rings' },
+];
+function shapeName(v) {
+  const names = ['sine', 'triangle', 'saw', 'square'];
+  const i = Math.min(3, Math.max(0, Math.round(v)));
+  return v === i ? names[i] : `${names[Math.floor(v)]}→${names[Math.ceil(v)]}`;
 }
 
 // ---- loops ---------------------------------------------------------------------------
@@ -339,6 +520,80 @@ function sendLoop(layer, action) {
   if (events) events.push(EV_LOOP, layer, action);
 }
 
+// ---- tapes ---------------------------------------------------------------------------
+
+const tapeUi = [];
+function buildTapeControls() {
+  const host = document.getElementById('tapes');
+  for (let t = 0; t < TAPE_TRACKS; t++) {
+    const row = document.createElement('div');
+    row.className = 'layer';
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = String(t + 1);
+    const buttons = document.createElement('div');
+    buttons.className = 'buttons';
+    const mk = (text) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; buttons.append(b); return b; };
+    const rec = mk('record'), play = mk('play'), mute = mk('mute'), clear = mk('clear');
+    for (const [b, what] of [[rec, 'record'], [play, 'play or stop'], [mute, 'mute'], [clear, 'clear']]) b.setAttribute('aria-label', `tape ${t + 1} ${what}`);
+    mute.setAttribute('aria-pressed', 'false');
+    rec.addEventListener('click', () => sendTape(t, TAPE_RECORD));
+    play.addEventListener('click', () => sendTape(t, TAPE_PLAY_STOP));
+    mute.addEventListener('click', () => sendTape(t, TAPE_MUTE));
+    confirmButton(clear, () => sendTape(t, TAPE_CLEAR));
+    const info = document.createElement('div');
+    info.className = 'info';
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    const pos = document.createElement('div');
+    bar.append(pos);
+    const text = document.createElement('span');
+    info.append(bar, text);
+    row.append(name, buttons, document.createElement('span'), info);
+    host.append(row);
+    tapeUi.push({ row, rec, play, mute, pos, text, last: '', lastPos: '' });
+  }
+  confirmButton(document.getElementById('clear-tapes'), () => sendTape(0, TAPE_CLEAR_ALL));
+}
+
+function sendTape(track, action) {
+  if (events) events.push(EV_TAPE, track, action);
+}
+
+// Show each tape's state from the latest frame (only touching the DOM on change).
+function updateTapes(frame) {
+  for (let t = 0; t < TAPE_TRACKS; t++) {
+    const o = FRAME_TAPES + t * TAPE_FIELDS;
+    const state = frame[o], muted = frame[o + 1], length = frame[o + 2], pos = frame[o + 3], waiting = frame[o + 4], fading = frame[o + 5];
+    const ui = tapeUi[t];
+    const width = state === PLAYING || state === OVERDUB
+      ? `${Math.min(100, (pos / Math.max(1e-3, length)) * 100).toFixed(0)}%` : state === RECORDING ? '100%' : '0';
+    if (width !== ui.lastPos) { ui.pos.style.width = width; ui.lastPos = width; }
+    let text = state === EMPTY ? 'empty' : `${length.toFixed(1)} s`;
+    if (state === RECORDING) text = `recording ${length.toFixed(1)} s`;
+    if (state === STOPPED) text += ' · stopped';
+    if (muted) text += ' · muted';
+    if (waiting) text += ' · waiting for the bar';
+    if (state === OVERDUB) text += ' · overdubbing';
+    if (fading === 1) text += ' · stopping';
+    if (fading === 2) text += ' · clearing';
+    const key = `${state}|${muted}|${text}`;
+    if (key === ui.last) continue;
+    ui.last = key;
+    ui.text.textContent = text;
+    ui.row.classList.toggle('recording', state === RECORDING || state === OVERDUB);
+    ui.rec.textContent = state === EMPTY ? 'record' : state === RECORDING ? 'finish' : state === OVERDUB ? 'end overdub' : 'overdub';
+    ui.rec.setAttribute('aria-label', `tape ${t + 1} ${ui.rec.textContent}`);
+    ui.rec.classList.toggle('rec', state === RECORDING || state === OVERDUB);
+    ui.play.textContent = state === PLAYING || state === OVERDUB ? 'stop' : state === RECORDING ? 'finish' : 'play';
+    ui.play.setAttribute('aria-label', `tape ${t + 1} ${ui.play.textContent}`);
+    ui.play.disabled = state === EMPTY;
+    ui.mute.classList.toggle('on', Boolean(muted));
+    ui.mute.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    ui.mute.disabled = state === EMPTY;
+  }
+}
+
 // Show each layer's state from the latest frame (only touching the DOM on change).
 function updateLoops(frame) {
   const bar = (4 * 60 * SIM_RATE) / values.bpm;
@@ -379,7 +634,9 @@ function updateLoops(frame) {
 
 buildTuningControls();
 buildKnobs();
+buildVoiceControls();
 buildLoopControls();
+buildTapeControls();
 buildStoneControls();
 document.getElementById('labels').addEventListener('change', (e) => { showLabels = e.target.checked; });
 startButton.addEventListener('click', start);
@@ -433,14 +690,17 @@ async function startAudio() {
     ctx, node, analyser, peak: () => peakOf(analyser), stones: () => stones, placed: () => placed,
     liveEnergy: () => live[0], liveFlash: () => Array.from(live.subarray(FRAME_FLASH, FRAME_FLASH + stones.count)),
     liveLoops: () => Array.from({ length: LOOP_LAYERS }, (_, l) => Array.from(live.subarray(FRAME_LOOPS + l * LOOP_FIELDS, FRAME_LOOPS + (l + 1) * LOOP_FIELDS))),
+    liveTapes: () => Array.from({ length: TAPE_TRACKS }, (_, t) => Array.from(live.subarray(FRAME_TAPES + t * TAPE_FIELDS, FRAME_TAPES + (t + 1) * TAPE_FIELDS))),
   };
 
   for (const k of Object.keys(PARAMS)) sendParam(k);
+  for (const k of VOICE_KEYS) sendVoice(k);
   retune();
   requestAnimationFrame(draw); // draw even if iOS holds the resume back
   status.textContent = 'waking the water…';
   await resumed;
-  status.textContent = `${ctx.sampleRate} Hz · touch to drop, drag to disturb — any number of fingers`;
+  playingStatus = `${ctx.sampleRate} Hz · touch to drop, drag to disturb — any number of fingers`;
+  status.textContent = playingStatus;
 }
 
 // ---- gestures: every finger, pen or mouse is its own disturbance ------------------------
@@ -455,6 +715,17 @@ surface.addEventListener('pointerdown', (e) => {
   // Keep receiving this finger's moves even if it slides off the surface.
   try { surface.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   const p = toSurface(e);
+  if (pickMode) { // choosing which stone the voice editor is changing
+    const i = nearestStone(e);
+    pickMode = false;
+    if (i >= 0) {
+      voiceTarget = i;
+      refreshVoice();
+      document.getElementById('voice').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    refreshVoice(); // a miss: back to playing, and this touch plays (the water is never dead)
+  }
   if (moveMode) {
     const i = nearestStone(e);
     if (i >= 0) grabs.set(e.pointerId, i);
@@ -528,6 +799,7 @@ let outputLevel = 0, lastFrameTime = 0, lastOutputWidth = '', lastSize = '', las
 function draw(now) {
   if (stonesUnsent) sendStones();
   for (const key of unsent) sendParam(key);
+  if (voiceQueue.size) flushVoice();
   const dt = lastFrameTime ? Math.min(0.1, (now - lastFrameTime) / 1000) : 0;
   lastFrameTime = now;
 
@@ -539,7 +811,7 @@ function draw(now) {
   let glowing = false;
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
-  const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${moveMode}x${showLabels}`;
+  const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${moveMode}x${showLabels}x${pickMode}x${voiceTarget}x${voiceMarks}`;
   if (!frame && !glowing && grabs.size === 0 && size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
   if (frame) {
@@ -556,6 +828,7 @@ function draw(now) {
     for (let i = 0; i < stones.count; i++) flashShown[i] = Math.max(flashShown[i], frame[FRAME_FLASH + i]);
     outputLevel = Math.max(frame[1], outputLevel * 0.9);
     updateLoops(frame);
+    updateTapes(frame);
   }
 
   const dpr = Math.min(2, window.devicePixelRatio || 1); // the water is a 128×97 image; 3× only costs
@@ -574,8 +847,10 @@ function draw(now) {
   }
 
   // Stones: a small dot; when one rings it glows, harder strikes brighter. In
-  // move mode, stones are larger targets and hand-placed ones are ringed.
-  const r = Math.max(2, Math.max(w, h) / 180) * (moveMode ? 1.8 : 1);
+  // move mode, stones are larger targets and hand-placed ones are ringed. A
+  // stone with its own voice has an amber centre; the one the voice editor
+  // is on has an amber ring (stones are larger targets while picking one).
+  const r = Math.max(2, Math.max(w, h) / 180) * (moveMode || pickMode ? 1.8 : 1);
   g.font = `${Math.round(11 * dpr)}px ui-sans-serif, system-ui, sans-serif`;
   for (let i = 0; i < stones.count; i++) {
     let grabbed = false;
@@ -588,6 +863,16 @@ function draw(now) {
     }
     g.fillStyle = grabbed ? 'rgba(255, 255, 255, 0.95)' : 'rgba(225, 235, 245, 0.75)';
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    if (overridden.has(i)) { // its own voice: an amber rim, visible at any size
+      g.strokeStyle = 'rgba(255, 196, 110, 0.95)';
+      g.lineWidth = Math.max(1.5, 1.2 * dpr);
+      g.beginPath(); g.arc(x, y, r + g.lineWidth, 0, Math.PI * 2); g.stroke();
+    }
+    if (i === voiceTarget) {
+      g.strokeStyle = 'rgba(255, 196, 110, 0.9)';
+      g.lineWidth = Math.max(1.5, 1.5 * dpr);
+      g.beginPath(); g.arc(x, y, r * 2.4, 0, Math.PI * 2); g.stroke();
+    }
     if (moveMode && placed.has(i)) {
       g.strokeStyle = 'rgba(225, 235, 245, 0.6)';
       g.lineWidth = Math.max(1, dpr);

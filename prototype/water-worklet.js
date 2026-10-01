@@ -1,18 +1,30 @@
 // water-worklet.js — runs the instrument (water, stones, bells) on the
 // browser's audio thread. Gestures, knob changes and stone layouts arrive
 // through the lock-free event queue (ring.js) and are handled by the
-// Instrument itself. Nothing here allocates once constructed.
+// Instrument itself; ~60 frames a second of the water go back to the page
+// through the visuals seqlock (visuals.js). Nothing here allocates once
+// constructed.
 
 import { Instrument } from './instrument.js';
 import { RingReader } from './ring.js';
+import { VisualWriter } from './visuals.js';
+
+const FRAME_RATE = 60;
 
 class WaterProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    const { eventBuffer, seed } = options.processorOptions;
+    const { eventBuffer, visualBuffer, seed } = options.processorOptions;
     // `sampleRate` is a global in the AudioWorklet scope.
     this.inst = new Instrument({ sampleRate, seed });
     this.events = new RingReader(eventBuffer);
+    this.visuals = new VisualWriter(visualBuffer);
+    // The page sized the shared frame; refuse to write past it (or leave stale
+    // heights) if the two sides ever disagree about the water's size.
+    this.publish = this.visuals.frame.length === this.inst.frameSize();
+    if (!this.publish) throw new Error(`visuals frame is ${this.visuals.frame.length} floats; the water needs ${this.inst.frameSize()}`);
+    this.frameSamples = Math.round(sampleRate / FRAME_RATE);
+    this.samplesSinceFrame = 0;
     this.scratch = new Float32Array(4096); // stands in for a missing right channel
     this.handle = (d, o) => this.inst.handleEvent(d, o); // created once, not per block
   }
@@ -24,6 +36,14 @@ class WaterProcessor extends AudioWorkletProcessor {
     if (!L) return true;
     const R = out[1] || this.scratch;
     this.inst.process(L, R, L.length);
+    this.samplesSinceFrame += L.length;
+    if (this.publish && this.samplesSinceFrame >= this.frameSamples) {
+      // Exact 60 Hz on average; never accumulates a backlog with large blocks.
+      this.samplesSinceFrame %= this.frameSamples;
+      this.inst.prepareFrame();
+      this.inst.writeFrame(this.visuals.begin());
+      this.visuals.end();
+    }
     return true;
   }
 }

@@ -114,6 +114,22 @@ console.log('\n2b. Tempo changes timing, not crest height');
     heights.map((h) => h.toFixed(3)).join(' / '));
 }
 
+console.log('\n2c. Ripples are the same in every direction');
+{
+  const s = new Surface(), cx = s.toGridX(0.5), cy = s.toGridY(0.5), d = 45 / Math.SQRT2;
+  s.drop(0.5, 0.5, 1, 1.5);
+  let ax = { h: -Infinity, t: 0 }, dg = { h: -Infinity, t: 0 };
+  for (let k = 1; k <= SIM_RATE; k++) {
+    s.step();
+    const a = s.heightAt(cx + 45, cy), b = s.heightAt(cx + d, cy + d);
+    if (a > ax.h) ax = { h: a, t: k };
+    if (b > dg.h) dg = { h: b, t: k };
+  }
+  const ratio = dg.h / ax.h, dt = Math.abs(dg.t - ax.t);
+  report(Math.abs(ratio - 1) < 0.05 && dt <= 5, 'crest 45 cells away: along an axis vs on the diagonal',
+    `height ratio ${ratio.toFixed(3)}, arrival ${dt} ms apart`);
+}
+
 // ---- 3. Stones ring in order of distance, on time ------------------------------
 console.log('\n3. One drop: stones ring in order of distance, at the predicted times');
 {

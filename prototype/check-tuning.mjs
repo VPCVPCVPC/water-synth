@@ -2,6 +2,7 @@
 //   node check-tuning.mjs
 
 import { SCALES, REFERENCES, noteToHz, buildPitches, noteLabel, MAX_PITCHES } from './tuning.js';
+import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
 
 let failures = 0;
 function report(ok, name, detail) {
@@ -117,6 +118,24 @@ console.log('\n6. Edges and guarantees');
 {
   const a = noteLabel(63.5), b = noteLabel(63.49999999999999);
   report(a === 'E4 −50¢' && b === 'E4 −50¢', 'quarter-tone labels are stable against float noise', `${a} / ${b}`);
+}
+
+console.log('\n7. Every setting the page allows gives playable stones');
+{
+  // Every scale × root × reference at the limits and in between × a spread of ranges.
+  let combos = 0, maxCount = 0, lo = Infinity, hi = 0, bad = 0;
+  const refs = [REF_MIN_HZ, 415.3, 432, 440, REF_MAX_HZ];
+  for (const scale of Object.values(SCALES)) for (let root = 0; root < 12; root++) for (const hz of refs) {
+    for (let low = RANGE_LOW; low <= RANGE_HIGH; low += 7) for (let high = low; high <= RANGE_HIGH; high += 5) {
+      combos++;
+      let p;
+      try { p = buildPitches({ scale, root: 60 + root, reference: { note: 69, hz }, low, high }); } catch { bad++; continue; }
+      maxCount = Math.max(maxCount, p.length);
+      for (const x of p) { lo = Math.min(lo, x.hz); hi = Math.max(hi, x.hz); }
+    }
+  }
+  report(bad === 0 && maxCount <= MAX_PITCHES && lo >= 8 && hi < 0.45 * 44100,
+    `${combos} reachable settings: none rejected, at most ${maxCount} stones`, `pitches ${lo.toFixed(1)}–${hi.toFixed(0)} Hz (limits 8 Hz – ${(0.45 * 44100).toFixed(0)} Hz)`);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll tuning checks passed.');

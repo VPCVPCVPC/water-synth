@@ -1,8 +1,11 @@
 // surface.js — the water: a damped 2D wave surface running at human speed.
 //
-// Same finite-difference scheme as the reviewed Phase 1a medium (two loss
-// terms, stability bound lambda² + 2·kappa ≤ 1/2, cached Laplacian, discrete
-// energy that never rises once disturbances stop), with three changes:
+// The reviewed Phase 1a scheme (two loss terms, cached Laplacian, discrete
+// energy that never rises once disturbances stop), with four changes:
+//   - An isotropic 9-point Laplacian, (4·edges + corners − 20·centre) / 6, so
+//     ripples travel and keep their height the same in every direction (the
+//     5-point stencil made diagonal crests ~40% higher than axial ones, which
+//     biased which stones rang). Stable when lambda² + 2·kappa ≤ 3/4.
 //   - It steps on a fixed simulation clock (SIM_RATE steps per second), not
 //     per audio sample, so the water behaves identically at any sample rate.
 //     Wave speed is in cells per second and acts as tempo.
@@ -18,18 +21,20 @@
 // audio path allocate nothing. Pure JS: runs in the AudioWorklet and in Node.
 
 export const SIM_RATE = 1000; // steps per second of water time
+export const SURFACE_W = 128, SURFACE_H = 97; // cells (not square, so reflections don't line up neatly)
 
 const MAX_DROP_RADIUS = 4; // cells
 const DROP_HALF = Math.ceil(3 * 2 * MAX_DROP_RADIUS); // dip ring is 2r wide
 const DROP_SPAN = 2 * DROP_HALF + 2;
 const LN1000 = Math.log(1000);
-const STABILITY_LIMIT = 0.49;
+const STABILITY_LIMIT = 0.74; // lambda² + 2·kappa, with margin under 3/4 (largest eigenvalue of −L is 16/3)
+const SIXTH = 1 / 6;
 const SILENCE_ENERGY = 5e-9; // ≈ −127 dB re one strength-1 drop at the default tempo (~2.3e4); far below any stone threshold
 const RUNAWAY_ENERGY = 1e12;
 const SILENCE_CHECK_STEPS = 50;
 // Crater centre height per unit of drop strength: a strength-1 drop's crest
 // is ~0.13 a dozen cells away (what the stone threshold is calibrated to).
-const CRATER_GAIN = 1.7;
+const CRATER_GAIN = 1.66;
 // Tempo is time-lapse: decay times are given at this wave speed and scale
 // with it, so the same gesture plays the same phrase at any tempo, faster or
 // slower. (Damping per second at a fixed decay would otherwise thin out slow
@@ -43,7 +48,7 @@ export const SURFACE_PARAMS = {
 };
 
 export class Surface {
-  constructor({ width = 128, height = 97 } = {}) {
+  constructor({ width = SURFACE_W, height = SURFACE_H } = {}) {
     if (!(width >= 8 && width <= 256 && height >= 8 && height <= 256)) {
       throw new RangeError('surface must be 8..256 cells on each side');
     }
@@ -117,7 +122,8 @@ export class Surface {
       let i = y * W + 1;
       for (let x = 1; x <= w; x++, i++) {
         const c = u[i];
-        const lap = u[i - 1] + u[i + 1] + u[i - W] + u[i + W] - 4 * c;
+        const lap = (4 * (u[i - 1] + u[i + 1] + u[i - W] + u[i + W]) +
+          u[i - W - 1] + u[i - W + 1] + u[i + W - 1] + u[i + W + 1] - 20 * c) * SIXTH;
         lc[i] = lap;
         un[i] = (2 * c - a * up[i] + lk * lap - k * lp[i]) * inv;
       }
@@ -152,39 +158,39 @@ export class Surface {
   toGridX(x) { return 1 + clamp(x, 0, 1) * (this.w - 1); }
   toGridY(y) { return 1 + clamp(y, 0, 1) * (this.h - 1); }
 
-  // Copy the w×h interior heights into dest (length ≥ w*h).
-  snapshot(dest) {
+  // Copy the w×h interior heights into dest, starting at `offset`.
+  snapshot(dest, offset = 0) {
     const W = this.W, u = this.u;
-    let o = 0;
+    let o = offset;
     for (let y = 1; y <= this.h; y++) {
       const row = y * W;
       for (let x = 1; x <= this.w; x++) dest[o++] = u[row + x];
     }
   }
 
-  // Discrete energy of the scheme with free edges (interior edges only), in
-  // per-second units. With parameters fixed and no drops it never rises.
+  // Discrete energy of the scheme, in per-second units, as quadratic forms of
+  // the same free-edge operator L the step uses (v = u − u_prev):
+  //   H = ½‖v‖² − ½λ²⟨u, L u_prev⟩ + ¼κ⟨v, L v⟩
+  // With parameters fixed and no drops it never rises.
   energy() {
     const W = this.W, w = this.w, h = this.h, u = this.u, up = this.up;
+    this.mirrorEdges(u);
+    this.mirrorEdges(up);
     let kinetic = 0, potential = 0, gradV = 0;
     for (let y = 1; y <= h; y++) {
-      for (let x = 1; x <= w; x++) {
-        const i = y * W + x;
+      let i = y * W + 1;
+      for (let x = 1; x <= w; x++, i++) {
+        const lu = (4 * (u[i - 1] + u[i + 1] + u[i - W] + u[i + W]) +
+          u[i - W - 1] + u[i - W + 1] + u[i + W - 1] + u[i + W + 1] - 20 * u[i]) * SIXTH;
+        const lp = (4 * (up[i - 1] + up[i + 1] + up[i - W] + up[i + W]) +
+          up[i - W - 1] + up[i - W + 1] + up[i + W - 1] + up[i + W + 1] - 20 * up[i]) * SIXTH;
         const v = u[i] - up[i];
         kinetic += v * v;
-        if (x < w) {
-          potential += (u[i + 1] - u[i]) * (up[i + 1] - up[i]);
-          const dv = (u[i + 1] - up[i + 1]) - v;
-          gradV += dv * dv;
-        }
-        if (y < h) {
-          potential += (u[i + W] - u[i]) * (up[i + W] - up[i]);
-          const dv = (u[i + W] - up[i + W]) - v;
-          gradV += dv * dv;
-        }
+        potential += u[i] * lp;
+        gradV += v * (lu - lp);
       }
     }
-    const e = 0.5 * kinetic + 0.5 * this.lambda2 * potential - 0.25 * this.kappa * gradV;
+    const e = 0.5 * kinetic - 0.5 * this.lambda2 * potential + 0.25 * this.kappa * gradV;
     return e * SIM_RATE * SIM_RATE;
   }
 
@@ -205,7 +211,8 @@ export class Surface {
     const tempo = REFERENCE_SPEED / this.waveSpeed;
     const decay = this.decay * tempo, hf = Math.min(this.hfDecay, this.decay) * tempo;
     const sigma = LN1000 / (decay * SIM_RATE);
-    let kappa = Math.max(0, (LN1000 / hf - LN1000 / decay) / (4 * SIM_RATE));
+    // The finest mode (eigenvalue 16/3) loses sigma + (8/3)·kappa per step.
+    let kappa = Math.max(0, (LN1000 / hf - LN1000 / decay) / ((8 / 3) * SIM_RATE));
     kappa = Math.min(kappa, STABILITY_LIMIT / 4);
     let lambda = this.waveSpeed / SIM_RATE;
     const lambdaMax = Math.sqrt(STABILITY_LIMIT - 2 * kappa);
@@ -216,8 +223,9 @@ export class Surface {
     this.inv = 1 / (1 + sigma);
   }
 
-  // Free edges: each ghost cell copies its interior neighbour, so the surface
-  // has no slope across the wall and crests reflect upright.
+  // Free edges: each ghost cell (corners included) copies the nearest interior
+  // cell — an even reflection — so the surface has no slope across the wall
+  // and crests reflect upright.
   mirrorEdges(u) {
     const W = this.W, w = this.w, h = this.h;
     for (let x = 1; x <= w; x++) {
@@ -228,6 +236,10 @@ export class Surface {
       u[y * W] = u[y * W + 1];
       u[y * W + w + 1] = u[y * W + w];
     }
+    u[0] = u[W + 1];
+    u[w + 1] = u[W + w];
+    u[(h + 1) * W] = u[h * W + 1];
+    u[(h + 1) * W + w + 1] = u[h * W + w];
   }
 
   // Crater: a Gaussian bump of radius r minus a Gaussian of radius 2r, each
@@ -270,16 +282,16 @@ export class Surface {
       }
     }
     // Refresh the cached Laplacian of up over the window and its 1-cell rim
-    // (free edges: a missing neighbour counts as the cell itself).
+    // (free edges: a neighbour beyond a wall is the nearest interior cell).
     const lx0 = Math.max(1, x0 - 1), lx1 = Math.min(this.w, x0 + nx);
     const ly0 = Math.max(1, y0 - 1), ly1 = Math.min(this.h, y0 + ny);
     const lp = this.lapPrev, w = this.w, h = this.h;
     for (let y = ly0; y <= ly1; y++) {
+      const ym = (y > 1 ? y - 1 : 1) * W, yc = y * W, yp = (y < h ? y + 1 : h) * W;
       for (let x = lx0; x <= lx1; x++) {
-        const i = y * W + x, c = up[i];
-        const l = x > 1 ? up[i - 1] : c, r2 = x < w ? up[i + 1] : c;
-        const t = y > 1 ? up[i - W] : c, b = y < h ? up[i + W] : c;
-        lp[i] = l + r2 + t + b - 4 * c;
+        const xm = x > 1 ? x - 1 : 1, xp = x < w ? x + 1 : w;
+        lp[yc + x] = (4 * (up[yc + xm] + up[yc + xp] + up[ym + x] + up[yp + x]) +
+          up[ym + xm] + up[ym + xp] + up[yp + xm] + up[yp + xp] - 20 * up[yc + x]) * SIXTH;
       }
     }
   }

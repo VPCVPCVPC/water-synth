@@ -1,9 +1,10 @@
-# Prototype: the medium in the browser
+# Prototype: the generative medium
 
-Phase 1 sketch of the medium (see [CLAUDE.md](../CLAUDE.md)). A 32×32 damped
-wave surface runs at audio rate; the grid's own resonances are the sound.
-There is no tuning, no modes, and no plugin here. Throwaway-friendly: the
-point is to find out whether disturbing it feels alive.
+Phase 1b sketch of the instrument (see [CLAUDE.md](../CLAUDE.md)). A pond of
+water you can watch, with tuned stones in it. You disturb the water; ripples
+travel, reflect and meet; when a crest reaches a stone, the stone rings like a
+water-struck bell at its pitch in the scale you've set. You don't pick notes
+directly — the water does. No plugin here, and only two gestures (drop and drag).
 
 ## Run it
 
@@ -11,173 +12,183 @@ point is to find out whether disturbing it feels alive.
 node prototype/serve.mjs
 ```
 
-Open http://localhost:8123 in Chrome, Safari, or Firefox and click
-**Click to wake the water** (browsers need a click before they play sound).
-In the Claude desktop app, the browser pane can start it from
-`.claude/launch.json` ("prototype").
+Open http://localhost:8123 and click **Click to wake the water** (browsers need
+a click before they play sound). In the Claude desktop app, the browser pane
+can start it from `.claude/launch.json` ("prototype").
 
-The small Node server is needed instead of opening the file directly: it sends
-the headers that let the page and the audio thread share memory.
+The small Node server sends the headers that let the page and the audio
+thread share memory; opening the file directly won't work.
 
 ## Playing
 
-- **Click**: a drop — one impact where you click. Each drop varies slightly.
-- **Drag**: the wake of your finger moving through the surface. Faster is
-  louder. Holding still while pressed adds nothing.
-- Every drag starts with a drop (pressing down is a click).
-- Pen and touch: pressure sets drop strength; a mouse click is fixed strength.
+- **Click** — a drop: a ring of ripples spreads from where you click.
+- **Drag** — a trail of small drops along your path; faster is stronger.
+- Stones ring when a crest reaches them, harder for higher crests, and glow
+  as they do (the glow shows how hard the water hit, not how loud the stone
+  then rings). Two ripples too small to ring a stone alone can ring it together.
+- Ripples bounce off the walls, so stones ring again as reflections pass.
+- A stone struck while still ringing rings on (brighter, or partly damped,
+  depending on how the new strike lines up) — it's one object, not a sampler.
+- The water settles by itself; phrases thin out and fade as it calms.
 
-## What you're seeing
+## Controls
 
-The canvas is an **energy map**, not a picture of the water. Ripples cross
-the grid in about 4 ms at audio rate, far too fast to see as rings, so it
-shows where energy sits instead:
+**Tuning** — scale (major, natural minor, dorian, major/minor pentatonic,
+chromatic, maqam Rast), root, lowest and highest note (C1–C8), and the
+reference pitch (A4 in Hz, 400–480 in this prototype; 440 and 432 one click
+away — the tuning core itself takes any frequency). There is one stone per
+scale note in the range. Note names are relative to A4 at the chosen reference
+(at 432 Hz, A4 is still labelled "A4"). Changing these retunes the stones; it never touches
+the water. A stone still ringing keeps its old pitch until it's next struck,
+then its old ring crossfades out over 100 ms.
 
-- brightness = how much energy the surface holds, on the same 60 dB scale the
-  sound fades over;
-- the pattern = standing waves (where energy pools), with contrast exaggerated
-  so it reads;
-- two faint circles = the listening points (left and right channels);
-- meters = total surface energy, and output level (turns orange near the limiter).
-
-Real water visuals come later (Phase 5, WebGL). Judge "does it feel like
-water" by ear.
-
-## The physics knobs
-
-Dev knobs for tuning the medium, not instrument controls:
+**Water**
 
 | Knob | What it does |
 |---|---|
-| decay | how long broad motion rings (time to fall 60 dB) |
-| fine-ripple decay | how long sharp detail lasts; never longer than decay |
-| wave speed | how fast ripples travel — **also moves the pitch of every resonance** |
-| input strength | how hard each gesture pushes |
-| volume | listening level |
+| tempo | how fast ripples travel; the whole water speeds up or slows down together, so the same gesture plays the same phrase faster or slower |
+| water decay | how long the water keeps moving (shown in seconds at the current tempo) |
+| fine ripples | how long small, sharp ripples last |
+| sensitivity | how much of the water the stones hear — and so how many notes a gesture makes and how long phrases last |
+| splash | ringing stones send ripples of their own back into the water; chains always die out (the water never gives back more than you put in) |
 
-Sweeping wave speed while the surface rings glides every resonance together
-and changes the loudness too (like tightening a drumhead mid-note: faster is
-louder and brighter, up to about +13 dB). That's the physics, not a
-performance control: how pitch attaches to the medium is decided in Phase 4
-(tuning) with Dash.
+**Bells** — bell decay (how long a struck stone rings, including stones already
+ringing) and volume. **Stone layout** compares two ways of placing stones
+(scattered, or low-to-high left-to-right); one will go once you decide.
+**Show note names** is a dev aid, off by default.
+
+The output meter turns orange when the limiter is working.
 
 ## Listening check — what to evaluate
 
-Defaults: a soft "plip" with a low body around 170 Hz that rings for about
-2.5 s; the brightest shimmer fades within about half a second and the mid
-tones take a second or more. It will likely
-sound more like a struck membrane or plate than water — that's the starting
-point, to be shaped by ear with the two decay knobs.
+At the defaults (C major pentatonic, C3–C6, 16 stones), one click in the
+middle rings about 25 notes over about 2 seconds, with a soft bell tone and a
+short water "tick" on each.
 
-1. Does a click feel like a drop into water, or like a drum / metal plate?
-2. Does a drag sound like moving through water, or like filtered noise gated
-   by the mouse?
-3. Do repeated taps in one spot sound like the same water touched slightly
-   differently, rather than randomly louder and softer?
-4. Do drops layered on a still-ringing surface blend, and does the tail fade
-   to true silence with no click at the end?
-5. Heavy dragging: does it sound squashed (output meter orange = limiter)?
-6. Fast drags vs slow ones: different in character, or only louder?
-7. Drag across a listening-point circle: there's a brighter, scratchier hiss
-   while you're right on it (like a microphone next to the hand). Welcome or
-   distracting?
-8. Does the fixed click strength already feel limiting?
+1. Does tapping in different places give clearly different phrases?
+2. Do overlapping taps make moments neither would alone?
+3. Do the bells sound water-struck (a soft tick, then a clear ring), or like a
+   synth pluck preset? (The bell's partials are 1 : 2 : 3 : 4.07 : 5.4 — sweeter
+   than before; a truer marimba-bar tuning is the alternative.)
+4. Re-strikes of a ringing stone: does it sound like the same stone ringing on?
+   About a third of re-strikes partly damp it (physics) — natural, or notes
+   being swallowed?
+5. Ripples make a crest, a trough and a smaller crest, so nearby stones often
+   ring twice ~100 ms apart, the second softly. Charming water detail, or a
+   stutter?
+6. Density: is ~25 notes per click right, or should the default sit nearer 13
+   (lower sensitivity)? Are distant stones too faint next to the loud nearby ones?
+7. Does the music ending before the visible water stops feel natural, or
+   disconnected?
+8. Splash: good surprises, or mush — and does it ever fall into loop-like
+   repetition?
+9. Tempo: sweep it while the water rings. Same phrase, faster or slower?
+   Changing tempo mid-flight speeds up the moving water — a possible seed for
+   the Ice phase (not built).
+10. Layouts: scattered vs pitch-by-position. Do you find yourself aiming at the
+    dots like keys? Clicking right on a stone plays it first, loudly.
+11. Stereo (stones panned by position, moderate width): pleasant?
+12. Fast drags get loud steeply. Too much?
 
 ### Decisions for Dash
 
-- Should a drag begin with a drop (current), or start silently?
-- Where variation comes from: currently small random nudges to each drop,
-  plus the noise in a drag and whatever the surface is already doing. Lean
-  more on the medium's state and the gesture's detail?
-- The drag's wake already sounds turbulent, which overlaps with how CLAUDE.md
-  describes Stir. This prototype shouldn't settle what Stir becomes.
+- **What makes a stone ring.** Phase 1b's hypothesis: a crest whose peak
+  passes a threshold. The stones ignore water moving below it. The
+  alternative CLAUDE.md lists is "energy arriving". It's isolated in one
+  method (`Stones.detect`) so it can be swapped.
+- **Tempo as time-lapse** (current) vs damping in real seconds (slow water
+  sparser, fast water busier).
+- **Splash is bounded by what you play** — it can outlive your last gesture by
+  about the water's decay. A more local, energy-based bound is possible.
+- **Stone layout** — keep scattered, pitch-by-position, or something else.
+- **Re-strikes** — physically accurate (sometimes damping) or always adding.
+- **Retunes** — a ringing stone crossfades its old pitch out over 100 ms when
+  next struck (my reading of "a stone has one pitch"); the alternative is to
+  let the old ring decay naturally under the new one.
+- **Bell partials** and **velocity range** (30 dB) — taste.
 
 ### Provisional choices (not decisions)
 
-- A square 32×32 grid with fixed edges. Wave speed and grid size set the
-  resonances, so they act like pitch — this touches the open question of how
-  tuning attaches to the medium. The square shape makes pairs of modes
-  coincide, so there are fewer distinct resonances: sparser, more bell-like.
-  A slightly non-square grid would spread them apart.
-- Two fixed listening points. Whether they move is an open question.
-- Audio runs at 48 kHz for CPU headroom: the JavaScript simulation uses about
-  17% of real time at 48k, about 40% at 96k and about 100% at 192k.
+- A 128 × 97 surface with free edges (reflections stay crests), stepped 1000
+  times a second of water time, with an isotropic grid stencil so ripples are
+  the same in every direction.
+- One stone per scale note in the range; at most 128.
+- Each stone panned by its left–right position (range 0.2–0.8).
+- Drops vary slightly (position, strength, size); most variation comes from
+  the water already moving.
 
 ## Known quirks
 
 - Pen pressure is often near zero at first contact, so pen drops can be weak.
-- Gestures take effect at the next 128-sample block (up to ~2.7 ms late).
-- If the event queue is ever full (in practice only while audio is suspended),
-  gestures are dropped; slider changes are retried until they get through.
-- Very rarely (about 1 in millions of frames under stress) the display shows a
-  frame mixed from two consecutive frames. Harmless; see port notes.
+- Gestures land at the next audio block and simulation step (≤ ~4 ms late).
+- Very rarely the display shows a frame mixed from two consecutive frames.
+- A very dense chromatic range at maximum splash and long bell decay can push
+  into the limiter.
 
 ## Checks
 
 ```bash
-node prototype/check.mjs
+cd prototype && npm run check
 ```
 
-About a minute. It checks stability across 44.1–192 kHz and parameter
-extremes, that energy never grows once gestures stop and the knobs are held
-still (checked every step), that the
-decay knobs give the decay times they promise and pitch doesn't drift with
-sample rate, settling to exact silence, identical output at any block size,
-bad-input handling, variation between identical drops, drag loudness across
-sample rates and pointer timing, the event queue, and CPU cost. It writes a
-reference render to `prototype/output/drops.wav` (not committed).
+About a minute and a half; three files:
+
+- `check-tuning.mjs` — references (440, 432, any), scale building, maqam Rast,
+  a non-octave scale, labels, bad input.
+- `check-water.mjs` — energy never rises once gestures stop; wave speed and
+  tempo invariance; stones ring in distance order on time; position matters;
+  interference; reflections; only scale notes; retuning never touches the
+  water; splash always dies out; moving water changes phrases; identical
+  notes at any sample rate and block size; bad input; CPU.
+- `check-bells.mjs` — bell pitch by FFT within 2 cents (exactly 0.00 measured)
+  at 44.1/48/192 kHz including A = 432 and a quarter tone, end to end through
+  the event queue; no aliasing; decay; click-free re-strikes and retunes;
+  tick tone independent of sample rate; limiter headroom; visuals frame; CPU.
 
 ## Files
 
 | File | What |
 |---|---|
-| `medium.js` | The simulation. No browser audio code, nothing allocated while processing; shaped for the C++ port. |
-| `medium-worklet.js` | Runs the medium on the browser's audio thread. |
-| `ring.js` | Lock-free queue: page → audio thread (gestures, knob changes). |
-| `visuals.js` | Lock-free snapshots: audio thread → page (energy map, meters). |
-| `main.js`, `index.html` | Page: pointer input, drawing, knobs. |
-| `check.mjs` | Objective checks, run with Node. |
+| `tuning.js` | Scales, reference pitch, range → pitches. |
+| `surface.js` | The water: damped 2D waves at human speed, free edges, craters. |
+| `stones.js` | When a crest rings a stone (the Phase 1b hypothesis). |
+| `layout.js` | Where stones sit (two layouts to compare). |
+| `engine.js` | Water + stones on one fixed clock; gestures; splash. |
+| `bells.js` | One water-struck bell per stone. |
+| `instrument.js` | Everything for one audio stream; page events; visuals frames. |
+| `water-worklet.js` | Runs the instrument on the browser's audio thread. |
+| `ring.js` | Lock-free queue: page → audio thread. |
+| `visuals.js` | Lock-free frames: audio thread → page. |
+| `main.js`, `index.html` | The page: drawing, gestures, controls. |
 | `serve.mjs` | Local server with the headers shared memory needs. |
+| `check-*.mjs` | The checks. |
 
 ## Notes for the C++ port (Phase 3)
 
-Collected from the real-time safety and DSP reviews:
+Collected from the real-time safety, DSP and tuning reviews of Phases 1a and 1b.
 
-- **Validate before every float → int conversion.** In C++, converting NaN,
-  Inf or an out-of-range float to an integer is undefined behaviour (JS just
-  gives 0 or wraps). Keep the finite checks and clamps in `drop`, `stroke`,
-  `setParamIndex` and the `exLen` clamp, and check event fields are finite
-  before casting them (event type, parameter index, `floor(centre ± half)` in
-  `fillKernel`). Otherwise a bad UI or host value becomes an out-of-bounds
-  write into the grid.
-- Keep block-size independence: the persistent sub-block position (`subPos`)
-  means smoothing, the output-gain ramp and excitation shapes advance every 32
-  samples of stream time, not per host block. Port the bit-identical
-  any-block-size check too.
-- Drain the event queue at the top of `processBlock`; never call `Medium`
-  from the message thread. `snapshot`/`energy` also run on the audio thread
-  and leave through the visuals buffer.
-- Keep the guards: NaN/runaway reset (counted), silence snap and sleep. Port
-  `check.mjs` to a native test harness, including the CPU benchmark at every
-  supported sample rate.
-- Parameters are state: prefer shared atomic targets (or APVTS) to queued
-  parameter events, so a full queue can't drop a final value.
-- Use `float` for the grid with `juce::ScopedNoDenormals` in `processBlock`
-  (the JS grid is Float64 only to avoid float32 subnormals in JS). Sum
-  `energy()` in double; with a float grid, relax the per-step energy check's
-  tolerance to ~1e-6.
-- Event queue: `std::atomic<uint32_t>` indices with release on publish and
-  acquire on the other side (relaxed would be a bug), separate cache lines —
-  or `juce::AbstractFifo`. Single producer only; add a queue per producer.
-- Visuals: the JS seqlock can rarely pass a mixed frame because plain accesses
-  aren't ordered against the atomics. In C++ use fences (release after the
-  first increment, acquire before the re-check) or a lock-free triple buffer.
-  Assert the frame size matches the grid.
-- Size any scratch buffer to the host's maximum block size.
-- Consider a fixed internal simulation rate with resampling: CPU scales with
-  sample rate (in JS at 192k: ~100% of real time while playing, ~122% with
-  all 16 excitations active — benchmark the worst case), and near the stability limit
-  the finest ripples shift with sample rate (FDTD dispersion).
-- Keep the xorshift state as `uint32_t`.
-- Grid size is capped at 64 in the prototype; N ≥ 128 wasn't real-time and
-  produced subnormals even in doubles. Keep a cap.
+- **Validate before every float → int conversion** (NaN/Inf/out-of-range casts
+  are undefined behaviour in C++): event types and indices, stone counts,
+  `floor`/`ceil` in crater windows and `heightAt`, strike sample offsets.
+- **Fixed simulation clock:** keep the 1 kHz water clock and the mapping of
+  step k to stream sample `floor(k·fs/1000)`; port the rate- and
+  block-size-independence checks.
+- **Bells:** keep phasor state in `double` (float drifts 1–4% in magnitude over
+  long tails). Render each strike from its exact sample. Size the per-block
+  strike list to `MAX_STONES × ceil(maxBlock / samplesPerStep)` or render per
+  step; splash already reads a per-step list.
+- **Water:** `float` is fine for the grid with `juce::ScopedNoDenormals`; sum
+  `energy()` in double. Craters are added at rest (to both height arrays) with
+  the cached Laplacian refreshed over the window.
+- **Event queue:** `std::atomic<uint32_t>` indices with release/acquire (or
+  `juce::AbstractFifo`), one queue per producer. Stones: staged events plus a
+  commit that applies only if every stone arrived.
+- **Visuals:** the JS seqlock can rarely pass a mixed frame; in C++ use fences
+  or a lock-free triple buffer, and assert frame sizes.
+- **Parameters** are state: prefer shared atomic targets (or APVTS) to queued
+  events. Consider smoothing tempo/decay on the water clock if jumps sound lumpy.
+- **Guards:** keep the runaway/NaN resets (counted), the silence snap and sleep,
+  NaN-safe voice release, and input validation at every boundary.
+- **Tuning:** stones must stay within audible, playable pitches (8 Hz to below
+  0.45·fs); the page limits the range to C1–C8. A Scala importer (Phase 4)
+  must decide how to treat out-of-order or ≥-period degrees.

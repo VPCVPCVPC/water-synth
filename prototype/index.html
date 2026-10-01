@@ -9,28 +9,83 @@
       --bg: #0b1016;
       --fg: #c9d6e2;
       --muted: #6f8294;
-      --surface: #0f1822;
+      --surface: #0e1e30;
       --edge: #1e2c3a;
+      --accent: #2a8fb0;
+      --hot: #d9824b;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg);
       font: 14px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif; }
-    main { min-height: 100%; display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 12px; padding: 16px; }
-    #surface { width: min(90vw, 760px); aspect-ratio: 128 / 97; display: block;
+    main { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px; }
+    .stage { width: min(100%, 860px); display: flex; flex-direction: column; gap: 8px; }
+    #surface { width: 100%; aspect-ratio: 128 / 97; display: block;
       background: var(--surface); border: 1px solid var(--edge); border-radius: 6px;
       touch-action: none; cursor: crosshair; }
+    .meter { display: grid; grid-template-columns: 4.5em 1fr; align-items: center; gap: 8px;
+      color: var(--muted); font-size: 12px; }
+    .track { height: 4px; background: var(--edge); border-radius: 2px; overflow: hidden; }
+    .fill { height: 100%; width: 0; background: var(--accent); }
+    .fill.hot { background: var(--hot); }
     #status { color: var(--muted); font-size: 12px; min-height: 1.4em; }
+    .panel { width: min(100%, 860px); display: grid; gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    fieldset { border: 1px solid var(--edge); border-radius: 6px; margin: 0; padding: 10px 12px 12px;
+      display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    legend { color: var(--muted); font-size: 12px; padding: 0 4px; }
+    .field { display: grid; grid-template-columns: 6.5em 1fr; align-items: center; gap: 8px; }
+    .field > span { color: var(--fg); }
+    select, input[type=number], button { background: #111a24; color: var(--fg); border: 1px solid var(--edge);
+      border-radius: 4px; padding: 4px 6px; font: inherit; min-width: 0; }
+    button { cursor: pointer; }
+    .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .control { display: grid; grid-template-columns: 6.5em 1fr 6.5em; align-items: center; column-gap: 8px; }
+    .control input { width: 100%; accent-color: var(--accent); min-width: 0; }
+    .control output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+    .control small, .note { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
     #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       background: rgba(11, 16, 22, 0.88); color: var(--fg); font-size: 18px; border: 0;
-      cursor: pointer; width: 100%; }
+      cursor: pointer; width: 100%; border-radius: 0; }
     #start[hidden] { display: none; }
   </style>
 </head>
 <body>
   <main>
-    <canvas id="surface" aria-label="Water surface: click to drop, drag to disturb"></canvas>
+    <div class="stage">
+      <canvas id="surface" aria-label="Water surface: click to drop, drag to disturb"></canvas>
+      <div class="meter"><span>output</span><div class="track"><div id="output" class="fill"></div></div></div>
+    </div>
     <div id="status"></div>
+
+    <div class="panel">
+      <fieldset>
+        <legend>Tuning</legend>
+        <label class="field"><span>scale</span><select id="scale"></select></label>
+        <label class="field"><span>root</span><select id="root"></select></label>
+        <label class="field"><span>lowest</span><select id="low"></select></label>
+        <label class="field"><span>highest</span><select id="high"></select></label>
+        <div class="field"><span>A4 =</span>
+          <div class="row"><input id="ref" type="number" min="400" max="480" step="0.1" style="width: 6em"> Hz
+            <button id="ref440" type="button">440</button><button id="ref432" type="button">432</button></div>
+        </div>
+        <div id="tuning-note" class="note"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Water</legend>
+        <div id="water-controls" style="display: contents"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Bells</legend>
+        <div id="bells-controls" style="display: contents"></div>
+        <label class="field" title="Two layouts to compare while deciding how stones should sit; one will go.">
+          <span>stone layout</span><select id="layout"></select></label>
+        <label class="row" style="color: var(--muted); font-size: 12px">
+          <input id="labels" type="checkbox"> show note names (dev aid)</label>
+        <button id="defaults" type="button">water &amp; bell knobs back to defaults</button>
+      </fieldset>
+    </div>
   </main>
   <button id="start">Click to wake the water</button>
   <script type="module" src="main.js"></script>

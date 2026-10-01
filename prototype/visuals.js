@@ -1,4 +1,4 @@
-// visuals.js — audio thread → page snapshots of the medium for drawing.
+// visuals.js — audio thread → page frames for drawing the water.
 //
 // A seqlock over a SharedArrayBuffer: the audio thread bumps a counter to odd,
 // writes the frame, bumps it to even. The page copies the frame and keeps it
@@ -11,13 +11,23 @@
 // (release after the first increment, acquire before the re-check) or a
 // lock-free triple buffer instead.
 //
-// Frame layout (Float32): [totalEnergy, outputPeak, cell0, cell1, …] where
-// cells are the N×N local energy densities averaged over the frame.
+// Frame layout (Float32):
+//   [0]                     surface energy
+//   [1]                     output peak since the last frame
+//   [2 .. 2+MAX_STONES)     per stone: loudest audible strike since the last frame (0 = none)
+//   [FRAME_HEIGHTS ..)      the water's heights, w × h, row by row
 
-export const FRAME_HEADER = 2;
+import { MAX_STONES } from './stones.js';
+
+export const FRAME_FLASH = 2;
+export const FRAME_HEIGHTS = FRAME_FLASH + MAX_STONES;
+
+export function frameLength(cells) {
+  return FRAME_HEIGHTS + cells;
+}
 
 export function createVisualBuffer(cells) {
-  return new SharedArrayBuffer(8 + (FRAME_HEADER + cells) * 4);
+  return new SharedArrayBuffer(8 + frameLength(cells) * 4);
 }
 
 export class VisualWriter {
@@ -26,13 +36,13 @@ export class VisualWriter {
     this.frame = new Float32Array(sab, 8);
   }
 
-  // acc holds sums over `count` accumulations; published as averages.
-  publish(acc, count, totalEnergy, outputPeak) {
-    const f = this.frame, inv = count > 0 ? 1 / count : 0;
+  // Write between begin() and end(); begin() returns the frame to fill.
+  begin() {
     Atomics.add(this.seq, 0, 1); // odd: writing
-    f[0] = totalEnergy;
-    f[1] = outputPeak;
-    for (let i = 0; i < acc.length; i++) f[FRAME_HEADER + i] = acc[i] * inv;
+    return this.frame;
+  }
+
+  end() {
     Atomics.add(this.seq, 0, 1); // even: done
   }
 }

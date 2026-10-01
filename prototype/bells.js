@@ -38,10 +38,13 @@ const TICK_SECONDS = 0.004;
 const TICK_ATTACK_SECONDS = 0.0003;
 const TICK_CUTOFF_HZ = 3500; // low-passed noise reads as water, not a click
 const TICK_LEVEL = 0.12;
-const FADE_SLOTS = 16; // rings of retuned stones, fading out
+// Rings of retuned stones, fading out: enough for every stone to be retuned
+// twice within one fade, so a scale change mid-phrase never runs out.
+const FADE_SLOTS = 2 * MAX_STONES;
 const FADE_SECONDS = 0.1;
 const PAN_MIN = 0.2, PAN_MAX = 0.8; // moderate stereo spread
 const OUTPUT_GAIN = 0.25; // headroom for many stones at once (at ≤ 16 stones)
+const GAIN_GLIDE_SECONDS = 0.02;
 const GAIN_REFERENCE_STONES = 16; // more stones than this → gain scales by √(16 / count)
 const MIN_HZ = 8;
 
@@ -81,15 +84,20 @@ export class Bells {
     this.rng = new Uint32Array(1);
     this.rng[0] = 0x9e3779b9;
     this.stoneGain = 1;
+    this.gain = this.volume * OUTPUT_GAIN; // the smoothed output gain
+    this.gainGlide = 1 - Math.exp(-1 / (GAIN_GLIDE_SECONDS * sampleRate));
+    this.decayDirty = false;
     this.skipped = 0; // diagnostics
     this.restruck = 0;
+    this.fadeReuses = 0; // fade slots reused while still fading (should stay 0)
   }
 
   setParam(name, value) {
     const p = BELL_PARAMS[name];
     if (!p || !Number.isFinite(value)) return;
     this[name] = value < p.min ? p.min : value > p.max ? p.max : value;
-    if (name === 'bellDecay') this.updateRingingDecays();
+    // Applied once at the start of the next block, however many changes arrive.
+    if (name === 'bellDecay') this.decayDirty = true;
   }
 
   // More stones can ring at once, so keep the overall level steady.
@@ -148,6 +156,7 @@ export class Bells {
   // Add n samples into outL / outR (which the caller zeroes), then apply
   // volume and the soft limiter.
   render(outL, outR, n) {
+    this.applyPending();
     this.renderRange(outL, outR, 0, n);
     this.endBlock(outL, outR, n);
   }
@@ -206,14 +215,21 @@ export class Bells {
   }
 
   // Finish a block: volume and soft limiter over [0, n).
+  // The gain glides per sample toward its target (~20 ms), in stream time, so
+  // volume moves and stone-count changes never click and the output stays
+  // identical however the stream is split into blocks.
   endBlock(outL, outR, n) {
     for (let s = 0; s < this.slots; s++) this.start[s] = 0;
-    const g = this.volume * OUTPUT_GAIN * this.stoneGain;
+    const target = this.volume * OUTPUT_GAIN * this.stoneGain, a = this.gainGlide;
+    let g = this.gain;
     for (let i = 0; i < n; i++) {
+      g += a * (target - g);
+      if (g - target < 1e-9 && target - g < 1e-9) g = target; // exact, never subnormal
       const l = outL[i] * g, r = outR[i] * g;
       outL[i] = Number.isFinite(l) ? Math.tanh(l) : 0;
       outR[i] = Number.isFinite(r) ? Math.tanh(r) : 0;
     }
+    this.gain = g;
   }
 
   // Ringing stones (not counting fading rings).
@@ -239,8 +255,11 @@ export class Bells {
     }
   }
 
-  // The bell-decay knob also applies to stones already ringing.
-  updateRingingDecays() {
+  // Call at the start of each block: a bell-decay change also reaches stones
+  // already ringing (only their decay changes; the ring itself is untouched).
+  applyPending() {
+    if (!this.decayDirty) return;
+    this.decayDirty = false;
     for (let s = 0; s < this.slots; s++) if (this.active[s]) this.setCoefficients(s);
   }
 
@@ -258,11 +277,15 @@ export class Bells {
   // `offset`), freeing the stone for its new pitch. If every fade slot is
   // busy, the quietest (level × fade remaining) is reused.
   fadeOut(s, offset) {
-    let slot = -1, least = Infinity;
-    for (let f = MAX_STONES; f < this.slots; f++) {
-      if (!this.active[f]) { slot = f; break; }
-      const audible = this.level(f) * this.fadeLeft[f];
-      if (audible < least) { least = audible; slot = f; }
+    let slot = -1;
+    for (let f = MAX_STONES; f < this.slots; f++) if (!this.active[f]) { slot = f; break; }
+    if (slot < 0) { // all busy (shouldn't happen): reuse the least audible
+      let least = Infinity;
+      for (let f = MAX_STONES; f < this.slots; f++) {
+        const audible = this.level(f) * this.fadeLeft[f];
+        if (audible < least) { least = audible; slot = f; }
+      }
+      this.fadeReuses++;
     }
     for (let p = 0; p < PARTIALS; p++) {
       const from = s * PARTIALS + p, to = slot * PARTIALS + p;

@@ -8,6 +8,7 @@ import { MAX_STONES } from './stones.js';
 import { buildPitches, SCALES, REFERENCES } from './tuning.js';
 import { stonePositions } from './layout.js';
 import { createRingBuffer, RingWriter, RingReader, EV_DROP, EV_STONE, EV_STONES_COMMIT } from './ring.js';
+import { frameLength, FRAME_FLASH, FRAME_HEIGHTS } from './visuals.js';
 import { performance } from 'node:perf_hooks';
 
 let failures = 0;
@@ -299,6 +300,74 @@ console.log('\n7. Whole instrument: water → stones → bells');
   for (const v of [NaN, Infinity, -1e9]) for (let i = -1; i <= PARAM_KEYS.length; i++) inst.setParamIndex(i, v);
   inst.setParamIndex(1.5, 1);
   report(play(inst, 1).L.every(Number.isFinite), 'bad parameter indices and values are ignored');
+}
+
+{
+  // Visuals frame: heights of the water, and flashes only for audible strikes.
+  const inst = makeInstrument();
+  const frame = new Float32Array(frameLength(128 * 97));
+  play(inst, 0.6, 128, (e) => e.drop(0.5, 0.5, 1, 0.02));
+  report(frame.length === inst.frameSize(), 'visuals frame size agrees with the water');
+  inst.prepareFrame();
+  inst.writeFrame(frame);
+  const heights = frame.subarray(FRAME_HEIGHTS);
+  const flashes = Array.from(frame.subarray(FRAME_FLASH, FRAME_FLASH + PENTA.length));
+  const moving = heights.some((h) => Math.abs(h) > 1e-3) && heights.every(Number.isFinite);
+  const lit = flashes.filter((f) => f > 0);
+  const energy = frame[0], outPeak = frame[1];
+  inst.writeFrame(frame);
+  const cleared = Array.from(frame.subarray(FRAME_FLASH, FRAME_FLASH + PENTA.length)).every((f) => f === 0 || f >= 0.02);
+  report(moving && lit.length > 0 && lit.every((f) => f >= 0.02) && cleared && outPeak > 0 && energy > 0,
+    'visuals frame: water heights, and flashes only for audible strikes (reset each frame)',
+    `${lit.length} stones lit, energy ${energy.toExponential(2)}, output peak ${outPeak.toFixed(3)}`);
+}
+
+{
+  // Gain changes glide: no click when the volume moves or the stone count changes.
+  // Second difference spikes are what a click looks like.
+  const clickAt = (change) => {
+    const inst = makeInstrument();
+    inst.engine.setStones([0.5], [0.5], [220], 1);
+    const fs = 48000, L = new Float32Array(128), R = new Float32Array(128), out = [];
+    inst.bells.strike(0, 220, 1, 0.5, 0);
+    for (let b = 0; b < 40; b++) {
+      if (b === 20) change(inst);
+      inst.process(L, R, 128);
+      out.push(...L);
+    }
+    let atChange = 0, elsewhere = 0;
+    for (let i = 2; i < out.length; i++) {
+      const d2 = Math.abs(out[i] - 2 * out[i - 1] + out[i - 2]);
+      if (i >= 20 * 128 - 2 && i <= 20 * 128 + 2) atChange = Math.max(atChange, d2); else elsewhere = Math.max(elsewhere, d2);
+    }
+    return atChange / elsewhere;
+  };
+  const vol = clickAt((inst) => inst.setParam('volume', 0.1));
+  const count = clickAt((inst) => inst.bells.setStoneCount(128));
+  // Transposing a busy chromatic range mid-phrase retunes every ringing stone at once.
+  const many = buildPitches({ scale: SCALES.chromatic, root: 60, low: 36, high: 96 });
+  const busyRetune = new Instrument({ seed: 4 });
+  const pos = stonePositions(many.length);
+  busyRetune.setStones(pos.xs, pos.ys, many.map((p) => p.hz), many.length);
+  busyRetune.setParam('threshold', 0.005);
+  play(busyRetune, 2, 128, (e) => { for (let i = 0; i < 12; i++) e.drop((i * 0.37) % 1, (i * 0.59) % 1, 1.5, i * 0.15); });
+  busyRetune.setStones(pos.xs, pos.ys, many.map((p) => p.hz * Math.pow(2, 1 / 12)), many.length);
+  play(busyRetune, 1, 128, (e) => { for (let i = 0; i < 6; i++) e.drop((i * 0.41) % 1, (i * 0.23) % 1, 1.5); });
+  report(busyRetune.bells.fadeReuses === 0, 'transposing 61 ringing stones mid-phrase: no fade cut short',
+    `fade slots reused while fading: ${busyRetune.bells.fadeReuses}`);
+
+  report(vol < 1.5 && count < 1.5, 'volume and stone-count gain changes glide (no click)',
+    `step at the change vs elsewhere: volume ${vol.toFixed(2)}×, stone count ${count.toFixed(2)}×`);
+
+  // A burst of bell-decay events costs one recompute per block, not one per event.
+  const busy = new Bells({ sampleRate: 48000 });
+  for (let s = 0; s < MAX_STONES; s++) busy.strike(s, 60 + s * 15, 1, 0.5, 0);
+  const t0 = performance.now();
+  for (let k = 0; k < 200; k++) busy.setParam('bellDecay', 1 + (k % 5));
+  const L = new Float32Array(128), R = new Float32Array(128);
+  busy.render(L, R, 128);
+  const ms = performance.now() - t0;
+  report(ms < 2, '200 bell-decay changes in one block: one recompute', `${ms.toFixed(2)} ms for the block`);
 }
 
 // ---- 8. Page → audio thread: events, stones, end-to-end pitch ---------------------------

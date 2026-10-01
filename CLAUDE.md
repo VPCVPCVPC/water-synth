@@ -167,6 +167,15 @@ Build in this order:
 3. **MPE controllers** (Seaboard, LinnStrument, Push) — per-note pressure and
    glide map naturally onto disturbance and microtonal pitch.
 
+**Camera / motion input (planned, not yet scheduled):** a dancer plays the
+instrument with her movement. Camera motion is an input, not Vessel. Motion in
+the camera frame becomes gesture events, like touch — at first drops and drags
+where movement happens, stronger for faster motion; how body motion maps to
+Stir, Wave and Still stays open — so the water, the stones and the loopers
+don't care where a gesture came from. Every
+input source enters through one gesture path, and the gesture looper records
+gestures from any source. Motion analysis stays on the device.
+
 Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
 
 ## Tech stack
@@ -235,9 +244,11 @@ Inside `processBlock` and anything it calls:
 - Stones: how many per scale and range, and whether the water can move them
   (the performer can; layout is scattered).
 - What exactly makes a stone ring: a wave crest passing a threshold, energy
-  arriving, or both — and how simultaneous arrivals combine.
+  arriving, or both — and how simultaneous arrivals combine. (The crest
+  threshold stands for now.)
 - How Phase changes the surface and the bell voices (ice / liquid / vapor).
 - How Vessel works now: outside audio disturbing the water, or becoming the
   stones' voice.
 - Whether to save and recall voices you've designed (no factory presets either way).
+- How camera / body motion maps to gestures, and when camera input is scheduled.
 - Instrument name.

@@ -6,17 +6,21 @@
 import { Engine, ENGINE_PARAMS, ENGINE_PARAM_KEYS } from './engine.js';
 import { Bells, BELL_PARAMS } from './bells.js';
 import { MAX_STONES } from './stones.js';
-import { EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT } from './ring.js';
+import { EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP } from './ring.js';
+import { GestureLooper, LOOPER_PARAMS, GESTURE_DROP, GESTURE_TRAIL } from './looper.js';
 import { FRAME_FLASH, FRAME_HEIGHTS, frameLength } from './visuals.js';
 
 // Every knob, in the order the page sends parameter indices.
-export const PARAMS = { ...ENGINE_PARAMS, ...BELL_PARAMS };
+export const PARAMS = { ...ENGINE_PARAMS, ...BELL_PARAMS, ...LOOPER_PARAMS };
+const BELL_KEYS_END = Object.keys(ENGINE_PARAMS).length + Object.keys(BELL_PARAMS).length;
 export const PARAM_KEYS = Object.keys(PARAMS);
 
 export class Instrument {
   constructor({ sampleRate = 48000, seed = 1 } = {}) {
     this.engine = new Engine({ sampleRate, seed });
     this.bells = new Bells({ sampleRate });
+    this.looper = new GestureLooper();
+    this.engine.stepListener = this.looper;
     this.fs = sampleRate;
     // Stones arrive one event at a time and go live together on commit, so a
     // half-delivered retune never sounds. A commit only applies if every
@@ -35,7 +39,8 @@ export class Instrument {
   setParamIndex(i, value) {
     if (!Number.isInteger(i) || i < 0 || i >= PARAM_KEYS.length) return;
     if (i < ENGINE_PARAM_KEYS.length) this.engine.setParamIndex(i, value);
-    else this.bells.setParam(PARAM_KEYS[i], value);
+    else if (i < BELL_KEYS_END) this.bells.setParam(PARAM_KEYS[i], value);
+    else this.looper.setParam(PARAM_KEYS[i], value);
   }
 
   setParam(name, value) {
@@ -72,8 +77,17 @@ export class Instrument {
   handleEvent(d, o) {
     const e = this.engine;
     switch (d[o]) {
-      case EV_DROP: e.drop(d[o + 1], d[o + 2], d[o + 3]); break;
-      case EV_STROKE: e.trail(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]); break;
+      // Live gestures — from any source — land at the next step and are
+      // recorded by any looper layer that's listening.
+      case EV_DROP:
+        e.drop(d[o + 1], d[o + 2], d[o + 3]);
+        this.looper.record(GESTURE_DROP, d[o + 1], d[o + 2], 0, 0, d[o + 3], e.simStep + 1);
+        break;
+      case EV_STROKE:
+        e.trail(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]);
+        this.looper.record(GESTURE_TRAIL, d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5], e.simStep + 1);
+        break;
+      case EV_LOOP: this.looper.action(d[o + 1], d[o + 2]); break;
       case EV_PARAM: this.setParamIndex(d[o + 1], d[o + 2]); break;
       case EV_STONE: {
         const i = d[o + 1];
@@ -100,6 +114,7 @@ export class Instrument {
     for (let i = 0; i < n; i++) outL[i] = outR[i] = 0;
     const e = this.engine;
     this.bells.applyPending();
+    this.looper.beginBlock();
     e.process(n);
     const st = e.strikes, stones = e.stones, bells = this.bells;
     // Strikes come in time order. Render the bells up to each strike's sample,

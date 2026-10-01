@@ -67,6 +67,15 @@ export class Engine {
 
     this.rng = new Uint32Array(1);
     this.rng[0] = seed >>> 0 || 1;
+    // Anything that plays gestures on the water clock (the gesture looper):
+    // its onStep(step, engine) runs once per step, before that step's
+    // gestures land.
+    this.stepListener = null;
+    this.qCount = 0; // scheduled gestures waiting
+  }
+
+  queueFull() {
+    return this.qCount >= MAX_SCHEDULED;
   }
 
   setParam(name, value) {
@@ -123,9 +132,11 @@ export class Engine {
     // Nothing further ahead than the horizon, so far-future gestures can't
     // hold queue slots forever.
     if (step > this.simStep + SCHEDULE_HORIZON_STEPS) { this.gesturesDropped++; return false; }
+    if (this.qCount >= MAX_SCHEDULED) { this.gesturesDropped++; return false; } // full: fail fast
     for (let i = 0; i < MAX_SCHEDULED; i++) {
       if (this.qActive[i]) continue;
       this.qActive[i] = 1;
+      this.qCount++;
       this.qStep[i] = step; this.qX[i] = x; this.qY[i] = y;
       this.qStrength[i] = strength; this.qRadius[i] = radius;
       return true;
@@ -148,6 +159,7 @@ export class Engine {
     // position, however the stream is split into blocks.
     while (this.stepSample(this.simStep + 1) < end) {
       const next = this.simStep + 1;
+      if (this.stepListener) this.stepListener.onStep(next, this);
       this.applyScheduled(next);
       this.surface.step();
       this.simStep = next;
@@ -196,6 +208,7 @@ export class Engine {
           this.reservoir = Math.min(RESERVOIR_MAX, this.reservoir + RESERVOIR_PER_STRENGTH * this.qStrength[i]);
         }
         this.qActive[i] = 0;
+        this.qCount--;
       }
     }
   }

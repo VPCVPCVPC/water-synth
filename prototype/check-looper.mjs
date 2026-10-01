@@ -28,7 +28,7 @@ function rig({ fs = 48000, seed = 1, block = 128 } = {}) {
   inst.setParam('waveSpeed', 64); inst.setParam('decay', 8); inst.setParam('splash', 0);
   const replays = [];
   const e = inst.engine, drop = e.drop.bind(e), trail = e.trail.bind(e);
-  e.drop = (x, y, s, at) => { if (at !== undefined) replays.push({ step: Math.round(at * SIM_RATE), x, y, kind: 'drop' }); drop(x, y, s, at); };
+  e.drop = (x, y, s, at) => { if (at !== undefined) replays.push({ step: Math.round(at * SIM_RATE), x, y, kind: 'drop' }); return drop(x, y, s, at); };
   e.trail = (x0, y0, x1, y1, v, at) => { if (at !== undefined) replays.push({ step: Math.round(at * SIM_RATE), x: x0, y: y0, kind: 'trail' }); trail(x0, y0, x1, y1, v, at); };
   const strikes = [];
   const d = new Float32Array(8);
@@ -138,17 +138,21 @@ console.log('\n2. Overdub, mute, stop/play and clear');
   report(r.inst.looper.state[0] === EMPTY && r.replays.length === cleared, 'clear erases the layer completely');
 }
 {
-  // Clear all: every layer and the shared grid; the next take starts from scratch.
+  // Clear all: every layer, and a fresh beat (quantize is on) from the moment
+  // of clearing; the next take sits on it.
   const r = rig();
   r.param('quantize', 1); r.param('bpm', 120);
   r.runTo(5, [[0.1, () => r.loop(0, LOOP_RECORD)], [0.3, () => r.drop(0.3, 0.3)], [2.1, () => r.loop(0, LOOP_RECORD)],
     [2.2, () => r.loop(1, LOOP_RECORD)], [2.5, () => r.drop(0.6, 0.6)], [4.1, () => r.loop(1, LOOP_RECORD)]]);
+  const fresh = r.step() + 1;
   r.loop(0, LOOP_CLEAR_ALL);
   const lp = r.inst.looper;
-  const allEmpty = [0, 1, 2, 3].every((l) => lp.state[l] === EMPTY && lp.count[l] === 0) && lp.transportOrigin === -1;
-  let fresh = -1;
-  r.runTo(7, [[5.5, () => { r.loop(2, LOOP_RECORD); fresh = r.step() + 1; }], [5.8, () => r.drop(0.5, 0.5)], [7.0, () => r.loop(2, LOOP_RECORD)]]);
-  report(allEmpty && lp.origin[2] === fresh, 'clear all erases every layer and the bar grid; the next take starts afresh');
+  const allEmpty = [0, 1, 2, 3].every((l) => lp.state[l] === EMPTY && lp.count[l] === 0) && lp.transportOrigin === fresh;
+  r.runTo(7, [[5.5, () => r.loop(2, LOOP_RECORD)], [5.8, () => r.drop(0.5, 0.5)], [7.0, () => r.loop(2, LOOP_RECORD)]]);
+  report(allEmpty && lp.origin[2] === fresh, 'clear all erases every layer and starts a fresh beat; the next take sits on it');
+  r.param('quantize', 0);
+  r.loop(0, LOOP_CLEAR_ALL);
+  report(lp.transportOrigin === -1, 'with quantize off, clear all leaves no grid at all');
 }
 {
   // A quantized loop restarted mid-bar waits for the next bar.
@@ -167,10 +171,11 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
 {
   const run = (strength, swing = 0, quantize = 1) => {
     const r = rig();
-    r.param('quantize', quantize); r.param('bpm', 120); r.param('grid', 4); r.param('quantizeStrength', strength); r.param('swing', swing);
+    r.param('bpm', 120); r.param('grid', 4); r.param('quantizeStrength', strength); r.param('swing', swing);
     let origin = 0;
     r.runTo(2.2, [
-      [0.05, () => { r.loop(0, LOOP_RECORD); origin = r.step() + 1; }],
+      // The beat starts when quantize is turned on: here, with the take.
+      [0.05, () => { r.param('quantize', quantize); r.loop(0, LOOP_RECORD); origin = r.step() + 1; }],
       [0.3, () => r.drop(0.3, 0.4)], // ~250 ms after origin (on a 125 ms grid)
       [0.69, () => r.drop(0.5, 0.5)], // ~640: between grid points 625 and 750
       [1.99, () => r.loop(0, LOOP_RECORD)], // ~1.94 s take → 1 bar (2 s at 120 bpm)
@@ -185,7 +190,7 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
   const swingOk = swung.times.some((t) => Math.round(t / (g / 2)) % 2 === 1 && Math.abs((t % g) - g / 2) <= 1);
   report(snap.len === 2000 && off.len === 1940, 'a 1.94 s take at 120 bpm becomes exactly one bar (2000 ms)', `quantized ${snap.len} ms; quantize off ${off.len} ms`);
   report(onGrid, 'strength 1 snaps recorded touches to the 1/16 grid', `[${raw.times}] → [${snap.times}]`);
-  report(halfway, 'strength 0.5 moves them halfway (the default "lean")', `[${lean.times}]`);
+  report(halfway, 'strength 0.5 moves them halfway ("lean")', `[${lean.times}]`);
   report(swingOk, 'swing pushes every second grid point late', `[${swung.times}]`);
 }
 {
@@ -202,16 +207,119 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
     'a second layer joins the same grid: 1 and 2 bars, every replay on an eighth', `${r.replays.length} replays`);
 }
 {
-  // Quantize off by default; live touches are never delayed.
-  const r = rig();
-  report(r.inst.looper.quantize === 0, 'quantize is off by default');
-  r.param('quantize', 1); r.param('quantizeStrength', 1);
-  let landed = -1, sent = -1;
-  const e = r.inst.engine, orig = e.surface.drop.bind(e.surface);
-  // Drops land inside the step that's starting (before simStep advances).
-  e.surface.drop = (...a) => { if (landed < 0) landed = e.simStep + 1; return orig(...a); };
-  r.runTo(0.5, [[0.123, () => { sent = r.step(); r.drop(0.5, 0.5); }]]);
-  report(landed === sent + 1, 'a live touch lands on the very next step even with quantize on', `sent at step ${sent}, landed at ${landed}`);
+  // Quantize is off by default, and snaps by default once on. A live touch
+  // heading for the next grid point waits for it; one just past a grid point
+  // lands at once; with quantize off or at strength 0, nothing waits.
+  const fresh = rig();
+  report(fresh.inst.looper.quantize === 0 && fresh.inst.looper.quantizeStrength === 1, 'quantize is off by default, and snaps when turned on');
+  const landing = (quantize, strength, at) => {
+    const r = rig();
+    r.param('bpm', 120); r.param('grid', 2); r.param('quantizeStrength', strength); // a 250 ms grid
+    r.param('quantize', quantize);
+    const origin = r.inst.looper.transportOrigin;
+    let landed = -1, sent = -1;
+    const e = r.inst.engine, orig = e.surface.drop.bind(e.surface);
+    // Drops land inside the step that's starting (before simStep advances).
+    e.surface.drop = (...a) => { if (landed < 0) landed = e.simStep + 1; return orig(...a); };
+    r.runTo(1, [[at, () => { sent = r.step() + 1; r.drop(0.5, 0.5); }]]);
+    return { delay: landed - sent, onGrid: (landed - origin) % 250 === 0 };
+  };
+  const late = landing(1, 1, 0.2), early = landing(1, 1, 0.3), off = landing(0, 1, 0.2), none = landing(1, 0, 0.2), half = landing(1, 0.5, 0.2);
+  report(late.onGrid && late.delay > 0 && late.delay <= 125, 'snap: a touch before a grid point waits for it', `held ${late.delay} ms, lands on the grid`);
+  report(early.delay === 0, 'a touch just past a grid point lands at once (never sent into the past)', `held ${early.delay} ms`);
+  report(Math.abs(half.delay - late.delay / 2) <= 1, 'lean 50%: it waits half as long', `held ${half.delay} ms`);
+  report(off.delay === 0 && none.delay === 0, 'quantize off, or strength 0: never delayed', `held ${off.delay} / ${none.delay} ms`);
+  // Its recorded copy replays exactly where it was heard.
+  {
+    const r = rig();
+    r.param('bpm', 120); r.param('grid', 2); r.param('quantize', 1);
+    r.runTo(3.2, [[0.05, () => r.loop(0, LOOP_RECORD)], [0.2, () => r.drop(0.5, 0.5)], [2.2, () => r.loop(0, LOOP_RECORD)]]);
+    const lp = r.inst.looper, heard = lp.transportOrigin + 250; // the grid point the touch waited for
+    const replay = r.replays.find((x) => x.kind === 'drop');
+    report(replay && (replay.step - heard) % lp.length[0] === 0, 'a held touch\'s recorded copy replays exactly where it was heard',
+      replay ? `replayed at ${replay.step}, heard at ${heard}, loop ${lp.length[0]}` : 'no replay');
+  }
+  {
+    // A touch held for the grid across the loop's wrap plays once there (live),
+    // and its copy from the next pass on — never both at once. Overdubbing,
+    // and a first take finished while the touch is still held.
+    const count = (r, x, step) => r.replays.filter((e) => e.kind === 'drop' && Math.abs(e.x - x) < 1e-6 && e.step === step).length;
+    const r = rig();
+    r.param('bpm', 120); r.param('grid', 2); r.param('quantize', 1);
+    const o = r.inst.looper.transportOrigin;
+    r.runTo(2.6, [[0.05, () => r.loop(0, LOOP_RECORD)], [0.5, () => r.drop(0.3, 0.3)], [2.05, () => r.loop(0, LOOP_RECORD)],
+      [2.5, () => r.loop(0, LOOP_RECORD)]]); // overdub
+    r.runTo(8.5, [[(o + 3901) / SIM_RATE, () => r.drop(0.7, 0.7)]]);
+    const atWrap = count(r, 0.7, o + 4000), next = count(r, 0.7, o + 6000);
+    report(atWrap === 1 && next === 1, 'overdub: a touch held onto the downbeat plays once there, then once a pass',
+      `at the wrap ${atWrap}, a pass later ${next}`);
+    const f = rig();
+    f.param('bpm', 120); f.param('grid', 2); f.param('quantize', 1);
+    const fo = f.inst.looper.transportOrigin;
+    f.runTo(6.5, [[0.05, () => f.loop(0, LOOP_RECORD)], [(fo + 1900) / SIM_RATE, () => f.drop(0.6, 0.6)],
+      [(fo + 1950) / SIM_RATE, () => f.loop(0, LOOP_RECORD)]]);
+    const fw = count(f, 0.6, fo + 2000), fn = count(f, 0.6, fo + 4000);
+    report(f.inst.looper.length[0] === 2000 && fw === 1 && fn === 1, 'a take finished while a touch is held: once at the wrap, then once a pass',
+      `at the wrap ${fw}, a pass later ${fn}`);
+  }
+  {
+    // Overdubbing a short loop recorded free, with a slow grid: a touch is
+    // never held longer than the loop, so it can't meet its own copy.
+    const r = rig();
+    r.runTo(1.0, [[0.1, () => r.loop(0, LOOP_RECORD)], [0.2, () => r.drop(0.2, 0.2)], [0.5, () => r.loop(0, LOOP_RECORD)]]);
+    r.param('bpm', 40); r.param('grid', 1); r.param('quantize', 1);
+    const lp = r.inst.looper;
+    r.loop(0, LOOP_RECORD); // overdub a 400 ms loop; the grid step is 1500 ms
+    let sent = 0;
+    r.runTo(4, [[1.3, () => { sent = r.step() + 1; r.drop(0.8, 0.8); }]]);
+    const hits = r.replays.filter((x) => x.kind === 'drop' && Math.abs(x.x - 0.8) < 1e-6).map((x) => x.step);
+    const twice = hits.some((v, i) => hits.indexOf(v) !== i);
+    report(lp.length[0] === 400 && !twice, 'a touch is never held longer than an overdubbing loop (no double hit)',
+      `loop ${lp.length[0]} ms; copies at ${hits.slice(0, 5).join(', ')}`);
+  }
+  {
+    // A burst of held touches never takes more than half of the water's
+    // gesture queue: the rest land at once, and stirring still gets through.
+    const r = rig();
+    r.param('bpm', 40); r.param('grid', 1); r.param('quantize', 1); // 1.5 s grid: long holds
+    const e = r.inst.engine;
+    let queued = 0;
+    // 60 touches over half a second, all heading for the same grid point.
+    const taps = Array.from({ length: 60 }, (_, k) => [1.0 + k * 0.008, () => r.drop(0.1 + 0.013 * k, 0.5)]);
+    r.runTo(1.55, [...taps, [1.5, () => { queued = e.qCount; r.stroke(0.2, 0.2, 0.4, 0.4, 2); }]]);
+    report(queued <= 32 && e.gesturesDropped === 0, '60 touches waiting for one grid point: at most half the queue waits, nothing is lost',
+      `waiting ${queued}, dropped ${e.gesturesDropped}`);
+  }
+  {
+    // A drag keeps its shape in the loop: snap doesn't bunch its trail onto
+    // grid points.
+    const r = rig();
+    r.param('bpm', 120); r.param('grid', 2); r.param('quantize', 1);
+    const strokes = [0, 1, 2, 3, 4].map((k) => [0.3 + 0.02 * k, () => r.stroke(0.3 + 0.02 * k, 0.5, 0.32 + 0.02 * k, 0.5, 1)]);
+    r.runTo(3.5, [[0.05, () => r.loop(0, LOOP_RECORD)], ...strokes, [2.2, () => r.loop(0, LOOP_RECORD)]]);
+    const trail = r.replays.filter((x) => x.kind === 'trail').slice(0, 5).map((x) => x.step);
+    const gaps = trail.slice(1).map((v, i) => v - trail[i]);
+    report(trail.length === 5 && gaps.every((d) => Math.abs(d - 20) <= 1), 'with snap on, a recorded drag replays with its own timing',
+      `trail segments ${gaps.join(', ')} ms apart`);
+  }
+  {
+    // A loop recorded free, then overdubbed with quantize on: the new touch's
+    // copy replays where it was heard (on the shared grid), not on a grid of
+    // its own.
+    const r = rig();
+    r.param('bpm', 120); r.param('grid', 2);
+    r.runTo(2.5, [[0.137, () => r.loop(0, LOOP_RECORD)], [0.5, () => r.drop(0.3, 0.3)], [2.137, () => r.loop(0, LOOP_RECORD)]]);
+    r.param('quantize', 1);
+    const lp = r.inst.looper;
+    let sent = 0;
+    r.runTo(2.7, [[2.6, () => { r.loop(0, LOOP_RECORD); }], [2.65, () => { sent = r.step() + 1; r.drop(0.6, 0.6); }]]);
+    const heard = r.inst.looper.liveStep(sent);
+    r.runTo(7);
+    const replay = r.replays.filter((x) => x.kind === 'drop' && Math.abs(x.x - 0.6) < 1e-6);
+    report(replay.length > 0 && replay.every((x) => (x.step - heard) % lp.length[0] === 0),
+      'overdub with quantize on, on a loop recorded free: the copy replays where it was heard',
+      replay.length ? `heard at ${heard}, replayed at ${replay.map((x) => x.step).join(', ')}` : 'no replay');
+  }
 }
 
 // ---- 4. Same loop at any sample rate and block size --------------------------------

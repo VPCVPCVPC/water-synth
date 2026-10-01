@@ -88,17 +88,22 @@ and plays a different phrase.
   while a tape is still on it). Clearing never
   touches the water: what's already moving rings out.
 - A layer holds 4096 gestures; if one fills, it says so and stops recording.
-- **Quantize** (off by default) moves when your *recorded* touches land toward
-  a beat grid — strength from lean to snap, swing, BPM and grid size — and
-  rounds new loops to whole bars so they stay in time. Live touches are never
-  delayed, and the water still decides when stones ring. BPM and bars only
-  appear when quantize is on.
+- **Quantize** (off by default) moves when your touches land toward a beat
+  grid — strength from lean to snap (snap by default), swing, BPM and grid
+  size — and rounds new loops to whole bars so they stay in time. While it's
+  on, the beat runs and the pond's rim pulses on it (brighter on each bar's
+  first beat). A touch just before a grid point waits for it — a faint ring
+  at your finger closes in until it lands — and one just after lands at once
+  (nothing is sent into the past) with its loop copy pulled back onto the
+  grid. Drags flow: never delayed, and a looped drag keeps its own timing. A
+  touch held onto a loop's downbeat plays once there, then once a pass. The
+  water still decides when stones ring. BPM and bars only appear when quantize is on.
 
 **Water**
 
 | Knob | What it does |
 |---|---|
-| flow | how fast ripples travel; the whole water speeds up or slows down together, so the same gesture plays the same phrase faster or slower |
+| flow | how fast ripples travel, from ~32 s to cross the pond (very slow drift) to well under a second; the whole water speeds up or slows down together, so the same gesture plays the same phrase faster or slower |
 | water decay | how long the water keeps moving (shown in seconds at the current flow) |
 | fine ripples | how long small, sharp ripples last |
 | sensitivity | how much of the water the stones hear — and so how many notes a gesture makes and how long phrases last |
@@ -126,10 +131,13 @@ one part that isn't the water). **record** starts a take, **finish** ends it
 and it plays; **overdub** adds more on top (heard live once, replayed from the
 next pass). A tape records the water, never another tape. **mute**, **stop**
 and **clear** fade out over 0.3 s rather than cut; the loop wraps without a
-click. Each track has its own length (up to 30 s), so tapes drift against each
-other — unless quantize is on: then a take sits on the loops' bar grid and
-**finish** waits for the next bar line. Clearing every loop keeps the grid
-while a tape is still on it. **tape level** sets the tapes under (or over) the
+click. A tape always plays exactly what it recorded — retuning never touches
+it — so you can lay a bassline, retune, add a melody, retune, add harmonies.
+Each track has its own length (up to 30 s), so tapes drift against each
+other. With quantize on, a take starts on a beat and **finish** waits for the
+next beat: every tape is a whole number of beats, but each its own number
+(3, 5, 7…), so they follow the beat while the way they line up keeps
+changing. Clearing every loop keeps the grid while a tape is still on it. **tape level** sets the tapes under (or over) the
 water. Overdubs add up with no decay, so a much-overdubbed tape gets louder.
 
 **Voice** — what a struck stone sounds like. Every stone shares one voice;
@@ -205,6 +213,23 @@ voice editor untouched you hear exactly the Phase 1c bell.
 16. After shaping a voice, did you want to keep it for next time? (Saving
     voices is your open decision.)
 17. On the iPad/phone: are the voice and tape controls usable in the drawer?
+
+**Since your check-2 notes (Phase 1d):**
+
+18. **Quantize, now felt:** turn it on (it snaps by default) and play to the
+    pulsing rim. Do touches that wait for the beat feel like the water waiting,
+    or like lag? Is the closing ring at your finger enough? At slow BPM on a
+    1/4 grid a touch can wait up to 1.5 s — too long?
+19. Touch and drag at once with quantize on: the drag starts moving the water
+    while the touch waits for the beat, so the ripple lands behind your
+    finger. Fine, or should the drag wait too?
+20. Drags never snap, live or looped (a snapped drag became stutters on the
+    grid). Right?
+21. **Tapes on the beat:** with quantize on, record tapes of different numbers
+    of beats (say 3 and 4). Do they line up in interesting new ways?
+22. **Very slow flow** (down to ~32 s to cross): at the slowest, water decay
+    stretches with it (time-lapse), so the pond can take many minutes to fall
+    silent. Is that the drift you wanted, or should decay not stretch so far?
 
 ### Decisions for Dash
 
@@ -297,15 +322,16 @@ About four minutes; seven files (the voices CPU budget is a process of its own):
   and plays it back fixed (every pass identical, and it does not follow the
   water as it sounds now); tapes never record another tape's playback; overdub is
   heard live once and replays from the next pass; mute, stop and clear fade
-  rather than cut; the loop seam is crossfaded; takes sit on the gesture
-  looper's bar grid when quantize is on; the status frame; bit-identical at
+  rather than cut (restarts and clears mid-fade included); the loop seam is
+  crossfaded; with quantize on, takes start on a beat and last whole beats of
+  their own lengths; retuning never touches a tape; the status frame; bit-identical at
   block sizes 1…8192 and the same loudness over time at 44.1/48/96 kHz; limits
   and bad input; the whole path through the instrument (the knob, `EV_TAPE`,
   the frame); CPU.
 - `check-looper.mjs` — loops replay every gesture at the same place each pass
   while each pass plays a different phrase; overdub, mute, stop/restart,
   clear and clear all; quantize snap/lean/swing and whole bars on a shared
-  grid; live touches never delayed; identical at any sample rate and block
+  grid; a live touch waits for the next grid point (never sent into the past) and its copy replays where it was heard; identical at any sample rate and block
   size; limits; bad input; CPU.
 
 ## Files
@@ -396,6 +422,11 @@ Collected from the real-time safety, DSP and tuning reviews of Phases 1a and 1b.
   (counting sort); budget recorded gestures per block and stop firing into a
   full gesture queue — MIDI, OSC and camera sources can burst. Benchmark a
   combined worst case (looper burst + water burst + retune burst in one block).
+- **Quantize:** schedule a held touch by integer step (an `atStep` entry
+  point), not by seconds (the JS round trip can land 1 ms late after ~75 min);
+  hold at most half the gesture queue; record a copy only if the touch went
+  into the water; a copy whose moment is still ahead (held past a loop's
+  wrap) is skipped on its first pass.
 - **Tapes:** positions (`now`, `origin`, `startAt`, `takeEnd`, `deadline`) as
   int64 sample counts with an integer `mod`; validate the track and action
   floats from the ring before any int cast. Preallocate the tape memory and the

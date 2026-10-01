@@ -13,7 +13,8 @@ import {
 } from './ring.js';
 import { GestureLooper, LOOPER_PARAMS, GESTURE_DROP, GESTURE_TRAIL } from './looper.js';
 import { TapeDeck, TAPE_PARAMS } from './tape.js';
-import { FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_HEIGHTS, frameLength } from './visuals.js';
+import { SIM_RATE } from './surface.js';
+import { FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, frameLength } from './visuals.js';
 
 // Every instrument-wide knob, in the order the page sends parameter indices.
 // Voice parameters travel separately (EV_VOICE), by index into VOICE_KEYS.
@@ -89,6 +90,7 @@ export class Instrument {
     for (let i = 0; i < MAX_STONES; i++) { frame[FRAME_FLASH + i] = this.flash[i]; this.flash[i] = 0; }
     this.looper.writeStatus(frame, FRAME_LOOPS);
     this.tape.writeStatus(frame, FRAME_TAPES);
+    frame[FRAME_BEAT] = this.looper.beatPosition();
     this.engine.surface.snapshot(frame, FRAME_HEIGHTS);
     this.outputPeak = 0;
   }
@@ -104,10 +106,19 @@ export class Instrument {
     switch (d[o]) {
       // Live gestures — from any source — land at the next step and are
       // recorded by any looper layer that's listening.
-      case EV_DROP:
-        e.drop(d[o + 1], d[o + 2], d[o + 3]);
-        this.looper.record(GESTURE_DROP, d[o + 1], d[o + 2], 0, 0, d[o + 3], e.simStep + 1);
+      // With quantize on, a touch (a drop) can be held back toward the next
+      // grid point; a drag's trail is never delayed, so stirring stays fluid.
+      case EV_DROP: {
+        const now = e.simStep + 1, at = this.looper.liveStep(now);
+        // Held only while the gesture queue has room to spare; otherwise it
+        // lands now, and its copy keeps the time it was heard.
+        const held = at > now && e.canHold() && at - now < this.looper.holdLimit();
+        const landed = held ? e.drop(d[o + 1], d[o + 2], d[o + 3], at / SIM_RATE) : e.drop(d[o + 1], d[o + 2], d[o + 3]);
+        // Recorded as sent — quantize moves the copy to the same place `at`
+        // is — and only if it went into the water at all.
+        if (landed) this.looper.record(GESTURE_DROP, d[o + 1], d[o + 2], 0, 0, d[o + 3], now, at > now && !held);
         break;
+      }
       case EV_STROKE:
         e.trail(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]);
         this.looper.record(GESTURE_TRAIL, d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5], e.simStep + 1);

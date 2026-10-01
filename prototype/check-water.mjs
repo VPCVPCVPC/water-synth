@@ -108,7 +108,7 @@ console.log('\n1. Surface stability and energy');
 
 // ---- 2. Wave speed is what the knob says ---------------------------------------
 console.log('\n2. Wave speed = knob (crest travel time between two points)');
-for (const c of [32, 64, 200]) {
+for (const c of [4, 32, 64, 200]) {
   const s = testSurface();
   const y = s.toGridY(0.5), x0 = s.toGridX(0.2);
   // Window ends before the first reflection can reach the nearer point.
@@ -119,14 +119,14 @@ for (const c of [32, 64, 200]) {
 
 console.log('\n2b. Tempo changes timing, not crest height');
 {
-  const heights = [25, 64, 450].map((c) => {
+  const heights = [4, 25, 64, 450].map((c) => {
     const s = testSurface();
     const x0 = s.toGridX(0.3), y = s.toGridY(0.5);
     const [p] = probe({ waveSpeed: c }, 0.3, 0.5, [[x0 + 12, y]], (1.1 * 30) / c + 0.1);
     return p.h;
   });
   const spread = Math.max(...heights) / Math.min(...heights);
-  report(spread < 1.1, 'crest 12 cells from a strength-1 drop at 25 / 64 / 450 cells/s',
+  report(spread < 1.1, 'crest 12 cells from a strength-1 drop at 4 / 25 / 64 / 450 cells/s',
     heights.map((h) => h.toFixed(3)).join(' / '));
 }
 

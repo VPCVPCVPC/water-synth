@@ -38,7 +38,7 @@ written, that still sit in your scale.
 A simulated surface that holds energy, propagates it, reflects it off its
 edges, and damps it over time. It runs at **human speed**: ripples visibly
 travel across it. Its speed — **flow** — is adjustable, from slow drift
-(seconds to cross) to busy cascades (well under a second). Flow is a
+(up to ~30 s to cross) to busy cascades (well under a second). Flow is a
 time-lapse: the whole water speeds up or slows down together, so the same
 gesture plays the same phrase faster or slower. (Flow is the water's pace;
 "tempo/BPM" means only the loopers' beat grid.) The surface is the composer,
@@ -71,7 +71,7 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
 - No factory presets or preset browser. Saving the session's state is fine.
   Saving and recalling your own voices: not yet — revisit after Dash has
   played with the editor (Oct 2026).
-- Phase (Phase 6) will later act on these voice parameters; the voice editor is
+- Phase (prototyped in build phase 2) will act on these voice parameters; the voice editor is
   a sound-design surface, not the Phase mechanism.
 
 ### Layers: loopers
@@ -81,15 +81,22 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   different lengths can layer and drift. Loop playback is a natural input for
   Erosion later, so loops are stored as timed gesture events.
 - **Quantize** (optional, off by default) moves *when you touch the water*
-  toward a beat grid, with a strength control from lean (the default when
-  enabled) to snap, plus swing. It never places notes: when stones ring is
-  still decided by distance and the water.
+  toward a beat grid — live touches and recorded ones — with a strength
+  control from lean to snap (the default when enabled), plus swing. Touches
+  lean; drags flow (never delayed, and a looped drag keeps its own timing). While it's
+  on, the beat is visible on the pond. It never places notes: when stones ring
+  is still decided by distance and the water. (Dash, Oct 2026: quantize was
+  too subtle to notice when it only moved recorded touches.)
 - **Audio looper** — "a tape beside the pond": records the instrument's output
   and layers fixed audio, like a loop pedal. The one feature that isn't the
   water; mainly for the standalone app. Several tape tracks of their own
   lengths, each with record, overdub, mute and clear (Dash, Oct 2026); they
-  record the water's sound, not other tapes. Stopping, muting and clearing
-  fade, never cut.
+  record the water's sound, not other tapes. A tape always plays back exactly
+  what was recorded — retuning never touches it — so you can lay a bassline,
+  then a melody, then harmonies in other tunings. With quantize on, a take
+  starts on a beat and lasts whole beats: tapes follow the beat, but their
+  lengths differ, so the way they line up keeps changing. Stopping, muting
+  and clearing fade, never cut.
 
 ### Prototype findings (Phase 1a, Sept 2026)
 An audio-rate 2D wave grid read directly as audio sounded like a metal plate,
@@ -110,6 +117,14 @@ a ringing stone (sometimes damping it).
 ### Listening results (Phase 1c A, Oct 2026)
 Listening check 1 (loops, quantize, stone controls, touch): Dash — "it seems
 good." Batch A's choices stand.
+
+### Listening results (Phase 1c B, Oct 2026)
+From listening check 2 so far: tapes must keep the tuning they were recorded
+in (they do); Flow needs a much lower floor (~30 s to cross the pond);
+quantize was hard to notice (now: live touches too, snap by default, a
+visible beat); tapes follow the beat in whole-beat lengths. The interface
+should become fun and pretty — and a near-final web prototype comes before
+the app, for user testing (see Build phases).
 
 ### Gestures (how you disturb it)
 | Gesture | What it does to the medium |
@@ -155,8 +170,9 @@ and a **period** (usually 1200 cents). A tuning is: a **reference note** and a
 Reference pitch is a float in Hz. Ship A=440 and A=432 as presets, but never
 hard-code the two; arbitrary reference pitches must work from day one internally.
 
-Quantization must have a **strength/glide** control, not just on/off. Hard
-snapping fights the concept of a flowing medium. The water can bend a ringing
+Pitch quantization must have a **strength/glide** control, not just on/off.
+Hard pitch snapping fights the concept of a flowing medium. (This is pitch,
+not the loopers' timing quantize.) The water can bend a ringing
 stone's pitch (e.g. pressure from passing waves); quantization strength sets
 how firmly the stone is pulled back to its scale degree, and glide how fast.
 
@@ -211,13 +227,22 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    A: gesture looper with optional quantize, stone controls (move, randomize,
    spread), multi-touch and phone/iPad layout, played with today's bell;
    B: the voice editor (shared voice with per-stone overrides, water-held
-   sustain) and the audio looper.
-2. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
-3. **Port the medium** to C++ in `source/dsp`.
-4. **Full tuning engine** — every scale family above, Scala import,
+   sustain) and the audio looper. 1d: follow-ups from listening check 2.
+2. **Web prototype for user testing** (Dash, Oct 2026) — a close-to-final
+   instrument in the browser that other people play before any app ships:
+   a designed interface, fun and pretty (the water visuals, and a tape
+   section that looks like a real tape deck); the remaining gestures (Stir,
+   Wave, Still) and Phase (ice / liquid / vapor); and some of MIDI, Vessel
+   and hosting for testers, scoped with Dash when we get there. It ends in
+   user testing; what testers find feeds the phases below.
+3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
+4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
+   including its gestures and the Phase modes).
+5. **Full tuning engine** — every scale family above, Scala import,
    quantization strength/glide.
-5. **WebView UI** with the XY surface.
-6. **Gestures → Phase → Vessel → Erosion → Cycle**, in that order.
+6. **WebView UI** with the XY surface (the build-phase-2 interface).
+7. **Vessel → Erosion → Cycle**, in that order (and any gestures or Phase-mode
+   behaviour build phase 2 didn't settle).
 
 Do not jump ahead of the current phase without Dash's go-ahead.
 

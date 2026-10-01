@@ -44,7 +44,7 @@ export const REFERENCE_SPEED = 64; // cells per second
 export const SURFACE_PARAMS = {
   // Defaults from Dash's Phase 1b listening session: slow (≈3.3 s to cross 128
   // cells) and long-lived (≈27 s at this tempo).
-  waveSpeed: { min: 25, max: 450, def: 39 }, // cells per second
+  waveSpeed: { min: 4, max: 450, def: 39 }, // cells per second (4 ≈ 32 s to cross: very slow drift)
   decay: { min: 1, max: 30, def: 16.4 }, // s at the reference tempo: T60 of broad swells
   hfDecay: { min: 0.1, max: 30, def: 1.5 }, // s at the reference tempo: T60 of the finest ripples
 };

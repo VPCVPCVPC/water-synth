@@ -77,6 +77,12 @@ export class Engine {
     return this.qCount >= MAX_SCHEDULED;
   }
 
+  // Room to hold a live touch back for the grid: at most half the queue, so
+  // a burst of held touches never crowds out stirring or loop playback.
+  canHold() {
+    return this.qCount < MAX_SCHEDULED / 2;
+  }
+
   setParam(name, value) {
     if (!Number.isFinite(value)) return;
     if (Object.prototype.hasOwnProperty.call(SURFACE_PARAMS, name)) {
@@ -100,13 +106,14 @@ export class Engine {
 
   // A drop at (x, y) in [0, 1]², now (at the next simulation step) or at
   // `atSeconds` of stream time. Each drop varies a little.
+  // Returns false if it was ignored or the gesture queue had no room.
   drop(x, y, strength = 1, atSeconds) {
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(strength)) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(strength)) return false;
     const jx = (this.rand() - 0.5) * 0.6 / (this.surface.w - 1);
     const jy = (this.rand() - 0.5) * 0.6 / (this.surface.h - 1);
     const s = Math.min(16, Math.max(0, strength)) * (1 + (this.rand() - 0.5) * 0.3);
     const r = DROP_RADIUS * (1 + (this.rand() - 0.5) * 0.4);
-    this.schedule(x + jx, y + jy, s, r, atSeconds);
+    return this.schedule(x + jx, y + jy, s, r, atSeconds);
   }
 
   // A drag from (x0, y0) to (x1, y1) at `speed` surface-widths per second:

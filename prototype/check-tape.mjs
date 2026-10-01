@@ -18,6 +18,7 @@ import { LOOP_RECORD, LOOP_CLEAR_ALL } from './looper.js';
 import { FRAME_TAPES } from './visuals.js';
 import { SIM_RATE } from './surface.js';
 import { performance } from 'node:perf_hooks';
+import { cents, spectrum } from './check-lib.mjs';
 
 let failures = 0;
 function report(ok, name, detail) {
@@ -216,29 +217,37 @@ console.log('\n5. The loop wraps without a click');
     `step across the wrap ${around.toFixed(4)} vs ${elsewhere.toFixed(4)} mid-loop`);
 }
 
-// ---- 6. Quantize: takes sit on the gesture looper's bar grid ---------------------------
-console.log('\n6. Quantize shares the gesture looper\'s grid');
+// ---- 6. Quantize: takes sit on the beats of the gesture looper's grid -----------------
+console.log('\n6. Quantize: tapes follow the beat, in whole beats of their own lengths');
 {
   const rate = 48000, grid = new GestureLooper();
-  grid.setParam('quantize', 1); grid.setParam('bpm', 120); // a bar is 2 s
+  grid.setParam('quantize', 1); grid.setParam('bpm', 120); // a beat is 0.5 s
   grid.transportOrigin = 1000; // 1 s of stream time
   const r = rig({ grid }), d = r.d;
-  const bar = (grid.barSteps() * rate) / SIM_RATE, origin = (grid.transportOrigin * rate) / SIM_RATE;
-  // Asked for at 1.3 s: the take starts at the bar line at 1 s and finishes at
-  // the next bar line (3 s), so its first 0.3 s is silence.
+  const beat = (60 * rate) / grid.bpm, origin = (grid.transportOrigin * rate) / SIM_RATE;
+  // Asked for at 1.3 s: the take starts on the beat at 1 s; finish asked for at
+  // 2.7 s waits for the beat at 3 s — 4 beats, the first 0.3 s silence.
   const at = Math.round(1.3 * rate);
   r.run(1.4, TONE, [{ sample: at, track: 0, act: TAPE_RECORD }]);
   r.run(1.61, TONE, [{ sample: at + Math.round(1.4 * rate), track: 0, act: TAPE_RECORD }]);
   const len = d.length[0], gap = at - origin;
-  report(d.onGrid[0] === 1 && d.origin[0] === origin && Math.abs(len - bar) < 1,
-    'a take starts on the bar line and finishes on the next one',
-    `origin ${d.origin[0]} (the bar line), length ${(len / rate).toFixed(3)} s (a bar is ${(bar / rate).toFixed(3)} s)`);
+  report(d.onGrid[0] === 1 && d.origin[0] === origin && Math.abs(len - 4 * beat) < 1,
+    'a take starts on a beat and finishes on the next beat after finish',
+    `origin ${d.origin[0]} (a beat), length ${(len / rate).toFixed(3)} s = ${(len / beat).toFixed(2)} beats`);
   report(d.state[0] === PLAYING && d.usesGrid(), 'the tape keeps the shared grid');
   const play = r.run(0.6, () => 0);
   const inGap = rms(play, 0, Math.round(gap * 0.8));
   const after = rms(play, Math.round(gap + 0.03 * rate), Math.round(gap + 0.3 * rate));
   report(inGap < 1e-7 && after > 0.02, 'the silence before the take is part of the loop',
     `gap rms ${inGap.toExponential(1)}, then ${after.toFixed(4)}`);
+  // A second tape, 3 beats long: a different length, still on the beat.
+  const t1 = Math.round(origin + 6.4 * beat);
+  r.run((t1 - r.pos) / rate + 0.01, TONE, [{ sample: t1, track: 1, act: TAPE_RECORD }]);
+  r.run(1.6, TONE, [{ sample: Math.round(origin + 8.6 * beat), track: 1, act: TAPE_RECORD }]);
+  const len1 = d.length[1];
+  report(Math.abs(len1 - 3 * beat) < 1 && Math.abs((d.origin[1] - origin) / beat - 6) < 1e-6,
+    'tapes can be different whole numbers of beats (4 and 3), so they line up differently each time',
+    `track 2: ${(len1 / beat).toFixed(2)} beats from beat ${((d.origin[1] - origin) / beat).toFixed(0)}`);
 }
 
 // ---- 7. Block size and sample rate ------------------------------------------------------
@@ -415,7 +424,7 @@ console.log('\n13. Restarts mid-fade, the level knob, and a reused track\'s gap'
   const rate = 48000;
   // Play pressed 50 ms into a stop's 0.3 s fade: the old sound keeps fading
   // where it was while the tape starts again — no jump. Off the grid, and on
-  // it (where the restart waits for the next bar line).
+  // it (where the restart waits for the next beat).
   for (const onGrid of [false, true]) {
     let grid = null;
     if (onGrid) { grid = new GestureLooper(); grid.setParam('quantize', 1); grid.setParam('bpm', 120); grid.transportOrigin = 0; }
@@ -485,7 +494,7 @@ console.log('\n13. Restarts mid-fade, the level knob, and a reused track\'s gap'
     d.action(0, TAPE_CLEAR);
     r.run(0.5, () => 0);
     grid.setParam('quantize', 1); grid.setParam('bpm', 120);
-    grid.transportOrigin = Math.ceil((r.pos * SIM_RATE) / rate); // a bar line now
+    grid.transportOrigin = Math.ceil((r.pos * SIM_RATE) / rate); // a beat now
     const origin = (grid.transportOrigin * rate) / SIM_RATE, at = Math.round(origin + 0.5 * rate);
     r.run((at - r.pos) / rate, () => 0);
     r.run(1.6, () => 0, [{ sample: at, track: 0, act: TAPE_RECORD }, { sample: at + Math.round(1.2 * rate), track: 0, act: TAPE_RECORD }]);
@@ -498,7 +507,7 @@ console.log('\n13. Restarts mid-fade, the level knob, and a reused track\'s gap'
 }
 function mod0(a, n) { const m = a % n; return m < 0 ? m + n : m; }
 
-console.log('\n12. Loops and tapes share one bar grid');
+console.log('\n12. Loops and tapes share one grid');
 {
   const rate = 48000, inst = new Instrument({ sampleRate: rate, seed: 3 });
   inst.setStones([0.5], [0.5], [220], 1);
@@ -517,8 +526,44 @@ console.log('\n12. Loops and tapes share one bar grid');
     `grid origin ${grid} → ${inst.looper.transportOrigin}`);
   // ... and the last tape off it frees it.
   send(EV_TAPE, 0, TAPE_CLEAR_ALL); run(0.5);
-  report(inst.tape.state[0] === EMPTY && inst.looper.transportOrigin === -1, 'once the last tape is cleared too, the grid is free',
+  report(inst.tape.state[0] === EMPTY && inst.looper.transportOrigin === grid, 'with quantize still on, the beat keeps running after the last tape goes',
     `tape state ${inst.tape.state[0]}, grid origin ${inst.looper.transportOrigin}`);
+  send(EV_PARAM, PARAM_KEYS.indexOf('quantize'), 0); run(0.1);
+  report(inst.looper.transportOrigin === -1, 'quantize off, nothing on the grid: the grid is free', `grid origin ${inst.looper.transportOrigin}`);
+}
+
+// Energy within ±50 cents of `hz`.
+function bandEnergy(x, fs, hz, size = 1 << 17) {
+  const mag = spectrum(x, size), bin = fs / size;
+  let e = 0;
+  for (let i = 1; i < mag.length; i++) if (Math.abs(cents(i * bin, hz)) < 50) e += mag[i] * mag[i];
+  return e;
+}
+console.log('\n14. A tape keeps the tuning it was recorded in');
+{
+  // One stone at 220 Hz rings onto a tape; then the stone is retuned to
+  // 330 Hz. Once the water is still, all you hear is the tape: still 220 Hz,
+  // the recording untouched.
+  const rate = 48000, inst = new Instrument({ sampleRate: rate, seed: 4 });
+  inst.setParam('decay', 1); inst.setParam('splash', 0);
+  inst.setStones([0.5], [0.5], [220], 1);
+  const send = (...v) => { const d = new Float32Array(8); v.forEach((x, i) => { d[i] = x; }); inst.handleEvent(d, 0); };
+  const L = new Float32Array(128), R = new Float32Array(128);
+  const run = (seconds, keep) => { const out = []; for (let k = 0; k < Math.round((seconds * rate) / 128); k++) { inst.process(L, R, 128); if (keep) out.push(...L); } return Float64Array.from(out); };
+  send(EV_TAPE, 0, TAPE_RECORD);
+  send(EV_DROP, 0.45, 0.5, 2);
+  run(2);
+  send(EV_TAPE, 0, TAPE_RECORD);
+  run(0.01);
+  const len = inst.tape.length[0], before = inst.tape.L.slice(0, len);
+  inst.setStones([0.5], [0.5], [330], 1); // retune
+  run(12); // the water and the stone fall silent; the tape plays on
+  const heard = run(2, true);
+  const same = inst.tape.L.slice(0, len).every((v, i) => v === before[i]);
+  const e220 = bandEnergy(heard, rate, 220), e330 = bandEnergy(heard, rate, 330);
+  report(same && inst.bells.activeVoices() === 0 && e220 > 1e3 * e330 && rms(heard) > 1e-3,
+    'retuning never touches a tape: it plays what it recorded',
+    `recording unchanged: ${same}; 330 Hz ${(10 * Math.log10(e330 / e220)).toFixed(0)} dB re 220 Hz`);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll tape checks passed.');

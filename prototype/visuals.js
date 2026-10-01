@@ -18,7 +18,8 @@
 //   [FRAME_LOOPS ..)        per looper layer, LOOP_FIELDS each: state, muted, length (steps),
 //                           position (steps), fill (0–1), waiting for its downbeat (0/1)
 //   [FRAME_TAPES ..)        per tape track, TAPE_FIELDS each: state, muted, length (s),
-//                           position (s), waiting for a bar line, fading-out code
+//                           position (s), waiting for a beat, fading-out code
+//   [FRAME_BEAT]            beats since the quantize grid began (−1: no grid)
 //   [FRAME_HEIGHTS ..)      the water's heights, w × h, row by row
 
 import { MAX_STONES } from './stones.js';
@@ -29,7 +30,8 @@ export const LOOP_FIELDS = 6;
 export const FRAME_FLASH = 2;
 export const FRAME_LOOPS = FRAME_FLASH + MAX_STONES;
 export const FRAME_TAPES = FRAME_LOOPS + LOOP_LAYERS * LOOP_FIELDS;
-export const FRAME_HEIGHTS = FRAME_TAPES + TAPE_TRACKS * TAPE_FIELDS;
+export const FRAME_BEAT = FRAME_TAPES + TAPE_TRACKS * TAPE_FIELDS;
+export const FRAME_HEIGHTS = FRAME_BEAT + 1;
 
 export function frameLength(cells) {
   return FRAME_HEIGHTS + cells;

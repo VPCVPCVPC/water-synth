@@ -7,7 +7,7 @@ import {
   EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE,
 } from './ring.js';
 import {
-  createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_HEIGHTS, LOOP_FIELDS,
+  createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
 } from './visuals.js';
 import { buildPitches, noteLabel, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
@@ -735,6 +735,10 @@ surface.addEventListener('pointerdown', (e) => {
   // is often low); fingers and mice are a fixed-strength drop.
   const strength = e.pointerType === 'pen' && e.pressure > 0 ? 0.6 + 1.4 * e.pressure : 1;
   events.push(EV_DROP, p.x, p.y, strength);
+  // With quantize on, a touch just before a grid point waits for it (the
+  // audio thread decides; this mirrors it): show where it will land.
+  const hold = heldFor();
+  if (hold > 0.02) pending.push({ x: p.x, y: p.y, from: performance.now(), until: performance.now() + hold * 1000 });
   drags.set(e.pointerId, { x: p.x, y: p.y, t: e.timeStamp });
 });
 
@@ -794,6 +798,20 @@ const gridCtx = grid.getContext('2d');
 const image = gridCtx.createImageData(GRID_W, GRID_H);
 const flashShown = new Float32Array(MAX_STONES);
 let showLabels = false;
+let beatAt = -1, beatTime = 0; // beats since the grid began, at the latest frame (and when it came)
+let beatNow = -1; // the beat as last drawn
+const pending = []; // touches waiting for the grid: { x, y, from, until } (ms)
+
+// How long (s) a touch made now waits for the grid — the page's mirror of the
+// looper's liveStep (nearest grid point, swing on every second; only a point
+// ahead holds it, by the quantize strength).
+function heldFor() {
+  if (!values.quantize || beatNow < 0 || values.quantizeStrength <= 0) return 0;
+  const t = beatNow * values.grid, k = Math.round(t);
+  const target = k + (((k % 2) + 2) % 2 === 1 ? values.swing : 0);
+  if (!(target > t)) return 0;
+  return (values.quantizeStrength * (target - t) * 60) / (values.bpm * values.grid);
+}
 let outputLevel = 0, lastFrameTime = 0, lastOutputWidth = '', lastSize = '', lastFrameEnergy = -1;
 
 function draw(now) {
@@ -804,6 +822,13 @@ function draw(now) {
   lastFrameTime = now;
 
   let frame = visuals.read();
+  // The beat (when quantize is on) comes with every frame, still water or not;
+  // between frames it's carried forward at the tempo.
+  if (frame) { beatAt = frame[FRAME_BEAT]; beatTime = now; }
+  const beating = values.quantize === 1 && beatAt >= 0;
+  const beat = beating ? beatAt + ((now - beatTime) / 1000) * (values.bpm / 60) : -1;
+  beatNow = beat;
+  for (let i = pending.length - 1; i >= 0; i--) if (pending[i].until <= now) pending.splice(i, 1);
   // A frame of perfectly still water after another one changes nothing on screen.
   if (frame && frame[0] === 0 && lastFrameEnergy === 0 && frame[1] === 0) frame = null;
   if (frame) lastFrameEnergy = frame[0];
@@ -812,7 +837,7 @@ function draw(now) {
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
   const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${moveMode}x${showLabels}x${pickMode}x${voiceTarget}x${voiceMarks}`;
-  if (!frame && !glowing && grabs.size === 0 && size === lastSize) { requestAnimationFrame(draw); return; }
+  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
   if (frame) {
     const px = image.data;
@@ -881,6 +906,26 @@ function draw(now) {
     if (showLabels) {
       g.fillStyle = 'rgba(225, 235, 245, 0.7)';
       g.fillText(stones.labels[i], x + r * 2, y - r * 1.5);
+    }
+  }
+
+  // A touch waiting for the beat: a faint ring at the touch point that closes
+  // in as its moment comes (then the ripple itself takes over).
+  for (const m of pending) {
+    const c = toCanvas(m.x, m.y), left = Math.max(0, (m.until - now) / (m.until - m.from));
+    g.strokeStyle = `rgba(200, 230, 255, ${(0.25 + 0.45 * (1 - left)).toFixed(3)})`;
+    g.lineWidth = Math.max(1, dpr);
+    g.beginPath(); g.arc(c.u * w, c.v * h, (4 + 14 * left) * dpr, 0, Math.PI * 2); g.stroke();
+  }
+
+  // The beat: the pond's rim pulses on every beat, brighter on each bar's first.
+  if (beating) {
+    const frac = beat - Math.floor(beat), downbeat = ((Math.floor(beat) % 4) + 4) % 4 === 0;
+    const pulse = Math.exp(-frac * 7) * (downbeat ? 1 : 0.55);
+    if (pulse > 0.01) {
+      g.strokeStyle = `rgba(150, 205, 255, ${(0.85 * pulse).toFixed(3)})`;
+      g.lineWidth = (2 + 4 * pulse) * dpr;
+      g.strokeRect(g.lineWidth / 2, g.lineWidth / 2, w - g.lineWidth, h - g.lineWidth);
     }
   }
 

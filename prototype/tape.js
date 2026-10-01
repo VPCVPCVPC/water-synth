@@ -7,10 +7,15 @@
 // other tapes (an overdub never captures any tape's playback, so nothing
 // doubles pass after pass). The first take sets a track's length; overdub
 // layers more on top, heard live once and replayed from the next pass.
-// Tracks have their own lengths and drift against each other — unless
-// quantize is on, when a take starts on the shared bar grid (the gesture
-// looper's) and finishing waits for the next bar line, so the tape stays in
-// time with quantized loops.
+// Tracks have their own lengths and drift against each other. With quantize
+// on, a take starts on a beat of the shared grid (the gesture looper's) and
+// finishing waits for the next beat, so every tape is a whole number of
+// beats: tapes follow the beat, but their lengths differ (3, 5, 7 beats…),
+// so the way they line up keeps changing.
+//
+// A tape always plays back exactly what it recorded: retuning the stones
+// never touches it, so a bassline, a melody and harmonies can be laid in
+// different tunings.
 //
 // Stopping, muting and clearing fade (TAPE_FADE_SECONDS), never cut. The loop
 // seam is crossfaded with the sound from just before the take began, so a
@@ -47,8 +52,8 @@ export const TAPE_PARAMS = {
 };
 
 export class TapeDeck {
-  // `grid` is the gesture looper: its quantize switch and shared bar grid
-  // (transportOrigin, in simulation steps; barSteps()).
+  // `grid` is the gesture looper: its quantize switch, tempo (bpm) and shared
+  // grid (transportOrigin, in simulation steps).
   constructor({ sampleRate = 48000, grid = null } = {}) {
     if (!(sampleRate >= 8000 && sampleRate <= 768000)) throw new RangeError('bad sampleRate');
     const fs = sampleRate;
@@ -81,8 +86,8 @@ export class TapeDeck {
     // it was (its tail) while the restart begins: never a jump.
     this.tailOrigin = new Float64Array(TAPE_TRACKS);
     this.tailGain = new Float64Array(TAPE_TRACKS);
-    // A quantized take begins after its bar line; the gap before it is silence.
-    // It isn't zeroed all at once (up to a bar of memory in one block): reads
+    // A quantized take begins after its beat; the gap before it is silence.
+    // It isn't zeroed all at once (up to a beat of memory in one block): reads
     // below gapEnd count as silence, and the playhead clears it as it passes,
     // starting from the top, during the first pass.
     this.gapEnd = new Int32Array(TAPE_TRACKS);
@@ -173,7 +178,7 @@ export class TapeDeck {
         const at = this.now + i;
         const live = outL[off + i], liveR = outR[off + i];
         if (this.state[t] === RECORDING) {
-          // The first take: written straight in from the bar line (or the
+          // The first take: written straight in from the beat (or the
           // take's start) until it finishes. The sample the take ends on is
           // played back in this very block — no `break` — so the tape's output
           // never depends on where the stream is split into blocks.
@@ -255,21 +260,26 @@ export class TapeDeck {
 
   // ---- internals ----------------------------------------------------------------
 
+  // One beat of the shared grid, in samples.
+  beat() {
+    return (60 * this.fs) / this.grid.bpm;
+  }
+
   startTake(t, now) {
     const fs = this.fs;
     let start = now;
     this.onGrid[t] = 0;
     if (this.grid && this.grid.quantize) {
-      // On the shared grid: the loop's position 0 is the bar line at or
-      // before now (the gesture looper's grid, started now if there isn't one).
+      // On the shared grid: the loop's position 0 is the beat at or before
+      // now (the gesture looper's grid, started now if there isn't one).
       const g = this.grid;
       if (g.transportOrigin < 0) g.transportOrigin = Math.floor((now * SIM_RATE) / fs) + 1;
-      const bar = (g.barSteps() * fs) / SIM_RATE, origin = (g.transportOrigin * fs) / SIM_RATE;
-      start = Math.floor(origin + Math.floor((now - origin) / bar) * bar);
+      const beat = this.beat(), origin = (g.transportOrigin * fs) / SIM_RATE;
+      start = Math.floor(origin + Math.floor((now - origin) / beat) * beat);
       if (start > now) start = now;
       this.onGrid[t] = 1;
-      // Finish by itself on the last bar line that fits.
-      this.deadline[t] = start + Math.max(1, Math.floor(this.capacity / bar)) * bar;
+      // Finish by itself on the last beat that fits.
+      this.deadline[t] = start + Math.max(1, Math.floor(this.capacity / beat)) * beat;
       if (this.deadline[t] > start + this.capacity) this.deadline[t] = start + this.capacity;
       this.deadline[t] = Math.floor(this.deadline[t]);
     } else {
@@ -284,7 +294,7 @@ export class TapeDeck {
     this.gain[t] = 0;
     this.punch[t] = 0;
     this.startAt[t] = 0;
-    // Silence before the take (from the bar line) — cleared lazily, see
+    // Silence before the take (from the beat) — cleared lazily, see
     // gapEnd — and the sound just before it.
     this.gapEnd[t] = Math.round(now - start);
     this.tailGain[t] = 0;
@@ -296,15 +306,15 @@ export class TapeDeck {
     this.state[t] = RECORDING;
   }
 
-  // Ask a take to finish: now, or at the next bar line if it's on the grid.
+  // Ask a take to finish: now, or on the next beat if it's on the grid.
   finishTake(t, now) {
     if (this.takeEnd[t] >= 0) return; // already finishing
     let end = now;
     if (this.onGrid[t]) {
       const g = this.grid, fs = this.fs;
-      const bar = (g.barSteps() * fs) / SIM_RATE;
-      const bars = Math.max(1, Math.ceil((now - this.origin[t]) / bar - 1e-9));
-      end = Math.min(this.deadline[t], Math.floor(this.origin[t] + bars * bar));
+      const beat = this.beat();
+      const beats = Math.max(1, Math.ceil((now - this.origin[t]) / beat - 1e-9));
+      end = Math.min(this.deadline[t], Math.floor(this.origin[t] + beats * beat));
     }
     this.takeEnd[t] = end;
   }
@@ -341,14 +351,14 @@ export class TapeDeck {
     this.state[t] = PLAYING;
   }
 
-  // Play a stopped tape from its top: now, or at the next bar line if it's
+  // Play a stopped tape from its top: now, or on the next beat if it's
   // on the grid.
   restart(t, now) {
     let start = now;
     const g = this.grid;
     if (this.onGrid[t] && g && g.transportOrigin >= 0) {
-      const fs = this.fs, bar = (g.barSteps() * fs) / SIM_RATE, origin = (g.transportOrigin * fs) / SIM_RATE;
-      start = Math.floor(origin + Math.ceil((now - origin) / bar - 1e-9) * bar);
+      const fs = this.fs, beat = this.beat(), origin = (g.transportOrigin * fs) / SIM_RATE;
+      start = Math.floor(origin + Math.ceil((now - origin) / beat - 1e-9) * beat);
       if (start < now) start = now;
     }
     // A tail is still fading and the tape is sounding too (stop and play
@@ -404,7 +414,7 @@ export class TapeDeck {
       frame[o + 2] = (s === RECORDING ? this.now - this.origin[t] : this.length[t]) / fs; // seconds
       frame[o + 3] = (s === PLAYING || s === OVERDUB) && this.length[t] > 0 && this.now >= this.startAt[t]
         ? mod(this.now - this.origin[t], this.length[t]) / fs : 0;
-      frame[o + 4] = this.now < this.startAt[t] || (s === RECORDING && this.takeEnd[t] >= 0) ? 1 : 0; // waiting for a bar line
+      frame[o + 4] = this.now < this.startAt[t] || (s === RECORDING && this.takeEnd[t] >= 0) ? 1 : 0; // waiting for a beat
       frame[o + 5] = this.clearing[t] ? 2 : this.stopping[t] ? 1 : 0; // fading out: 1 stopping, 2 clearing
     }
   }

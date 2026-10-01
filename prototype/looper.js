@@ -11,11 +11,14 @@
 // identical at any sample rate and block size. Several layers can run at
 // once; loops of different lengths drift against each other.
 //
-// Quantize (optional, off by default) moves *when a recorded touch lands*
-// toward a beat grid — strength from lean (default when on) to snap, plus
-// swing — and rounds a new loop's length to whole bars. It never places notes:
-// when stones ring is still the water's business. Live touches are never
-// delayed; only their recorded copies are quantized.
+// Quantize (optional, off by default) moves *when a touch (a drop) lands* toward a
+// beat grid; drags flow, live and looped — strength from lean to snap (default when on), plus swing — and
+// rounds a new loop's length to whole bars. It never places notes: when
+// stones ring is still the water's business. A live touch can only be held
+// back, never sent into the past: one in the second half of a grid step
+// leans toward the next grid point (liveStep); one just after a grid point
+// lands at once, and its recorded copy is pulled back onto that point. While
+// quantize is on the grid runs, so its beat can be shown and played to.
 //
 // Fixed capacity, allocated up front. onStep() and record() allocate nothing.
 
@@ -41,7 +44,7 @@ export const LOOPER_PARAMS = {
   quantize: { min: 0, max: 1, def: 0 }, // 0 off, 1 on
   bpm: { min: 40, max: 240, def: 90 },
   grid: { min: 1, max: 8, def: 2 }, // subdivisions per beat (2 = eighths, 4 = sixteenths, 3 = triplets)
-  quantizeStrength: { min: 0, max: 1, def: 0.5 }, // 0 = as played, 1 = snapped
+  quantizeStrength: { min: 0, max: 1, def: 1 }, // 0 = as played, 1 = snapped (Dash: snap by default)
   swing: { min: 0, max: 0.5, def: 0 }, // fraction of a grid step that every second step is pushed late
 };
 
@@ -70,7 +73,7 @@ export class GestureLooper {
     this.histogram = new Int32Array(MAX_LOOP_STEPS + 1); // counting sort over loop positions
     this.recordBudget = RECORD_BUDGET;
     this.scratchP = new Float32Array(LOOP_EVENTS * 5);
-    this.transportOrigin = -1; // shared bar grid, set by the first quantized take
+    this.transportOrigin = -1; // the shared grid: starts when quantize is turned on (or a quantized take begins)
     // Anything else on the grid (the tapes): its usesGrid() keeps the grid
     // alive while it holds a tape on it.
     this.gridUser = null;
@@ -89,13 +92,42 @@ export class GestureLooper {
     let v = value < p.min ? p.min : value > p.max ? p.max : value;
     if (name === 'grid' || name === 'quantize') v = Math.round(v);
     this[name] = v;
+    if (name === 'quantize') {
+      if (v && this.transportOrigin < 0) this.transportOrigin = this.step + 1; // the beat starts now
+      else if (!v) this.releaseGrid();
+    }
+  }
+
+  // Where a live touch arriving for `step` should land: where quantize would
+  // put its recorded copy, if that's later — never earlier than `step`. So a
+  // touch heading for the next grid point is held back toward it (exactly as
+  // its copy will replay), and one just past a grid point lands at once.
+  liveStep(step) {
+    if (!this.quantize || this.quantizeStrength <= 0 || this.transportOrigin < 0 || !Number.isFinite(step)) return step;
+    const q = this.transportOrigin + this.quantizeTime(step - this.transportOrigin);
+    return q > step ? q : step;
+  }
+
+  // The longest a live touch may be held now: shorter than any loop that is
+  // overdubbing, so its copy can't come round before the touch lands.
+  holdLimit() {
+    let m = Infinity;
+    for (let l = 0; l < LOOP_LAYERS; l++) if (this.state[l] === OVERDUB && this.length[l] < m) m = this.length[l];
+    return m;
+  }
+
+  // Beats since the grid began (−1 when there's no grid), for the page.
+  beatPosition() {
+    return this.transportOrigin < 0 ? -1 : ((this.step - this.transportOrigin) * this.bpm) / (60 * SIM_RATE);
   }
 
   // An action from the page on one layer.
   action(layer, act) {
     if (act === LOOP_CLEAR_ALL) {
       for (let l = 0; l < LOOP_LAYERS; l++) this.clear(l);
-      this.releaseGrid();
+      // A fresh start: a new beat from now if quantize is on (unless a tape
+      // still holds the old one).
+      if (!(this.gridUser && this.gridUser.usesGrid())) this.transportOrigin = this.quantize ? this.step + 1 : -1;
       return;
     }
     if (!Number.isInteger(layer) || layer < 0 || layer >= LOOP_LAYERS) return;
@@ -124,7 +156,8 @@ export class GestureLooper {
   }
 
   // A gesture that just landed in the water at `step` (from any live source).
-  record(kind, x0, y0, x1, y1, strength, step) {
+  // `asPlayed`: keep this touch's time as is (it was heard unquantized).
+  record(kind, x0, y0, x1, y1, strength, step, asPlayed = false) {
     if (!Number.isFinite(x0) || !Number.isFinite(y0) || !Number.isFinite(x1) || !Number.isFinite(y1) ||
         !Number.isFinite(strength) || !Number.isFinite(step)) return;
     let listening = false;
@@ -135,9 +168,16 @@ export class GestureLooper {
     for (let l = 0; l < LOOP_LAYERS; l++) {
       const s = this.state[l];
       if (s !== RECORDING && s !== OVERDUB) continue;
-      let t = this.quantizeTime(step - this.origin[l]);
-      // An overdubbed gesture was just heard live: its copy first plays next pass.
-      const skip = s === OVERDUB && mod(t, this.length[l]) > this.lastPos[l] ? 1 : 0;
+      // A touch (drop) leans toward the shared grid, landing where its live
+      // twin did (liveStep); a drag's trail is kept as played, so a stroke
+      // keeps its shape in the loop instead of bunching onto grid points.
+      const q = kind === GESTURE_DROP && !asPlayed && this.transportOrigin >= 0
+        ? this.transportOrigin + this.quantizeTime(step - this.transportOrigin) : step;
+      let t = q - this.origin[l];
+      // An overdubbed gesture whose moment hasn't come yet is about to be heard
+      // live (perhaps held for the grid, perhaps past the loop's wrap): its
+      // copy first plays on the pass after, never alongside it.
+      const skip = s === OVERDUB && q > this.step ? 1 : 0;
       if (s === OVERDUB) t = mod(t, this.length[l]);
       this.insert(l, t, kind, x0, y0, x1, y1, strength, skip);
     }
@@ -243,7 +283,7 @@ export class GestureLooper {
       return;
     }
     this.length[layer] = len;
-    this.wrapEvents(layer, len);
+    this.wrapEvents(layer, len, now - this.origin[layer]);
     this.cursor[layer] = 0;
     this.lastPos[layer] = mod(now - this.origin[layer], len);
     // Start just after "now" in the loop, so nothing double-fires.
@@ -258,13 +298,16 @@ export class GestureLooper {
   // (one rotation, since times were increasing), via preallocated scratch.
   // Times are whole steps in [0, len) with len ≤ MAX_LOOP_STEPS, so a stable
   // counting sort does it in O(n + len) — no matter how the take wrapped.
-  wrapEvents(layer, len) {
+  // Events still due after `nowRel` (a touch held for the grid past the end
+  // of the take) are about to be heard live: skipped on their first pass.
+  wrapEvents(layer, len, nowRel) {
     const base = layer * LOOP_EVENTS, n = this.count[layer], h = this.histogram;
     const L = Math.min(len, MAX_LOOP_STEPS);
     for (let i = 0; i < n; i++) {
       const t = Math.min(L - 1, Math.max(0, Math.round(mod(this.time[base + i], len))));
       this.scratchTime[i] = t;
       this.scratchKind[i] = this.kind[base + i];
+      this.scratchSkip[i] = this.time[base + i] > nowRel ? 1 : 0;
       for (let j = 0; j < 5; j++) this.scratchP[i * 5 + j] = this.p[(base + i) * 5 + j];
       h[t + 1]++;
     }
@@ -273,7 +316,7 @@ export class GestureLooper {
       const k = base + h[this.scratchTime[i]]++;
       this.time[k] = this.scratchTime[i];
       this.kind[k] = this.scratchKind[i];
-      this.skip[k] = 0;
+      this.skip[k] = this.scratchSkip[i];
       for (let j = 0; j < 5; j++) this.p[k * 5 + j] = this.scratchP[i * 5 + j];
     }
     h.fill(0, 0, L + 1);
@@ -332,7 +375,8 @@ export class GestureLooper {
 
   // Forget the bar grid once nothing is on it any more: no loop, and no tape.
   releaseGrid() {
-    if (this.allEmpty() && !(this.gridUser && this.gridUser.usesGrid())) this.transportOrigin = -1;
+    if (this.quantize || !this.allEmpty() || (this.gridUser && this.gridUser.usesGrid())) return;
+    this.transportOrigin = -1;
   }
 
   allEmpty() {

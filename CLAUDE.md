@@ -6,30 +6,59 @@
 
 ## The core idea
 
-**You don't trigger sounds. You disturb a medium.**
+**You don't play notes. You disturb a medium, and the medium plays.**
 
-The instrument is a body of sound — a "medium" — that sits at rest. Every
-performer action injects energy into it. The medium responds on its own terms:
-it ripples, carries, interferes, and slowly settles back to stillness.
+The instrument is a body of water that sits at rest, with tuned points in it.
+Every performer action injects energy. The medium responds on its own terms:
+it ripples, carries, reflects, interferes, and slowly settles back to
+stillness — and as it moves, it sounds notes in whatever scale and range is
+set. It is generative: the music comes from what the water does, not from a
+sequence anyone wrote.
 
 This is a performance instrument first. It should feel alive, responsive, and a
 little beyond full control — like touching water, not like pressing a key that
-plays a sample.
+plays a sample. The goal is creative serendipity: phrases you wouldn't have
+written, that still sit in your scale.
 
 ### What this means in practice
-- There is no "note" in the usual sense. Input is *energy* placed somewhere in
-  the medium, with some shape and intensity.
+- The performer never picks a note directly. Input is *energy* placed somewhere
+  in the medium, with some shape and intensity. Output is notes, chosen by
+  where that energy travels, when it arrives, and what it meets.
+- Where you disturb it matters: position sets which notes ring and when.
+- Waves interact: two disturbances meeting make something neither makes alone.
 - Silence is a state the medium returns to naturally.
-- The same gesture should never sound exactly the same twice.
-- If a feature makes this feel like a preset synth, it's the wrong feature.
+- The same gesture should never sound exactly the same twice — mostly because
+  it lands in water that is already moving.
+- If a feature makes this feel like a preset synth or a step sequencer, it's
+  the wrong feature.
 
 ## Structure
 
 ### Core: the medium
-A simulated surface that holds energy, propagates it, and damps it over time.
-Starting hypothesis: a 2D grid simulation (finite-difference wave equation or
-mass-spring / waveguide mesh) with one or more "listening points" that read the
-surface's motion as audio. Open to change after the prototype.
+A simulated surface that holds energy, propagates it, reflects it off its
+edges, and damps it over time. It runs at **human speed**: ripples visibly
+travel across it. Wave speed is adjustable and acts as tempo, from slow drift
+(seconds to cross) to busy cascades (well under a second). The surface is the
+composer, not the oscillator: it decides *when*, *which*, and *how hard*.
+
+### Tuned stones: how the medium sounds
+Points on the surface — **stones** — each hold one pitch from the current
+scale and range. When a ripple reaches a stone, the stone rings. How hard the
+water hits sets how loud; ripples arriving together ring it brighter or set off
+its neighbours. Distances between where you disturb and where the stones sit
+make the rhythm; reflections make echoes that repeat but drift.
+
+Stones ring with **water-struck bell** voices for now: clear, tuned resonant
+tones with a soft bell/marimba-like decay. Voice character is expected to
+evolve (and is where Phase will act).
+
+### Prototype findings (Phase 1a, Sept 2026)
+An audio-rate 2D wave grid read directly as audio sounded like a metal plate,
+and sounded the same wherever you tapped: the physics is linear (ripples pass
+through each other unchanged), waves crossed the whole grid in ~4 ms, and tap
+position only rebalanced the same fixed resonances. Hence the move to a
+human-speed surface driving tuned voices. The 1a code is in git history
+(`7016618`) with its review notes and C++ port notes.
 
 ### Gestures (how you disturb it)
 | Gesture | What it does to the medium |
@@ -55,11 +84,9 @@ surface's motion as audio. Open to change after the prototype.
 
 ## Tuning and scales
 
-The medium has no notes, so what is tuned is its **resonances** — the pitches the
-surface rings at when disturbed. How quantization attaches to the simulation is
-an open question to answer during the prototype (candidates: a tuned resonator
-bank read alongside the grid; quantizing the grid's tension/size so ripples ring
-at scale pitches; snapping listening-point positions).
+What is tuned is the **stones**: each holds a scale degree within the set
+**range** (a lowest and highest pitch). Changing the scale, root or range
+retunes the stones; it never rewrites what the water is doing.
 
 **Build one general engine, not a menu of scales.**
 
@@ -78,8 +105,9 @@ Reference pitch is a float in Hz. Ship A=440 and A=432 as presets, but never
 hard-code the two; arbitrary reference pitches must work from day one internally.
 
 Quantization must have a **strength/glide** control, not just on/off. Hard
-snapping fights the concept of a flowing medium; the medium should be able to
-slide toward a scale degree rather than jump.
+snapping fights the concept of a flowing medium. The water can bend a ringing
+stone's pitch (e.g. pressure from passing waves); quantization strength sets
+how firmly the stone is pulled back to its scale degree, and glide how fast.
 
 Later, if it earns its place: MTS-ESP support and MPE per-note pitch.
 
@@ -88,8 +116,8 @@ Later, if it earns its place: MTS-ESP support and MPE per-note pitch.
 Build in this order:
 1. **XY surface in the plugin UI** — click = Drop, drag = Stir, swipe = Wave,
    press-and-hold = Still. No hardware needed; the primary way to play.
-2. **MIDI keyboard** — note selects the scale degree that rings, velocity sets
-   energy, aftertouch feeds continuous stirring, sustain pedal engages Still.
+2. **MIDI keyboard** — a note drops energy at the stone holding that scale
+   degree (the water then carries it to the others), velocity sets energy, aftertouch feeds continuous stirring, sustain pedal engages Still.
    Mod wheel / CCs morph Phase.
 3. **MPE controllers** (Seaboard, LinnStrument, Push) — per-note pressure and
    glide map naturally onto disturbance and microtonal pitch.
@@ -109,10 +137,15 @@ phone's motion sensors.
   `prototype/`, then ported to C++.
 
 ## Build phases
-1. **Browser prototype** of the medium — iterate until the behavior feels right.
+1. **Browser prototype** of the generative medium — iterate until it feels
+   right. (1a, the audio-rate grid, is done; see Prototype findings.) 1b: a
+   human-speed surface, tuned stones, bell voices, and a *minimal* tuning core
+   (root, cents list, period, reference pitch, range) with a few built-in
+   scales. Click = Drop, drag = a trail; no other gestures or modes yet.
 2. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 3. **Port the medium** to C++ in `source/dsp`.
-4. **Tuning engine** + quantization of the medium's resonances.
+4. **Full tuning engine** — every scale family above, Scala import,
+   quantization strength/glide.
 5. **WebView UI** with the XY surface.
 6. **Gestures → Phase → Vessel → Erosion → Cycle**, in that order.
 
@@ -147,7 +180,11 @@ Inside `processBlock` and anything it calls:
 - **pluginval** at a strict level, and `auval` on macOS.
 
 ## Open questions
-- Which mechanism attaches quantization to the medium's resonances.
-- How many listening points, and whether they move during performance.
-- How Vessel mode injects outside audio into the grid.
+- Stones: how many, how they're laid out over the range (pitch by position or
+  scattered), and whether the performer or the water can move them.
+- What exactly makes a stone ring: a wave crest passing a threshold, energy
+  arriving, or both — and how simultaneous arrivals combine.
+- How Phase changes the surface and the bell voices (ice / liquid / vapor).
+- How Vessel works now: outside audio disturbing the water, or becoming the
+  stones' voice.
 - Instrument name.

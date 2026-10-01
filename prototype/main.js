@@ -4,7 +4,7 @@
 import { createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT } from './ring.js';
 import { createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_HEIGHTS } from './visuals.js';
 import { buildPitches, noteLabel, SCALES } from './tuning.js';
-import { stonePositions, LAYOUTS } from './layout.js';
+import { stonePositions } from './layout.js';
 import { PARAMS, PARAM_KEYS } from './instrument.js';
 import { REFERENCE_SPEED, SURFACE_W, SURFACE_H } from './surface.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
@@ -24,7 +24,7 @@ let visuals = null;
 // ---- tuning: scale, root, range, reference → stones ------------------------------
 
 const ROOTS = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
-const tuning = { scale: 'pentatonicMajor', root: 0, low: 48, high: 84, refHz: 440, layout: 'scattered' };
+const tuning = { scale: 'pentatonicMajor', root: 0, low: 48, high: 84, refHz: 440 };
 let stones = { xs: new Float64Array(0), ys: new Float64Array(0), hzs: [], labels: [], count: 0 };
 let stonesUnsent = false;
 
@@ -41,7 +41,7 @@ function retune() {
   }
   if (pitches.length === 0) { setTuningNote(`no scale notes in this range — keeping the previous ${stones.count} stones`); return; }
   setTuningNote(`${pitches.length} stones`);
-  const { xs, ys } = stonePositions(pitches.length, tuning.layout);
+  const { xs, ys } = stonePositions(pitches.length);
   stones = { xs, ys, hzs: pitches.map((p) => p.hz), labels: pitches.map((p) => p.label), count: pitches.length };
   sendStones();
 }
@@ -73,7 +73,6 @@ function buildTuningControls() {
   const root = fill('root', ROOTS.map((r, i) => [i, r]), tuning.root);
   const low = fill('low', notes, tuning.low);
   const high = fill('high', notes, tuning.high);
-  const layout = fill('layout', Object.entries(LAYOUTS), tuning.layout);
   const ref = document.getElementById('ref');
   ref.value = tuning.refHz;
 
@@ -89,7 +88,6 @@ function buildTuningControls() {
     if (tuning.low > tuning.high) { tuning.low = tuning.high; low.value = String(tuning.low); }
     retune();
   });
-  layout.addEventListener('change', () => { tuning.layout = layout.value; retune(); });
   const setRef = (hz) => {
     if (!(hz >= REF_MIN_HZ && hz <= REF_MAX_HZ)) {
       ref.value = tuning.refHz;

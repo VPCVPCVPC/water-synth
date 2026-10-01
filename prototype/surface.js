@@ -42,8 +42,10 @@ const CRATER_GAIN = 1.66;
 export const REFERENCE_SPEED = 64; // cells per second
 
 export const SURFACE_PARAMS = {
-  waveSpeed: { min: 25, max: 450, def: 64 }, // cells per second (≈2 s to cross 128 cells)
-  decay: { min: 1, max: 30, def: 8 }, // s at the reference tempo: T60 of broad swells
+  // Defaults from Dash's Phase 1b listening session: slow (≈3.3 s to cross 128
+  // cells) and long-lived (≈27 s at this tempo).
+  waveSpeed: { min: 25, max: 450, def: 39 }, // cells per second
+  decay: { min: 1, max: 30, def: 16.4 }, // s at the reference tempo: T60 of broad swells
   hfDecay: { min: 0.1, max: 30, def: 1.5 }, // s at the reference tempo: T60 of the finest ripples
 };
 

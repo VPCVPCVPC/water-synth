@@ -1,24 +1,19 @@
-// layout.js — where stones sit on the surface. Two layouts to compare while
-// CLAUDE.md's open question about stone layout is answered; expect one to go.
-//
-//   scattered:          evenly spread but irregular, like stones dropped on
-//                       a pond: Mitchell's best-candidate sampling with fixed
-//                       pseudo-random candidates. Stone i is placed only from
-//                       stones 0..i−1, so changing the range adds or removes
-//                       stones at the end without moving the rest.
-//   pitchByPosition:    low notes on the left, high on the right; heights
-//                       from the scattered layout.
+// layout.js — where stones sit on the surface: scattered, evenly spread but
+// irregular, like stones dropped on a pond (Mitchell's best-candidate
+// sampling with fixed pseudo-random candidates). Stone i is placed only from
+// stones 0..i−1, so changing the range adds or removes stones at the end
+// without moving the rest. (Dash preferred this to pitch-by-position in the
+// Phase 1b listening session.)
 //
 // Not for the audio path (allocates). Positions are in [0, 1]² of the
 // surface; distances account for its shape (ASPECT = height / width).
 
-export const LAYOUTS = { scattered: 'Scattered', pitchByPosition: 'Pitch by position' };
 
 const MARGIN = 0.08;
 const ASPECT = 97 / 128;
 const CANDIDATES = 24;
 
-export function stonePositions(count, layout = 'scattered') {
+export function stonePositions(count) {
   const xs = new Float64Array(count), ys = new Float64Array(count);
   const span = 1 - 2 * MARGIN;
   for (let i = 0; i < count; i++) {
@@ -36,9 +31,6 @@ export function stonePositions(count, layout = 'scattered') {
     }
     xs[i] = bestX;
     ys[i] = bestY;
-  }
-  if (layout === 'pitchByPosition') {
-    for (let i = 0; i < count; i++) xs[i] = MARGIN + span * (count > 1 ? i / (count - 1) : 0.5);
   }
   return { xs, ys };
 }

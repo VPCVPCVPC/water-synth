@@ -246,8 +246,11 @@ console.log('\n6. Quiet strikes, bad input and bursts');
 
 // ---- 7. The whole instrument ------------------------------------------------------
 const PENTA = buildPitches({ scale: SCALES.pentatonicMajor, root: 60, low: 48, high: 84 });
+// Instrument checks run at the calibration baseline (reference tempo, splash
+// off), not the player-facing defaults; checks about a knob set it themselves.
 function makeInstrument(fs = 48000, seed = 1, pitches = PENTA) {
   const inst = new Instrument({ sampleRate: fs, seed });
+  inst.setParam('waveSpeed', 64); inst.setParam('decay', 8); inst.setParam('splash', 0);
   const { xs, ys } = stonePositions(pitches.length);
   inst.engine.setStones(xs, ys, pitches.map((p) => p.hz), pitches.length);
   return inst;

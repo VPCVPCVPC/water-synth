@@ -17,7 +17,7 @@ import { Stones, StrikeBuffer, STONE_PARAMS, MAX_STONES } from './stones.js';
 export const ENGINE_PARAMS = {
   ...SURFACE_PARAMS,
   ...STONE_PARAMS,
-  splash: { min: 0, max: 0.8, def: 0 }, // splash height ÷ crest height
+  splash: { min: 0, max: 0.8, def: 0.21 }, // splash height ÷ crest height (default from Dash's session)
 };
 export const ENGINE_PARAM_KEYS = Object.keys(ENGINE_PARAMS);
 

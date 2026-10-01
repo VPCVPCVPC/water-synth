@@ -37,9 +37,12 @@ written, that still sit in your scale.
 ### Core: the medium
 A simulated surface that holds energy, propagates it, reflects it off its
 edges, and damps it over time. It runs at **human speed**: ripples visibly
-travel across it. Wave speed is adjustable and acts as tempo, from slow drift
-(seconds to cross) to busy cascades (well under a second). The surface is the
-composer, not the oscillator: it decides *when*, *which*, and *how hard*.
+travel across it. Its speed — **flow** — is adjustable, from slow drift
+(seconds to cross) to busy cascades (well under a second). Flow is a
+time-lapse: the whole water speeds up or slows down together, so the same
+gesture plays the same phrase faster or slower. (Flow is the water's pace;
+"tempo/BPM" means only the loopers' beat grid.) The surface is the composer,
+not the oscillator: it decides *when*, *which*, and *how hard*.
 
 ### Tuned stones: how the medium sounds
 Points on the surface — **stones** — each hold one pitch from the current
@@ -48,9 +51,40 @@ water hits sets how loud; ripples arriving together ring it brighter or set off
 its neighbours. Distances between where you disturb and where the stones sit
 make the rhythm; reflections make echoes that repeat but drift.
 
-Stones ring with **water-struck bell** voices for now: clear, tuned resonant
-tones with a soft bell/marimba-like decay. Voice character is expected to
-evolve (and is where Phase will act).
+The performer can **move stones** — drag them by hand, randomize them, or
+change how they spread (Dash, Phase 1c). A stone moved through moving water
+rings as crests pass over it. Whether the *water* can move stones stays open.
+A stone struck while still ringing rings on: it is one object, not a sampler.
+
+### Voices: what a struck stone sounds like
+The default voice is the **water-struck bell**: clear, tuned resonant tones with
+a soft bell/marimba-like decay and a short "tick" of water touching the stone.
+The voice can be designed — oscillators, filter, envelopes (Phase 1c) — but
+the water still decides when, which, and how hard: how hard a stone is struck
+shapes its loudness and brightness by default.
+- All stones share one voice; any single stone can be given an override.
+- **Stones have no note-off.** Every voice falls silent on its own. A voice may
+  sustain only while the water around its stone keeps moving, releasing as the
+  water calms — the water holds the note, never the player.
+- No factory presets or preset browser. Saving the session's state is fine;
+  whether to save and recall your own voices is an open decision for Dash.
+- Phase (Phase 6) will later act on these voice parameters; the voice editor is
+  a sound-design surface, not the Phase mechanism.
+
+### Layers: loopers
+- **Gesture looper** — records disturbances (drops and drags, with their
+  timing), not notes, and replays them into the living water, so each pass
+  lands in water that is already moving and differs. Several loops of
+  different lengths can layer and drift. Loop playback is a natural input for
+  Erosion later, so loops are stored as timed gesture events.
+- **Quantize** (optional, off by default) moves *when you touch the water*
+  toward a beat grid, with a strength control from lean (the default when
+  enabled) to snap, plus swing. It never places notes: when stones ring is
+  still decided by distance and the water.
+- **Audio looper** — "a tape beside the pond": records the instrument's output
+  and layers fixed audio, like a loop pedal. The one feature that isn't the
+  water; mainly for the standalone app. Stopping, muting and clearing fade,
+  never cut.
 
 ### Prototype findings (Phase 1a, Sept 2026)
 An audio-rate 2D wave grid read directly as audio sounded like a metal plate,
@@ -59,6 +93,14 @@ through each other unchanged), waves crossed the whole grid in ~4 ms, and tap
 position only rebalanced the same fixed resonances. Hence the move to a
 human-speed surface driving tuned voices. The 1a code is in git history
 (`7016618`) with its review notes and C++ port notes.
+
+### Listening results (Phase 1b, Oct 2026)
+Dash: "It's gorgeous." Nothing felt off. He preferred the scattered stone
+layout (pitch-by-position retired), and played with a much slower flow
+(≈3.3 s to cross), longer water decay, and some splash — now the defaults.
+The 1b design choices stand: a crest passing a threshold rings a stone;
+flow as time-lapse; splash bounded by what you play; re-strikes that add to
+a ringing stone (sometimes damping it).
 
 ### Gestures (how you disturb it)
 | Gesture | What it does to the medium |
@@ -116,14 +158,16 @@ Later, if it earns its place: MTS-ESP support and MPE per-note pitch.
 Build in this order:
 1. **XY surface in the plugin UI** — click = Drop, drag = Stir, swipe = Wave,
    press-and-hold = Still. No hardware needed; the primary way to play.
+   **Touch first:** on iPad and iPhone — likely the ideal way to play — every
+   finger is its own disturbance (multi-touch), and Apple Pencil pressure sets
+   strength.
 2. **MIDI keyboard** — a note drops energy at the stone holding that scale
    degree (the water then carries it to the others), velocity sets energy, aftertouch feeds continuous stirring, sustain pedal engages Still.
    Mod wheel / CCs morph Phase.
 3. **MPE controllers** (Seaboard, LinnStrument, Push) — per-note pressure and
    glide map naturally onto disturbance and microtonal pitch.
 
-Later possibilities: tablet/pen pressure, multi-touch second screen, OSC from a
-phone's motion sensors.
+Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
 
 ## Tech stack
 - **Framework:** JUCE (C++), built with CMake.
@@ -131,6 +175,8 @@ phone's motion sensors.
   when convenient. AAX only if Pro Tools support is ever needed — it requires an
   Avid partnership and PACE signing.
 - **Platforms:** macOS first (Apple Silicon + Intel), Windows and Linux via CI.
+  **iPad and iPhone** are an intended target — a standalone app and AUv3, via
+  JUCE — likely the ideal way to play; this doesn't reorder the build phases.
   No platform-specific code in the DSP layer, ever.
 - **UI:** JUCE WebView — interface and water visuals in HTML/CSS/JS/WebGL.
 - **Prototyping:** medium physics sketched in the browser (JS + Web Audio) in
@@ -142,6 +188,12 @@ phone's motion sensors.
    human-speed surface, tuned stones, bell voices, and a *minimal* tuning core
    (root, cents list, period, reference pitch, range) with a few built-in
    scales. Click = Drop, drag = a trail; no other gestures or modes yet.
+   (1b passed its listening gate.) 1c: layers and voices, in two halves, each
+   ending in a listening gate —
+   A: gesture looper with optional quantize, stone controls (move, randomize,
+   spread), multi-touch and phone/iPad layout, played with today's bell;
+   B: the voice editor (shared voice with per-stone overrides, water-held
+   sustain) and the audio looper.
 2. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 3. **Port the medium** to C++ in `source/dsp`.
 4. **Full tuning engine** — every scale family above, Scala import,
@@ -180,11 +232,12 @@ Inside `processBlock` and anything it calls:
 - **pluginval** at a strict level, and `auval` on macOS.
 
 ## Open questions
-- Stones: how many, how they're laid out over the range (pitch by position or
-  scattered), and whether the performer or the water can move them.
+- Stones: how many per scale and range, and whether the water can move them
+  (the performer can; layout is scattered).
 - What exactly makes a stone ring: a wave crest passing a threshold, energy
   arriving, or both — and how simultaneous arrivals combine.
 - How Phase changes the surface and the bell voices (ice / liquid / vapor).
 - How Vessel works now: outside audio disturbing the water, or becoming the
   stones' voice.
+- Whether to save and recall voices you've designed (no factory presets either way).
 - Instrument name.

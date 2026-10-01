@@ -2,7 +2,7 @@
 // engine), without sound. Agents can't hear; these are what we can prove.
 //   node check-water.mjs
 
-import { Surface, SURFACE_PARAMS, SIM_RATE } from './surface.js';
+import { Surface, SURFACE_PARAMS, SIM_RATE, REFERENCE_SPEED } from './surface.js';
 import { Stones, StrikeBuffer } from './stones.js';
 import { Engine, ENGINE_PARAMS } from './engine.js';
 import { buildPitches, SCALES } from './tuning.js';
@@ -17,9 +17,25 @@ function report(ok, name, detail) {
 
 const PENTA = buildPitches({ scale: SCALES.pentatonicMajor, root: 60, low: 48, high: 84 });
 
-function makeEngine({ fs = 48000, seed = 1, pitches = PENTA, layout = 'scattered', params = {} } = {}) {
-  const e = new Engine({ sampleRate: fs, seed });
-  const { xs, ys } = stonePositions(pitches.length, layout);
+// The physics checks are calibrated at the reference tempo with splash off;
+// they pin those rather than inherit whatever the player-facing defaults are.
+// Checks about a knob set it themselves.
+const BASELINE = { waveSpeed: REFERENCE_SPEED, decay: 8, splash: 0 };
+function testEngine(opts) {
+  const e = new Engine(opts);
+  for (const [k, v] of Object.entries(BASELINE)) e.setParam(k, v);
+  return e;
+}
+function testSurface() {
+  const s = new Surface();
+  s.setParam('waveSpeed', BASELINE.waveSpeed);
+  s.setParam('decay', BASELINE.decay);
+  return s;
+}
+
+function makeEngine({ fs = 48000, seed = 1, pitches = PENTA, params = {} } = {}) {
+  const e = testEngine({ sampleRate: fs, seed });
+  const { xs, ys } = stonePositions(pitches.length);
   e.setStones(xs, ys, pitches.map((p) => p.hz), pitches.length);
   for (const [k, v] of Object.entries(params)) e.setParam(k, v);
   return e;
@@ -50,7 +66,7 @@ const seq = (strikes, n = 12) => strikes.slice(0, n).map((s) => s.stone).join(',
 
 // Peak height and its time at a grid point, for one drop on a bare surface.
 function probe(params, dropX, dropY, points, seconds) {
-  const s = new Surface();
+  const s = testSurface();
   for (const [k, v] of Object.entries(params)) s.setParam(k, v);
   s.drop(dropX, dropY, 1, 1.5);
   const peaks = points.map(() => ({ h: -Infinity, t: 0 }));
@@ -72,7 +88,7 @@ console.log('\n1. Surface stability and energy');
     'slow+short': { waveSpeed: P.waveSpeed.min, decay: P.decay.min, hfDecay: P.hfDecay.min },
   };
   for (const [name, p] of Object.entries(sets)) {
-    const s = new Surface();
+    const s = testSurface();
     for (const [k, v] of Object.entries(p)) s.setParam(k, v);
     for (const [x, y] of [[0.5, 0.5], [0.02, 0.98], [0.99, 0.01], [0.3, 0.6]]) s.drop(x, y, 4, 2);
     for (let k = 0; k < 10; k++) s.step(); // drops finish injecting
@@ -93,7 +109,7 @@ console.log('\n1. Surface stability and energy');
 // ---- 2. Wave speed is what the knob says ---------------------------------------
 console.log('\n2. Wave speed = knob (crest travel time between two points)');
 for (const c of [32, 64, 200]) {
-  const s = new Surface();
+  const s = testSurface();
   const y = s.toGridY(0.5), x0 = s.toGridX(0.2);
   // Window ends before the first reflection can reach the nearer point.
   const [a, b] = probe({ waveSpeed: c }, 0.2, 0.5, [[x0 + 16, y], [x0 + 48, y]], (1.1 * 48) / c + 0.06);
@@ -104,7 +120,7 @@ for (const c of [32, 64, 200]) {
 console.log('\n2b. Tempo changes timing, not crest height');
 {
   const heights = [25, 64, 450].map((c) => {
-    const s = new Surface();
+    const s = testSurface();
     const x0 = s.toGridX(0.3), y = s.toGridY(0.5);
     const [p] = probe({ waveSpeed: c }, 0.3, 0.5, [[x0 + 12, y]], (1.1 * 30) / c + 0.1);
     return p.h;
@@ -116,7 +132,7 @@ console.log('\n2b. Tempo changes timing, not crest height');
 
 console.log('\n2c. Ripples are the same in every direction');
 {
-  const s = new Surface(), cx = s.toGridX(0.5), cy = s.toGridY(0.5), d = 45 / Math.SQRT2;
+  const s = testSurface(), cx = s.toGridX(0.5), cy = s.toGridY(0.5), d = 45 / Math.SQRT2;
   s.drop(0.5, 0.5, 1, 1.5);
   let ax = { h: -Infinity, t: 0 }, dg = { h: -Infinity, t: 0 };
   for (let k = 1; k <= SIM_RATE; k++) {
@@ -133,7 +149,7 @@ console.log('\n2c. Ripples are the same in every direction');
 // ---- 3. Stones ring in order of distance, on time ------------------------------
 console.log('\n3. One drop: stones ring in order of distance, at the predicted times');
 {
-  const e = new Engine({ seed: 1 });
+  const e = testEngine({ seed: 1 });
   const s = e.surface;
   const dists = [10, 20, 30, 40, 50];
   const x0 = 0.15, y0 = 0.5, gx0 = s.toGridX(x0);
@@ -161,13 +177,13 @@ console.log('\n4. Position matters: drops in different places give different phr
 // ---- 5. Waves interact: two ripples ring a stone neither rings alone ------------
 console.log('\n5. Interference');
 {
-  const s0 = new Surface();
+  const s0 = testSurface();
   const sx = s0.toGridX(0.5), sy = s0.toGridY(0.5);
   const d = 30 / (s0.w - 1);
   const [alone] = probe({}, 0.5 - d, 0.5, [[sx, sy]], 1.5);
   const threshold = 1.4 * alone.h;
   const ring = (drops) => {
-    const s = new Surface(), st = new Stones(), out = new StrikeBuffer();
+    const s = testSurface(), st = new Stones(), out = new StrikeBuffer();
     st.setThreshold(threshold);
     st.setStones(s, [0.5], [0.5], [440], 1);
     for (const x of drops) s.drop(x, 0.5, 1, 1.5);
@@ -182,7 +198,7 @@ console.log('\n5. Interference');
 // ---- 6. Reflections ring stones (free edges reflect crests upright) -------------
 console.log('\n6. Reflections off the walls ring stones on time');
 {
-  const e = new Engine({ seed: 1 });
+  const e = testEngine({ seed: 1 });
   const s = e.surface;
   e.setStones([0.95], [0.5], [440], 1);
   e.setParam('threshold', 0.01);
@@ -323,7 +339,7 @@ console.log('\n12. Bad input');
 }
 {
   // Bad stones are disabled in place; good ones keep working.
-  const e = new Engine({ seed: 1 });
+  const e = testEngine({ seed: 1 });
   e.setStones([0.5, NaN, 0.6, 0.4], [0.5, 0.5, Infinity, 0.5], [440, 330, 220, NaN], 4);
   e.setStones([0.5], [0.5], [440], NaN); // ignored
   e.process(NaN); e.process(-5); e.process(1.5); // ignored: clock untouched

@@ -31,6 +31,7 @@ const TYPES = {
   '.json': 'application/json',
   '.wav': 'audio/wav',
   '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
 };
 
 async function handle(req, res) {

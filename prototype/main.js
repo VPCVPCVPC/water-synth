@@ -9,7 +9,7 @@ import {
 import {
   createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
 } from './visuals.js';
-import { buildPitches, noteLabel, SCALES } from './tuning.js';
+import { buildPitches, noteLabel, SCALES, stonePitches } from './tuning.js';
 import { stonePositions } from './layout.js';
 import { PARAMS, PARAM_KEYS, VOICE_PARAMS, VOICE_KEYS, SHARED } from './instrument.js';
 import {
@@ -93,12 +93,13 @@ function confirmButton(button, action) {
 // ---- tuning and stones ---------------------------------------------------------------
 
 const ROOTS = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
-const tuning = { scale: 'pentatonicMajor', root: 0, low: 48, high: 84, refHz: 440 };
+const tuning = { scale: 'pentatonicMajor', root: 0, low: 48, high: 84, refHz: 440, stoneCount: 0 }; // stoneCount 0: one per note
 const layout = { seed: 0, spread: 1 };
 const placed = new Map(); // stone index → { x, y } placed by hand
 let stones = { xs: new Float64Array(0), ys: new Float64Array(0), hzs: [], labels: [], count: 0 };
 let stonesUnsent = false;
 
+let notesInRange = 0, stoneCountKnob = null; // scale notes in the range; the stone-count knob
 function retune() {
   let pitches;
   try {
@@ -111,7 +112,10 @@ function retune() {
     return;
   }
   if (pitches.length === 0) { setTuningNote(`no scale notes in this range — keeping the previous ${stones.count} stones`); return; }
-  setTuningNote(`${pitches.length} stones`);
+  notesInRange = pitches.length;
+  pitches = stonePitches(pitches, tuning.stoneCount);
+  setTuningNote(`${notesInRange} notes in range · ${pitches.length} stones`);
+  if (stoneCountKnob) stoneCountKnob.refresh();
   stones = { ...placeStones(pitches.length), hzs: pitches.map((p) => p.hz), labels: pitches.map((p) => p.label), count: pitches.length };
   sendStones();
   refreshVoice(); // a stone the editor was on may be gone
@@ -202,12 +206,23 @@ function buildStoneControls() {
   document.getElementById('randomize').addEventListener('click', () => { layout.seed++; rearrange(); });
   confirmButton(document.getElementById('release'), () => { placed.clear(); rearrange(); });
   // Spread: gathered ↔ spread evenly over the whole pond.
-  const row = slider({
+  const count = knob({
+    label: 'stones', hint: 'how many stones: all (one per scale note in the range), fewer (spread over the range), or more (notes repeat in other places)',
+    // "All" (one per note) is the detent at the number of notes in range, so
+    // turning goes …14, 15, all (16), 17…
+    get: () => tuning.stoneCount || notesInRange || 1,
+    set: (v) => { tuning.stoneCount = v === notesInRange ? 0 : v; retune(); }, def: () => notesInRange || 1,
+    to: (v) => (v - 1) / (MAX_STONES - 1), from: (f) => 1 + Math.round(f * (MAX_STONES - 1)),
+    steps: MAX_STONES - 1,
+    show: (v) => (v === notesInRange ? `all · ${v}` : String(v)),
+  });
+  stoneCountKnob = count;
+  const row = knob({
     label: 'spread', hint: 'gathered in loose clumps ↔ spread evenly over the whole pond',
-    get: () => layout.spread, set: (v) => { layout.spread = v; rearrange(); },
+    get: () => layout.spread, set: (v) => { layout.spread = v; rearrange(); }, def: layout.spread,
     to: (v) => v, from: (f) => f, show: (v) => (v > 0.95 ? 'even' : v < 0.05 ? 'gathered' : `${Math.round(v * 100)}`),
   });
-  document.getElementById('stone-controls').append(row.el);
+  document.getElementById('stone-controls').append(count.el, row.el);
 }
 
 // ---- knobs ---------------------------------------------------------------------------
@@ -272,10 +287,121 @@ function slider({ label, hint, get, set, to, from, show }) {
   return row;
 }
 
+// A knob, after the logo's concentric rings: faint inner rings, the value as
+// an arc on the outer ring, and a pointer. Drag up/down (or sideways) to turn
+// — Shift for fine — double-tap to return to `def`, arrow keys step it. Same
+// interface as slider(): { el, readout, show, get, refresh, setDisabled }.
+const KNOB_SWEEP = 270; // degrees, from 7:30 to 4:30
+const knobArc = (f) => {
+  const a0 = (-KNOB_SWEEP / 2 - 90) * (Math.PI / 180), a1 = a0 + f * KNOB_SWEEP * (Math.PI / 180), R = 18;
+  const p = (a) => `${(20 + R * Math.cos(a)).toFixed(2)} ${(20 + R * Math.sin(a)).toFixed(2)}`;
+  return f <= 0.001 ? '' : `M ${p(a0)} A ${R} ${R} 0 ${f * KNOB_SWEEP > 180 ? 1 : 0} 1 ${p(a1)}`;
+};
+function knob({ label, hint, get, set, to, from, show, def, steps = 0 }) {
+  const el = document.createElement('div');
+  el.className = 'knob';
+  el.title = hint;
+  el.tabIndex = 0;
+  el.setAttribute('role', 'slider');
+  el.setAttribute('aria-label', label);
+  el.setAttribute('aria-description', hint);
+  el.setAttribute('aria-valuemin', '0'); el.setAttribute('aria-valuemax', '100');
+  el.innerHTML = `<svg viewBox="0 0 40 40" aria-hidden="true">
+    <circle class="ring" cx="20" cy="20" r="18"/><circle class="ring faint" cx="20" cy="20" r="12.5"/>
+    <circle class="ring faint" cx="20" cy="20" r="7"/><path class="arc"/><line class="pointer" x1="20" y1="20" x2="20" y2="6"/></svg>
+    <span class="knob-label"></span><output class="knob-value"></output>`;
+  el.querySelector('.knob-label').textContent = label;
+  const dial = el.querySelector('svg'); // only the dial turns; the label and value scroll the page
+  const arc = el.querySelector('.arc'), pointer = el.querySelector('.pointer'), readout = el.querySelector('.knob-value');
+  let disabled = false;
+  const frac = () => Math.min(1, Math.max(0, to(get())));
+  const paint = () => {
+    const f = frac();
+    arc.setAttribute('d', knobArc(f));
+    pointer.setAttribute('transform', `rotate(${(-KNOB_SWEEP / 2 + f * KNOB_SWEEP).toFixed(1)} 20 20)`);
+    readout.textContent = show(get());
+    el.setAttribute('aria-valuenow', String(Math.round(f * 100)));
+    el.setAttribute('aria-valuetext', show(get()));
+  };
+  const setFrac = (f) => {
+    if (disabled) return;
+    const v = from(Math.min(1, Math.max(0, f)));
+    if (v === get()) return; // nothing changed (e.g. a whole-number knob between steps)
+    set(v);
+    refreshReadouts();
+    paint();
+  };
+  const hintHere = () => showHint(el, label, hint);
+  // Turning: vertical and horizontal movement both count (up/right = more).
+  // A tap (moved < 4 px) right after another tap returns it to its default.
+  let drag = null, lastTap = 0;
+  dial.addEventListener('pointerdown', (e) => {
+    if (disabled) return;
+    el.focus({ preventScroll: true });
+    hintHere();
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, f: frac(), shift: e.shiftKey, moved: 0, at: performance.now() };
+    try { dial.setPointerCapture(e.pointerId); } catch { /* gone */ }
+    e.preventDefault();
+  });
+  dial.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (e.shiftKey !== drag.shift) { // fine/coarse changed: carry on from here
+      Object.assign(drag, { x: e.clientX, y: e.clientY, f: frac(), shift: e.shiftKey });
+      return;
+    }
+    const px = (drag.y - e.clientY) + (e.clientX - drag.x);
+    drag.moved = Math.max(drag.moved, Math.abs(px));
+    setFrac(drag.f + px / (e.shiftKey ? 900 : 180));
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const tap = drag.moved < 4 && e.type === 'pointerup';
+    drag = null;
+    if (!tap) { lastTap = 0; return; }
+    const now = performance.now();
+    if (now - lastTap < 320 && def !== undefined) { setFrac(to(typeof def === 'function' ? def() : def)); lastTap = 0; }
+    else lastTap = now;
+  };
+  dial.addEventListener('pointerup', end);
+  dial.addEventListener('pointercancel', end);
+  el.addEventListener('focus', hintHere);
+  el.addEventListener('keydown', (e) => {
+    const unit = steps > 0 ? 1 / steps : 0;
+    let step = { ArrowUp: 0.01, ArrowRight: 0.01, ArrowDown: -0.01, ArrowLeft: -0.01, PageUp: 0.1, PageDown: -0.1 }[e.key];
+    if (step !== undefined) {
+      step *= e.shiftKey ? 0.2 : 1;
+      if (unit && Math.abs(step) < unit) step = Math.sign(step) * unit; // a whole-number knob always moves one
+      setFrac(frac() + step); e.preventDefault();
+    }
+    else if (e.key === 'Home') { setFrac(0); e.preventDefault(); }
+    else if (e.key === 'End') { setFrac(1); e.preventDefault(); }
+  });
+  const row = {
+    el, readout, show, get, refresh: paint,
+    setDisabled: (off) => { disabled = off; el.classList.toggle('off', off); el.setAttribute('aria-disabled', off ? 'true' : 'false'); },
+  };
+  paint();
+  return row;
+}
+
+// Each section has one hint line: what the knob last touched or focused does
+// (touch screens never show tooltips).
+function showHint(el, label, hint) {
+  const box = el.closest('fieldset, section');
+  if (!box) return;
+  let line = box.querySelector('.hint-line');
+  if (!line) { line = document.createElement('div'); line.className = 'note hint-line'; }
+  // Right under the group of knobs just touched (the synth layer's included).
+  const group = el.closest('.knobs') || el;
+  if (line.previousElementSibling !== group) group.after(line);
+  line.textContent = `${label} — ${hint}`;
+}
+
 function buildKnobs() {
   for (const k of KNOBS) {
-    const row = slider({
-      label: k.label, hint: k.hint, get: () => values[k.key],
+    const make = k.group === 'tapes' ? slider : knob; // the tape's level stays a fader
+    const row = make({
+      label: k.label, hint: k.hint, get: () => values[k.key], def: PARAMS[k.key].def,
       set: (v) => { values[k.key] = v; sendParam(k.key); }, to: k.map.to, from: k.map.from, show: k.show,
     });
     knobs.push(row);
@@ -296,9 +422,9 @@ let refreshVoice = () => {};
 
 function buildVoiceControls() {
   for (const k of VOICE_KNOBS) {
-    const row = slider({
+    const row = knob({
       label: k.label, hint: k.hint,
-      get: () => voiceValue(k.key), set: (v) => setVoiceValue(k.key, v),
+      get: () => voiceValue(k.key), set: (v) => setVoiceValue(k.key, v), def: VOICE_PARAMS[k.key].def,
       to: k.map.to, from: k.map.from, show: k.show,
     });
     voiceKnobs.push(row);

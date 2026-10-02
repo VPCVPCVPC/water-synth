@@ -112,8 +112,14 @@ on each bar's first beat). BPM and grid only appear when it's on.
 
 **Look** — zen garden minimalism (CLAUDE.md, "Look and feel"): black and
 white, Syncopate in wide-tracked capitals, the water in greys — light crests,
-dark troughs. Syncopate loads from Google Fonts; offline the page falls back
-to the system font.
+dark troughs — and the logo's concentric rings in the knobs, the reels and the
+start screen. Syncopate is bundled in `fonts/` (Apache 2.0), so the page works
+offline. On wide screens the tape sits beside the pond; on phones, under it.
+
+**Knobs** — most controls are knobs: drag up or down (or sideways) to turn,
+Shift for fine; double-tap to return to the default; arrow keys, Page Up/Down,
+Home and End step them. On a computer, hover one for what it does. The tape's
+level stays a fader.
 
 **Water**
 
@@ -129,15 +135,19 @@ to the system font.
 keep their place when you retune or randomize (which note each one holds
 follows the scale: lowest stone, lowest note), and a stone dragged through
 moving water rings as crests pass over it. **randomize** rearranges the stones you
-haven't placed. **spread** goes from gathered in loose clumps to spread evenly
-over the whole pond. **release placed** (tap twice) frees the stones you placed.
+haven't placed. **stones** sets how many: *all* (one per scale note in the
+range, the default), fewer (spread evenly over the range, lowest and highest
+kept) or more (every note gets one and the extras repeat notes evenly, so a
+note can ring from two places). **spread** goes from gathered in loose clumps
+to spread evenly over the whole pond. **release placed** (tap twice) frees the
+stones you placed.
 
 **Tuning** — scale (major, natural minor, dorian, major/minor pentatonic,
 chromatic, maqam Rast), root, lowest and highest note (C1–C8), and the
 reference pitch (A4 in Hz, 400–480 in this prototype; 440 and 432 one tap
-away — the tuning core itself takes any frequency). There is one stone per
-scale note in the range. Note names are relative to A4 at the chosen reference
-(at 432 Hz, A4 is still labelled "A4"). Changing these retunes the stones; it
+away — the tuning core itself takes any frequency). The stones knob decides
+how many stones share the scale notes in the range. Note names are relative
+to A4 at the chosen reference (at 432 Hz, A4 is still labelled "A4"). Changing these retunes the stones; it
 never touches the water. A stone still ringing keeps its old pitch until it's
 next struck, then its old ring crossfades out over 100 ms.
 
@@ -267,8 +277,14 @@ voice editor untouched you hear exactly the Phase 1c bell.
 29. **The look:** black and white, wide capitals, grey water. Calm and zen,
     or too stark? Is everything still readable on the phone (the small
     hint text especially)? The light tape machine is the brightest thing on
-    the page and sits first among the controls — right, or should it come
-    after the water and stones, or be a little darker?
+    the page and now sits beside the pond (under it on a phone) — right?
+30. **Knobs:** do they feel like an instrument? Easy to turn on the iPad
+    (drag up/down; double-tap resets)? Any control that should stay a slider?
+31. **Number of stones:** try fewer stones than notes (a sparse pond) and
+    more (notes doubled in other places). Useful? Is "all" the right default?
+    A stone's own voice and a hand-placed spot belong to its slot, so
+    changing the count can move them to another note — fine, or should they
+    follow a note?
 
 ### Decisions for Dash
 
@@ -282,13 +298,16 @@ voice editor untouched you hear exactly the Phase 1c bell.
 - **Saving voices** — yes (Oct 2026): your own, by name, in this browser.
 - **Overrides on retune** — kept (Oct 2026); they belong to a stone's slot.
 - **Tapes** record only the water (Oct 2026).
+- **Stone count** is the performer's (Oct 2026): one per note by default, or
+  any number.
 
 ### Provisional choices (not decisions)
 
 - A 128 × 97 surface with free edges (reflections stay crests), stepped 1000
   times a second of water time, with an isotropic grid stencil so ripples are
   the same in every direction.
-- One stone per scale note in the range; at most 128.
+- By default one stone per scale note in the range; the stones knob sets any
+  count up to 128.
 - Each stone panned by its left–right position (range 0.2–0.8).
 - Loops: 4 layers, up to 60 s each, 4096 gestures per layer.
 - Tapes: 4 tracks, up to 30 s each (stereo, about 46 MB at 48 kHz), 0.3 s
@@ -393,6 +412,7 @@ About four minutes; seven files (the voices CPU budget is a process of its own):
 | `ring.js` | Lock-free queue: page → audio thread. |
 | `visuals.js` | Lock-free frames: audio thread → page. |
 | `main.js`, `index.html` | The page: drawing, gestures, controls. |
+| `fonts/` | Syncopate (Apache 2.0), bundled so the page works offline. |
 | `serve.mjs` | Local server with the headers shared memory needs; `--https` for devices. |
 | `check-*.mjs` | The checks (`check-lib.mjs`: FFT and pitch measuring shared by them). |
 

@@ -75,6 +75,30 @@ export function buildPitches({ scale, root, reference = REFERENCES.a440, low, hi
   return out;
 }
 
+// The pitches for `count` stones from the scale notes in range (`pitches`,
+// low to high). 0 (or anything not a positive number) means one stone per
+// note. Fewer: spread evenly over the range, keeping the lowest and highest.
+// More: every note gets a stone, and the extra ones go evenly through the
+// range (a note can then sound from two places on the pond). Low to high.
+export function stonePitches(pitches, count) {
+  const m = pitches.length;
+  const n = Number.isFinite(count) ? Math.floor(count) : 0;
+  if (m === 0 || n <= 0 || n === m) return pitches.slice();
+  if (n < m) {
+    if (n === 1) return [pitches[Math.floor((m - 1) / 2)]];
+    const out = [];
+    for (let k = 0; k < n; k++) out.push(pitches[Math.round((k * (m - 1)) / (n - 1))]);
+    return out;
+  }
+  const out = [];
+  for (let i = 0; i < m; i++) {
+    // How many stones note i gets: the nth stone goes to note floor(n·i/m)…
+    const copies = Math.floor(((i + 1) * n) / m) - Math.floor((i * n) / m);
+    for (let c = 0; c < copies; c++) out.push(pitches[i]);
+  }
+  return out;
+}
+
 // "C4", "E♭5", or with a deviation from the nearest 12-TET name: "E4 −50¢".
 // Names are relative to note numbers (69 = A4), so they stay meaningful under
 // any reference frequency.

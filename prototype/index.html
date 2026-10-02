@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Water Synth</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Not render-blocking: the page paints at once and Syncopate swaps in (a venue's slow network never holds it up). -->
-  <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='black'/%3E%3Cg fill='none' stroke='white' stroke-width='4'%3E%3Ccircle cx='50' cy='50' r='10'/%3E%3Ccircle cx='50' cy='50' r='22'/%3E%3Ccircle cx='50' cy='50' r='34'/%3E%3Ccircle cx='50' cy='50' r='46'/%3E%3C/g%3E%3C/svg%3E">
+  <!-- Syncopate, bundled (fonts/, Apache 2.0): works offline, never calls out. -->
+  <link rel="preload" href="fonts/syncopate-400.woff2" as="font" type="font/woff2" crossorigin>
   <style>
+    @font-face { font-family: 'Syncopate'; font-style: normal; font-weight: 400; font-display: swap;
+      src: url(fonts/syncopate-400.woff2) format('woff2'); }
+    @font-face { font-family: 'Syncopate'; font-style: normal; font-weight: 700; font-display: swap;
+      src: url(fonts/syncopate-700.woff2) format('woff2'); }
     /* Zen garden minimalism: black and white, empty space, the water first.
        Type: Syncopate, all caps, wide tracking. */
     :root {
@@ -33,10 +36,16 @@
     html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg);
       font: 400 11px/1.7 var(--font); letter-spacing: var(--track); text-transform: uppercase;
       -webkit-text-size-adjust: 100%; touch-action: manipulation; }
-    main { display: flex; flex-direction: column; align-items: center; gap: 18px;
+    main { display: flex; flex-direction: column; align-items: center; gap: 22px;
       padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
         max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-    .stage { width: min(100%, 980px); width: min(100%, 980px, calc((100dvh - 150px) * 128 / 97));
+    /* The pond and the tape side by side on wide screens; stacked on phones. */
+    .top { width: min(100%, 1400px); display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; justify-items: center; }
+    @media (min-width: 1000px) {
+      .top { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; justify-items: stretch; }
+      .top .stage { justify-self: end; }
+    }
+    .stage { width: min(100%, 980px); width: min(100%, 980px, calc((100dvh - 110px) * 128 / 97));
       display: flex; flex-direction: column; gap: 10px; -webkit-user-select: none; user-select: none; }
     #surface { width: 100%; aspect-ratio: 128 / 97; display: block; background: var(--surface);
       border: 1px solid var(--edge); touch-action: none; cursor: crosshair;
@@ -51,12 +60,29 @@
     b { font-weight: 700; }
 
     /* Controls: a drawer on small screens, always open on large ones. */
-    #drawer { width: min(100%, 980px); }
+    #drawer { width: min(100%, 1400px); }
     #drawer > summary { list-style: none; cursor: pointer; text-align: center; color: var(--muted);
       padding: 12px; border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge); min-height: 44px; }
     #drawer > summary::-webkit-details-marker { display: none; }
     #drawer[open] > summary { margin-bottom: 24px; }
-    .panel { display: grid; gap: 40px 36px; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+    .panel { display: grid; gap: 34px 32px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    @media (min-width: 900px) { .panel .wide { grid-column: span 2; } }
+    /* Knobs, after the logo's rings. */
+    .knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 18px 6px; }
+    .knob { display: flex; flex-direction: column; align-items: center; gap: 5px;
+      -webkit-user-select: none; user-select: none; outline: none; min-width: 0; }
+    /* Only the dial turns (and holds the touch); the rest of the knob scrolls the page. */
+    .knob svg { width: 46px; height: 46px; display: block; overflow: visible; cursor: ns-resize; touch-action: none; }
+    .synth-knobs { padding-top: 12px; }
+    .hint-line { color: var(--fg); opacity: 0.75; }
+    .knob .ring { fill: none; stroke: var(--faint); stroke-width: 1.2; }
+    .knob .ring.faint { stroke: var(--edge); }
+    .knob .arc { fill: none; stroke: var(--fg); stroke-width: 2.4; }
+    .knob .pointer { stroke: var(--fg); stroke-width: 1.6; }
+    .knob:focus-visible svg { outline: 1px solid var(--fg); outline-offset: 3px; border-radius: 50%; }
+    .knob-label { font-size: 9px; text-align: center; line-height: 1.35; letter-spacing: 0.14em; }
+    .knob-value { font-size: 9px; color: var(--muted); text-align: center; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
+    .knob.off { opacity: 0.35; cursor: default; }
     fieldset { border: 0; border-top: 1px solid var(--edge); margin: 0; padding: 18px 0 0;
       display: flex; flex-direction: column; gap: 14px; min-width: 0; }
     legend { color: var(--fg); font-weight: 700; padding: 0 12px 0 0; letter-spacing: 0.3em; }
@@ -108,15 +134,21 @@
     }
 
     /* ---- the tape machine (after Dieter Rams: a quiet, light object) ---- */
-    .deck { grid-column: 1 / -1; background: var(--panel); color: var(--ink); border-radius: 6px;
-      padding: 22px 22px 18px; display: flex; flex-direction: column; gap: 20px; max-width: 760px;
+    .deck { background: var(--panel); color: var(--ink); border-radius: 6px;
+      padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 16px; max-width: 760px;
       width: 100%; justify-self: center; box-shadow: 0 1px 0 #fff inset, 0 20px 40px -20px #000; }
+    @media (min-width: 1000px) {
+      .deck .reel { width: 96px; }
+      .deck .deck-foot { grid-template-columns: 1fr; }
+      .deck .note { display: none; }
+    }
+    @media (min-width: 1000px) and (pointer: fine) { .deck .key { min-height: 34px; } }
     .deck-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; }
     .reel { width: min(150px, 30vw); aspect-ratio: 1; justify-self: center; }
     .reel svg { width: 100%; height: 100%; display: block; }
-    .reel .flange { fill: #2a2a29; }
-    .reel .tape { fill: #151514; }
-    .reel .hub { fill: var(--panel); }
+    .reel .flange { fill: #0d0d0d; }
+    .reel .groove { fill: none; stroke: var(--panel); stroke-width: 2.4; }
+    .reel .hub { fill: #0d0d0d; stroke: var(--panel); stroke-width: 2.4; }
     .reel .hole { fill: var(--panel); }
     .deck.running .reel svg { animation: spin 3.2s linear infinite; }
     .deck.running .reel.left svg { animation-duration: 4.4s; }
@@ -174,49 +206,59 @@
       button, .key { min-height: 44px; }
       .control input[type=range] { min-height: 36px; }
     }
-    #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    #start { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 34px; align-items: center; justify-content: center;
       background: rgba(0, 0, 0, 0.92); color: var(--fg); font: 400 13px var(--font); letter-spacing: 0.4em;
       text-transform: uppercase; border: 0; cursor: pointer; width: 100%; border-radius: 0; z-index: 10; }
     #start[hidden] { display: none; }
+    #start .logo { width: min(42vw, 220px); }
+    #start .logo circle { fill: none; stroke: var(--fg); stroke-width: 1.8; transform-origin: 50px 50px;
+      animation: breathe 6s ease-in-out infinite; }
+    #start .logo circle:nth-child(2) { animation-delay: 0.3s; } #start .logo circle:nth-child(3) { animation-delay: 0.6s; }
+    #start .logo circle:nth-child(4) { animation-delay: 0.9s; } #start .logo circle:nth-child(5) { animation-delay: 1.2s; }
+    #start .logo circle:nth-child(6) { animation-delay: 1.5s; } #start .logo circle:nth-child(7) { animation-delay: 1.8s; }
+    @keyframes breathe { 50% { transform: scale(1.04); opacity: 0.55; } }
+    @media (prefers-reduced-motion: reduce) { #start .logo circle { animation: none; } }
   </style>
 </head>
 <body>
   <main>
+    <div class="top">
     <div class="stage">
       <canvas id="surface" aria-label="Water surface: touch to drop, drag to disturb"></canvas>
       <div class="meter"><span>output</span><div class="track"><div id="output" class="fill"></div></div></div>
+    </div>
+    <section class="deck" id="deck" aria-label="Tape: a four-track machine">
+      <div class="deck-top">
+      <div class="reel left" aria-hidden="true"><svg viewBox="0 0 100 100">
+            <circle class="flange" cx="50" cy="50" r="49"/><circle class="groove" cx="50" cy="50" r="44"/><circle class="groove" cx="50" cy="50" r="38"/><circle class="groove" cx="50" cy="50" r="32"/><circle class="groove" cx="50" cy="50" r="26"/><circle class="groove" cx="50" cy="50" r="20"/>
+            <circle class="hub" cx="50" cy="50" r="13"/>
+            <circle class="hole" cx="50" cy="42.5" r="2.6"/><circle class="hole" cx="56.5" cy="53.8" r="2.6"/><circle class="hole" cx="43.5" cy="53.8" r="2.6"/>
+          </svg></div>
+        <div class="deck-mid">
+          <div class="deck-name">Tape</div>
+          <div class="counter" id="tape-counter" role="timer" aria-label="tape counter">00:00.0</div>
+          <div class="deck-sub">4 track</div>
+        </div>
+      <div class="reel right" aria-hidden="true"><svg viewBox="0 0 100 100">
+            <circle class="flange" cx="50" cy="50" r="49"/><circle class="groove" cx="50" cy="50" r="44"/><circle class="groove" cx="50" cy="50" r="38"/><circle class="groove" cx="50" cy="50" r="32"/><circle class="groove" cx="50" cy="50" r="26"/><circle class="groove" cx="50" cy="50" r="20"/>
+            <circle class="hub" cx="50" cy="50" r="13"/>
+            <circle class="hole" cx="50" cy="42.5" r="2.6"/><circle class="hole" cx="56.5" cy="53.8" r="2.6"/><circle class="hole" cx="43.5" cy="53.8" r="2.6"/>
+          </svg></div>
+      </div>
+      <div class="channels" id="layers"></div>
+      <div class="deck-foot">
+        <div id="tapes-controls"></div>
+        <button id="clear-all" class="key" type="button"><span class="glyph">×</span>clear all</button>
+      </div>
+      <div class="note">Each track records the water's sound and plays it back the same every pass —
+        whatever you retune. Overdub adds more on top. Stop, mute and clear fade.</div>
+    </section>
     </div>
     <div id="status" aria-live="polite"></div>
 
     <details id="drawer" open>
       <summary>Controls</summary>
       <div class="panel">
-        <section class="deck" id="deck" aria-label="Tape: a four-track machine">
-          <div class="deck-top">
-          <div class="reel left" aria-hidden="true"><svg viewBox="0 0 100 100">
-            <circle class="flange" cx="50" cy="50" r="49"/><circle class="tape" cx="50" cy="50" r="33"/>
-            <circle class="hub" cx="50" cy="50" r="13"/>
-            <circle class="hole" cx="50" cy="24" r="6"/><circle class="hole" cx="72.5" cy="63" r="6"/><circle class="hole" cx="27.5" cy="63" r="6"/>
-          </svg></div>
-            <div class="deck-mid">
-              <div class="deck-name">Tape</div>
-              <div class="counter" id="tape-counter" role="timer" aria-label="tape counter">00:00.0</div>
-              <div class="deck-sub">4 track · water only</div>
-            </div>
-          <div class="reel right" aria-hidden="true"><svg viewBox="0 0 100 100">
-            <circle class="flange" cx="50" cy="50" r="49"/><circle class="tape" cx="50" cy="50" r="33"/>
-            <circle class="hub" cx="50" cy="50" r="13"/>
-            <circle class="hole" cx="50" cy="24" r="6"/><circle class="hole" cx="72.5" cy="63" r="6"/><circle class="hole" cx="27.5" cy="63" r="6"/>
-          </svg></div>
-          </div>
-          <div class="channels" id="layers"></div>
-          <div class="deck-foot">
-            <div id="tapes-controls"></div>
-            <button id="clear-all" class="key" type="button"><span class="glyph">×</span>clear all</button>
-          </div>
-          <div class="note">Each track records the water's sound and plays it back the same every pass —
-            whatever you retune. Overdub adds more on top. Stop, mute and clear fade.</div>
-        </section>
 
         <fieldset>
           <legend>Beat</legend>
@@ -225,7 +267,7 @@
           <div class="quantized" hidden>
             <div class="field"><span>BPM</span><input id="bpm" type="number" min="40" max="240" step="1"></div>
             <div class="field"><span>grid</span><select id="grid"></select></div>
-            <div id="quantize-controls" style="display: contents"></div>
+            <div id="quantize-controls" class="knobs"></div>
           </div>
           <div class="note">Pulls touches and notes toward the beat — the pond's rim pulses on it. At full
             strength every note lands on the grid; lower, the water keeps more of its own time. Tapes
@@ -234,7 +276,7 @@
 
         <fieldset>
           <legend>Water</legend>
-          <div id="water-controls" style="display: contents"></div>
+          <div id="water-controls" class="knobs"></div>
           <button id="defaults" type="button">water knobs back to defaults</button>
         </fieldset>
 
@@ -245,7 +287,7 @@
             <button id="randomize" type="button">randomize</button>
             <button id="release" type="button">release placed</button>
           </div>
-          <div id="stone-controls" style="display: contents"></div>
+          <div id="stone-controls" class="knobs"></div>
           <div class="note" id="stone-note">In "move stones", drag a stone to place it; placed stones stay put
             when you retune or randomize. Dragging a stone through moving water rings it.</div>
         </fieldset>
@@ -264,7 +306,7 @@
         </fieldset>
 
 
-        <fieldset id="voice">
+        <fieldset id="voice" class="wide">
           <legend>Voice</legend>
           <div class="row">
             <button id="voice-pick" type="button" aria-pressed="false">edit one stone</button>
@@ -274,13 +316,15 @@
           <div class="row">
             <button id="voice-own" type="button" disabled>give it its own voice</button>
           </div>
-          <div id="voice-bell-controls" style="display: contents"></div>
-          <div id="voice-strike-controls" style="display: contents"></div>
-          <div id="voice-sustain-controls" style="display: contents"></div>
-          <div id="voice-synthlevel-controls" style="display: contents"></div>
+          <div class="knobs">
+            <div id="voice-bell-controls" style="display: contents"></div>
+            <div id="voice-strike-controls" style="display: contents"></div>
+            <div id="voice-sustain-controls" style="display: contents"></div>
+            <div id="voice-synthlevel-controls" style="display: contents"></div>
+          </div>
           <details class="group" id="synth-group">
             <summary>shape the synth layer — oscillators, filter, envelope</summary>
-            <div id="voice-synth-controls" class="group-body"></div>
+            <div id="voice-synth-controls" class="knobs synth-knobs"></div>
           </details>
           <button id="voice-defaults" type="button">shared voice back to defaults</button>
           <div class="row">
@@ -296,7 +340,10 @@
       </div>
     </details>
   </main>
-  <button id="start">Touch to wake the water</button>
+  <button id="start"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="8"/><circle cx="50" cy="50" r="14"/><circle cx="50" cy="50" r="20"/>
+      <circle cx="50" cy="50" r="26"/><circle cx="50" cy="50" r="32"/><circle cx="50" cy="50" r="38"/><circle cx="50" cy="50" r="44"/>
+    </svg><span>Touch to wake the water</span></button>
   <script type="module" src="main.js"></script>
 </body>
 </html>

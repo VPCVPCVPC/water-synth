@@ -174,8 +174,13 @@ before the app, for user testing (see Build phases).
 Zen garden minimalism: black and white, generous empty space, nothing
 decorative that the water doesn't need. Type is all caps, wide and slightly
 futurist (Syncopate), with extra letter spacing for a quiet sci-fi feel. The
-tape section looks like a real 4-track tape machine. The water is drawn in
-greys — light crests, dark troughs — like light on still water.
+tape section looks like a real 4-track tape machine, after Dieter Rams. The
+water is drawn in greys — light crests, dark troughs — like light on still
+water. Dash's brand mark is a set of white concentric rings on black (a
+ripple); that motif carries through the knobs, the tape reels and the start
+screen. Controls are knobs where a knob reads as part of an instrument; the
+tape sits beside the pond so the page needs little scrolling. Fonts are
+bundled, so the page works offline.
 
 ## Tuning and scales
 
@@ -304,8 +309,9 @@ Inside `processBlock` and anything it calls:
 - **pluginval** at a strict level, and `auval` on macOS.
 
 ## Open questions
-- Stones: how many per scale and range, and whether the water can move them
-  (the performer can; layout is scattered).
+- Whether the water can move stones (the performer can; layout is
+  scattered). How many stones there are is now the performer's: one per scale
+  note in the range by default, or any count (Dash, Oct 2026).
 - What exactly makes a stone ring: a wave crest passing a threshold, energy
   arriving, or both — and how simultaneous arrivals combine. (The crest
   threshold stands for now.)

@@ -4,12 +4,12 @@
 
 import {
   createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_STONE_MOVE,
-  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE,
+  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE, EV_STONE_TUNE,
 } from './ring.js';
 import {
   createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
 } from './visuals.js';
-import { buildPitches, noteLabel, SCALES, stonePitches } from './tuning.js';
+import { buildPitches, noteLabel, SCALES, pitchAtX, PITCH_MARGIN } from './tuning.js';
 import { stonePositions } from './layout.js';
 import { PARAMS, PARAM_KEYS, VOICE_PARAMS, VOICE_KEYS, SHARED } from './instrument.js';
 import {
@@ -69,8 +69,10 @@ fitOrientation();
 window.addEventListener('resize', fitOrientation);
 
 // Pond coordinates (x, y in [0, 1]) ↔ canvas coordinates (u, v in [0, 1]).
-const toCanvas = (x, y) => (rotated ? { u: 1 - y, v: x } : { u: x, v: y });
-const fromCanvas = (u, v) => (rotated ? { x: v, y: 1 - u } : { x: u, y: v });
+// Upright, the pond turns a quarter so its left (low notes) is at the bottom
+// and its right (high notes) at the top.
+const toCanvas = (x, y) => (rotated ? { u: y, v: 1 - x } : { u: x, v: y });
+const fromCanvas = (u, v) => (rotated ? { x: 1 - v, y: u } : { x: u, y: v });
 
 // Two taps to confirm anything that can't be undone.
 function confirmButton(button, action) {
@@ -108,6 +110,7 @@ let stones = { xs: new Float64Array(0), ys: new Float64Array(0), hzs: [], labels
 let stonesUnsent = false;
 
 let notesInRange = 0, stoneCountKnob = null; // scale notes in the range; the stone-count knob
+let scaleNotes = []; // the scale notes in range, low to high — where a stone sits picks one
 function retune() {
   let pitches;
   try {
@@ -121,13 +124,21 @@ function retune() {
   }
   if (pitches.length === 0) { setTuningNote(`no scale notes in this range — keeping the previous ${stones.count} stones`); return; }
   notesInRange = pitches.length;
-  pitches = stonePitches(pitches, tuning.stoneCount);
-  setTuningNote(`${notesInRange} notes in range · ${pitches.length} stones`);
+  scaleNotes = pitches;
+  const count = tuning.stoneCount || notesInRange;
+  stoneNote();
   if (stoneCountKnob) stoneCountKnob.refresh();
-  stones = { ...placeStones(pitches.length), hzs: pitches.map((p) => p.hz), labels: pitches.map((p) => p.label), count: pitches.length };
+  stones = withPitches({ ...placeStones(count), count });
   sendStones();
   refreshVoice(); // a stone the editor was on may be gone
 }
+
+// "16 notes in range · 16 stones · low left, high right" (or bottom → top upright).
+function stoneNote() {
+  if (!notesInRange) return;
+  setTuningNote(`${notesInRange} notes in range · ${tuning.stoneCount || notesInRange} stones · ${rotated ? 'low at the bottom, high at the top' : 'low left, high right'}`);
+}
+window.addEventListener('resize', stoneNote); // turning the phone turns the pond
 
 // Scattered positions, except stones placed by hand, which stay put.
 function placeStones(count) {
@@ -137,8 +148,30 @@ function placeStones(count) {
 }
 
 function rearrange() {
-  stones = { ...stones, ...placeStones(stones.count) };
+  stones = withPitches({ ...stones, ...placeStones(stones.count) });
   sendStones();
+}
+
+// Each stone's note from where it sits (left low → right high, on the scale).
+function withPitches(st) {
+  const ps = Array.from(st.xs, (x) => pitchAtX(scaleNotes, x));
+  return { ...st, hzs: ps.map((p) => p.hz), labels: ps.map((p) => p.label) };
+}
+// A stone that moved: if it crossed into another note's place, it takes that
+// note (from its next strike).
+function repitch(i) {
+  const x = stones.xs[i], p = pitchAtX(scaleNotes, x);
+  if (!p || p.hz === stones.hzs[i]) return;
+  // A little give at each band edge: a stone resting on the line between two
+  // notes doesn't flicker between them.
+  const give = 0.15 * (1 - 2 * PITCH_MARGIN) / Math.max(1, scaleNotes.length);
+  const near = [pitchAtX(scaleNotes, x - give), pitchAtX(scaleNotes, x + give)];
+  if (near.some((q) => q && q.hz === stones.hzs[i])) return;
+  stones.hzs[i] = p.hz;
+  stones.labels[i] = p.label;
+  voiceMarks++;
+  if (events && !events.push(EV_STONE_TUNE, i, p.hz)) stonesUnsent = true; // the full set goes again next frame
+  if (i === voiceTarget) refreshVoice();
 }
 
 // Each stone is one event, then a commit makes them live together. If the
@@ -1063,6 +1096,7 @@ function putStone(i, p) {
   stones.xs[i] = p.x; stones.ys[i] = p.y;
   placed.set(i, { x: p.x, y: p.y });
   if (!events.push(EV_STONE_MOVE, i, p.x, p.y)) stonesUnsent = true;
+  repitch(i);
 }
 
 surface.addEventListener('pointerdown', (e) => {
@@ -1152,7 +1186,7 @@ surface.addEventListener('keydown', (e) => {
     const i = heldStone;
     // Arrows follow the screen: on a portrait screen the pond is drawn turned a quarter.
     const sx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0, sy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
-    const dx = rotated ? sy : sx, dy = rotated ? -sx : sy;
+    const dx = rotated ? -sy : sx, dy = rotated ? sx : sy;
     putStone(i, { x: Math.min(1, Math.max(0, stones.xs[i] + dx)), y: Math.min(1, Math.max(0, stones.ys[i] + dy)) });
     setLift(i); // keeps it lifted (and restarts the timer)
     e.preventDefault();
@@ -1267,8 +1301,9 @@ function draw(now) {
   g.imageSmoothingQuality = 'medium';
   if (rotated) {
     g.save();
-    g.translate(w, 0);
-    g.rotate(Math.PI / 2);
+    // The same quarter turn as toCanvas: the pond's left (x = 0) at the bottom.
+    g.translate(0, h);
+    g.rotate(-Math.PI / 2);
     g.drawImage(grid, 0, 0, h, w);
     g.restore();
   } else {

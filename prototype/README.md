@@ -53,8 +53,8 @@ On iOS 17 and later the page asks to play through silent mode; on older
 iOS, turn silent mode off (ring/silent switch or Action button) or you'll
 hear nothing. If iOS pauses the sound (a lock, a call, switching apps), touch
 the water to bring it back. Held upright, the pond turns a quarter so it fills the screen — the
-water is the same, so stereo still follows the pond: its left and right are
-the top and bottom of an upright phone. Older devices may struggle with the
+water is the same, so stereo still follows the pond: its left (low notes) is
+the bottom of an upright phone and its right (high notes) the top. Older devices may struggle with the
 CPU; say if it stutters.
 
 ## Hosting it for testers
@@ -163,20 +163,23 @@ level stays a fader.
 | sensitivity | how much of the water the stones hear — and so how many notes a gesture makes and how long phrases last |
 | splash | ringing stones send ripples of their own back into the water; chains always die out (the water never gives back more than you put in) |
 
-**Stones** — a quick tap on a stone picks it up (it glows inside a pulsing
+**Stones** — **where a stone sits sets its note**: left to right across the
+pond runs low to high through the scale notes in your range (on an upright
+phone, bottom to top), always snapped to the scale. Move a stone sideways and
+it walks up or down the scale, taking its new note from its next strike.
+A quick tap on a stone picks it up (it glows inside a pulsing
 ring; the voice editor turns to it), then tap the water to put it down there —
 or tap the stone to put it back (Escape too). Left alone for 5 s it goes back
 down by itself; tapping another stone moves the lift to that one. Or press a
 stone and drag it. A crowded pond gives each stone a smaller handle, so most
 taps still play. On a keyboard: focus the pond, ←/→ select a stone, Enter
 lifts it, the arrows move it, Enter or Escape puts it down. Placed stones
-keep their place when you retune or randomize (which note each one holds
-follows the scale: lowest stone, lowest note), and a stone dragged through
+keep their place when you retune or randomize (their notes follow the new
+scale from where they sit), and a stone dragged through
 moving water rings as crests pass over it. **randomize** rearranges the stones you
-haven't placed. **stones** sets how many: *all* (one per scale note in the
-range, the default), fewer (spread evenly over the range, lowest and highest
-kept) or more (every note gets one and the extras repeat notes evenly, so a
-note can ring from two places). **spread** goes from gathered in loose clumps
+haven't placed. **stones** sets how many (*all* — the default — is as many as there are
+scale notes in the range; scattered stones can double some notes and miss
+others, since their places pick their notes). **spread** goes from gathered in loose clumps
 to spread evenly over the whole pond. **release placed** (tap twice) frees the
 stones you placed.
 

@@ -102,6 +102,23 @@ export class Stones {
     this.count = n;
   }
 
+  // Give one existing stone a new pitch (it moved into another note's place).
+  // Ignored for a stone that doesn't exist or an unusable pitch. A ringing
+  // stone's bell picks it up at its next strike.
+  setPitch(surface, i, hz) {
+    if (!Number.isInteger(i) || i < 0 || i >= this.count || !Number.isFinite(hz) || hz < MIN_HZ || hz > MAX_HZ) return;
+    this.hz[i] = hz;
+    if (!this.enabled[i]) {
+      // Switched back on: it starts listening now, as a newly placed stone
+      // does — never finishing a crest it was in the middle of when it stopped.
+      const h = surface.heightAt(this.gx[i], this.gy[i]);
+      this.prevH[i] = h;
+      this.motion[i] = 0;
+      this.state[i] = h < this.threshold * REARM_FRACTION ? ARMED : SPENT;
+      this.enabled[i] = 1;
+    }
+  }
+
   // Move one existing stone (e.g. while the performer drags it). It keeps
   // listening, so it rings as it passes through crests.
   moveStone(surface, i, x, y) {

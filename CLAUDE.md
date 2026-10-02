@@ -62,8 +62,21 @@ and tap the water to set it down; randomize them, or change how they spread
 (Dash, Phase 1c / Oct 2026). A tap right on a stone handles it rather than
 disturbing the water, and the stone last tapped is the one the voice editor's
 "selected stone" reaches. A stone moved through moving water
-rings as crests pass over it. Whether the *water* can move stones stays open.
+rings as crests pass over it.
 A stone struck while still ringing rings on: it is one object, not a sampler.
+
+**Where a stone sits sets its pitch** (Dash, Oct 2026, revisiting Phase 1b):
+left to right across the pond runs low to high through the scale notes in the
+range, always snapped to the scale. Stones stay scattered and movable; moving
+one walks it up or down the scale (its new note sounds from its next strike).
+On an upright phone the pond turns so low is at the bottom and high at the top.
+
+**Animate** (Dash, Oct 2026) lets stones move on their own, which makes the
+instrument more generative — as they move their pitches change, always within
+the scale. Four kinds, all to be tried with testers: *random drift*; *trace a
+path* (draw a line, stones travel it); *carried by the water* (ripples push
+stones — the water moving its own stones); *steer by camera* (your movement
+directs them).
 
 ### Voices: what a struck stone sounds like
 The default voice is the **water-struck bell**: clear, tuned resonant tones with
@@ -134,7 +147,8 @@ human-speed surface driving tuned voices. The 1a code is in git history
 
 ### Listening results (Phase 1b, Oct 2026)
 Dash: "It's gorgeous." Nothing felt off. He preferred the scattered stone
-layout (pitch-by-position retired), and played with a much slower flow
+layout (pitch-by-position retired then; in Oct 2026 pitch returned as a
+function of a scattered stone's left–right position), and played with a much slower flow
 (≈3.3 s to cross), longer water decay, and some splash — now the defaults.
 The 1b design choices stand: a crest passing a threshold rings a stone;
 flow as time-lapse; splash bounded by what you play; re-strikes that add to
@@ -320,9 +334,10 @@ Inside `processBlock` and anything it calls:
 - **pluginval** at a strict level, and `auval` on macOS.
 
 ## Open questions
-- Whether the water can move stones (the performer can; layout is
-  scattered). How many stones there are is now the performer's: one per scale
-  note in the range by default, or any count (Dash, Oct 2026).
+- How many stones there are is the performer's: one per scale note in the
+  range by default, or any count (Dash, Oct 2026). The water can move stones
+  when Animate is set to "carried by the water"; which animate modes earn a
+  place is for testing to decide.
 - What exactly makes a stone ring: a wave crest passing a threshold, energy
   arriving, or both — and how simultaneous arrivals combine. (The crest
   threshold stands for now.)

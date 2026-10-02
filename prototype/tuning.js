@@ -75,28 +75,18 @@ export function buildPitches({ scale, root, reference = REFERENCES.a440, low, hi
   return out;
 }
 
-// The pitches for `count` stones from the scale notes in range (`pitches`,
-// low to high). 0 (or anything not a positive number) means one stone per
-// note. Fewer: spread evenly over the range, keeping the lowest and highest.
-// More: every note gets a stone, and the extra ones go evenly through the
-// range (a note can then sound from two places on the pond). Low to high.
-export function stonePitches(pitches, count) {
+// Where a stone sits sets its pitch: left to right across the pond runs low
+// to high through the scale notes in range (`pitches`, low to high), each note
+// owning an equal band of the width (inside a small margin at the walls).
+// Always a scale note — never between two. `x` in [0, 1]; null if no notes.
+export const PITCH_MARGIN = 0.04;
+export function pitchAtX(pitches, x) {
   const m = pitches.length;
-  const n = Number.isFinite(count) ? Math.floor(count) : 0;
-  if (m === 0 || n <= 0 || n === m) return pitches.slice();
-  if (n < m) {
-    if (n === 1) return [pitches[Math.floor((m - 1) / 2)]];
-    const out = [];
-    for (let k = 0; k < n; k++) out.push(pitches[Math.round((k * (m - 1)) / (n - 1))]);
-    return out;
-  }
-  const out = [];
-  for (let i = 0; i < m; i++) {
-    // How many stones note i gets: the nth stone goes to note floor(n·i/m)…
-    const copies = Math.floor(((i + 1) * n) / m) - Math.floor((i * n) / m);
-    for (let c = 0; c < copies; c++) out.push(pitches[i]);
-  }
-  return out;
+  if (m === 0) return null;
+  let f = (Number.isFinite(x) ? x : 0.5) - PITCH_MARGIN;
+  f /= 1 - 2 * PITCH_MARGIN;
+  const i = Math.floor((f < 0 ? 0 : f > 1 ? 1 : f) * m);
+  return pitches[i >= m ? m - 1 : i];
 }
 
 // "C4", "E♭5", or with a deviation from the nearest 12-TET name: "E4 −50¢".

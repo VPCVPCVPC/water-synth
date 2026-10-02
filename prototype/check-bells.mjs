@@ -7,7 +7,7 @@ import { Instrument, PARAM_KEYS } from './instrument.js';
 import { MAX_STONES } from './stones.js';
 import { buildPitches, SCALES, REFERENCES } from './tuning.js';
 import { stonePositions } from './layout.js';
-import { createRingBuffer, RingWriter, RingReader, EV_DROP, EV_STONE, EV_STONES_COMMIT } from './ring.js';
+import { createRingBuffer, RingWriter, RingReader, EV_DROP, EV_STONE, EV_STONES_COMMIT, EV_STONE_TUNE } from './ring.js';
 import { frameLength, FRAME_FLASH, FRAME_HEIGHTS } from './visuals.js';
 import { performance } from 'node:perf_hooks';
 import { cents, spectrum, measurePitch, fftSize } from './check-lib.mjs';
@@ -393,6 +393,38 @@ console.log('\n9. CPU per 128-sample block at 48 kHz (budget 2667 µs)');
   for (let k = 0; k < 2000; k++) { L.fill(0); R.fill(0); b.render(L, R, 128); }
   const us2 = ((performance.now() - t1) * 1000) / 2000;
   report(us2 / 2667 < 0.3, `all ${MAX_STONES} stones ringing: ${us2.toFixed(0)} µs/block, ${((us2 / 2667) * 100).toFixed(1)}%`, 'limit 30%');
+}
+
+console.log('\n10. One stone retuned as it moves (EV_STONE_TUNE)');
+{
+  // Two stones; stone 1 is retuned through the event path, then struck: the
+  // bell rings at the new pitch. Bad indices and pitches change nothing.
+  const fs = 48000, inst = new Instrument({ sampleRate: fs });
+  inst.setStones([0.3, 0.7], [0.5, 0.5], [220, 330], 2);
+  const send = (...v) => { const d = new Float32Array(8); v.forEach((x, k) => { d[k] = x; }); inst.handleEvent(d, 0); };
+  send(EV_STONE_TUNE, 1, 440);
+  for (const [i, hz] of [[2, 500], [-1, 500], [0.5, 500], [0, NaN], [0, 3], [0, 1e6]]) send(EV_STONE_TUNE, i, hz);
+  const hz = Array.from(inst.engine.stones.hz.subarray(0, 2));
+  inst.bells.strike(1, inst.engine.stones.hz[1], 1, 0.5, 0);
+  const n = Math.round(1.5 * fs), L = new Float32Array(128), R = new Float32Array(128), out = new Float64Array(n);
+  for (let p = 0; p + 128 <= n; p += 128) { L.fill(0); R.fill(0); inst.bells.render(L, R, 128); for (let k = 0; k < 128; k++) out[p + k] = L[k] + R[k]; }
+  const m = measurePitch(out, fs, 440, fftSize(fs));
+  report(hz[0] === 220 && hz[1] === 440 && !m.error && Math.abs(cents(m.hz, 440)) < 2,
+    'the moved stone rings at its new pitch; bad events are ignored', `stones ${hz.join(', ')} Hz; heard ${m.error || `${cents(m.hz, 440).toFixed(2)}¢ from 440`}`);
+}
+{
+  // A stone switched off by an unusable pitch, caught mid-crest, then given a
+  // good pitch: it starts listening afresh — no strike from the old crest.
+  const inst = new Instrument({ sampleRate: 48000 });
+  inst.setStones([0.3, 0.7], [0.5, 0.5], [3, 330], 2); // 3 Hz: unusable, so stone 0 is off
+  const st = inst.engine.stones;
+  st.state[0] = 1; st.peakH[0] = 1; st.beforePeakH[0] = 0.5; st.peakStep[0] = 1; // as if it stopped mid-crest
+  const send = (...v) => { const d = new Float32Array(8); v.forEach((x, k) => { d[k] = x; }); inst.handleEvent(d, 0); };
+  send(EV_STONE_TUNE, 0, 220);
+  const L = new Float32Array(128), R = new Float32Array(128);
+  let struck = 0;
+  for (let k = 0; k < 40; k++) { inst.process(L, R, 128); for (let i = 0; i < inst.strikes.count; i++) if (inst.strikes.stone[i] === 0) struck++; }
+  report(st.enabled[0] === 1 && struck === 0 && st.state[0] !== 1, 'a stone switched back on by a new pitch never finishes a stale crest', `strikes ${struck}, state ${st.state[0]}`);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll bell checks passed.');

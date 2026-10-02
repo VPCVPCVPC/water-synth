@@ -1,7 +1,7 @@
 // check-tuning.mjs — checks for the minimal tuning core (tuning.js).
 //   node check-tuning.mjs
 
-import { SCALES, REFERENCES, noteToHz, buildPitches, noteLabel, MAX_PITCHES, stonePitches } from './tuning.js';
+import { SCALES, REFERENCES, noteToHz, buildPitches, noteLabel, MAX_PITCHES, pitchAtX, PITCH_MARGIN } from './tuning.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
 
 let failures = 0;
@@ -138,26 +138,20 @@ console.log('\n7. Every setting the page allows gives playable stones');
     `${combos} reachable settings: none rejected, at most ${maxCount} stones`, `pitches ${lo.toFixed(1)}–${hi.toFixed(0)} Hz (limits 8 Hz – ${(0.45 * 44100).toFixed(0)} Hz)`);
 }
 
-console.log('\n8. Choosing how many stones');
+console.log('\n8. Where a stone sits sets its pitch');
 {
   const penta = buildPitches({ scale: SCALES.pentatonicMajor, root: 60, low: 48, high: 84 }); // 16 notes
-  const notes = (ps) => ps.map((p) => p.note);
-  const all = stonePitches(penta, 0), same = stonePitches(penta, 16);
-  report(all.length === 16 && same.length === 16 && notes(all).join() === notes(penta).join(), 'auto (0) or the same count: one stone per note');
-  const five = stonePitches(penta, 5);
-  report(five.length === 5 && five[0] === penta[0] && five[4] === penta[15] && new Set(notes(five)).size === 5 &&
-    notes(five).every((n, i) => i === 0 || n > notes(five)[i - 1]),
-    'fewer: spread over the range, lowest and highest kept, no repeats', notes(five).map((n) => noteLabel(n)).join(' '));
-  const one = stonePitches(penta, 1);
-  report(one.length === 1, 'one stone: a note from the middle of the range', noteLabel(one[0].note));
-  const forty = stonePitches(penta, 40), counts = new Map();
-  for (const p of forty) counts.set(p.note, (counts.get(p.note) || 0) + 1);
-  const per = [...counts.values()];
-  report(forty.length === 40 && counts.size === 16 && Math.max(...per) - Math.min(...per) <= 1 &&
-    notes(forty).every((n, i) => i === 0 || n >= notes(forty)[i - 1]),
-    'more: every note has a stone, the extras spread evenly (counts differ by at most 1), low to high', `${Math.min(...per)}–${Math.max(...per)} stones per note`);
-  report(stonePitches([], 8).length === 0 && stonePitches(penta, NaN).length === 16 && stonePitches(penta, -3).length === 16,
-    'no notes, NaN or a negative count: no change');
+  const at = (x) => pitchAtX(penta, x);
+  report(at(0) === penta[0] && at(PITCH_MARGIN) === penta[0] && at(1) === penta[15] && at(1 - PITCH_MARGIN / 2) === penta[15],
+    'the left wall is the lowest note, the right wall the highest');
+  let rising = true, prev = -Infinity;
+  const seen = new Set();
+  for (let k = 0; k <= 1000; k++) { const p = at(k / 1000); if (p.note < prev) rising = false; prev = p.note; seen.add(p.note); }
+  report(rising && seen.size === 16, 'moving right only ever goes up, and every scale note in range has its place', `${seen.size} notes across the width`);
+  const band = (1 - 2 * PITCH_MARGIN) / 16;
+  report(at(PITCH_MARGIN + band * 4.5) === penta[4] && at(PITCH_MARGIN + band * 4.999) === penta[4] && at(PITCH_MARGIN + band * 5.001) === penta[5],
+    'each note owns an equal band; a stone snaps to the note of its band (never between notes)');
+  report(pitchAtX([], 0.5) === null && at(NaN) === at(0.5) && at(-3) === penta[0] && at(7) === penta[15], 'no notes, NaN or out of range: safe');
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll tuning checks passed.');

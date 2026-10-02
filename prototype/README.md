@@ -131,7 +131,13 @@ level stays a fader.
 | sensitivity | how much of the water the stones hear — and so how many notes a gesture makes and how long phrases last |
 | splash | ringing stones send ripples of their own back into the water; chains always die out (the water never gives back more than you put in) |
 
-**Stones** — **move stones**, then drag any stone to place it; placed stones
+**Stones** — a quick tap on a stone picks it up (it glows inside a pulsing
+ring; the voice editor turns to it), then tap the water to put it down there —
+or tap the stone to put it back (Escape too). Left alone for 5 s it goes back
+down by itself; tapping another stone moves the lift to that one. Or press a
+stone and drag it. A crowded pond gives each stone a smaller handle, so most
+taps still play. On a keyboard: focus the pond, ←/→ select a stone, Enter
+lifts it, the arrows move it, Enter or Escape puts it down. Placed stones
 keep their place when you retune or randomize (which note each one holds
 follows the scale: lowest stone, lowest note), and a stone dragged through
 moving water rings as crests pass over it. **randomize** rearranges the stones you
@@ -152,12 +158,11 @@ never touches the water. A stone still ringing keeps its old pitch until it's
 next struck, then its old ring crossfades out over 100 ms.
 
 **Voice** — what a struck stone sounds like. Every stone shares one voice;
-**edit one stone**, then tap a stone, to edit just that one (the pond is quiet
-while you pick; a tap away from every stone cancels and plays as usual):
-**give it its own voice** (a copy of the shared one; it gets a white rim on
-the pond, and the stone you're editing a dashed ring), **back to the shared
-voice** undoes it, **back to all stones** returns the editor to the shared
-voice. No presets. A stone's own voice belongs to its slot (stone 1 is the
+the toggle at the top chooses **all stones** or the **selected stone** (the
+one you last tapped on the pond). For the selected stone, **give it its own
+voice** (a copy of the shared one; the stone turns hollow on the pond, and the
+one you're editing has a dashed ring); **back to the shared voice** undoes
+it. The synth layer's knob comes first. No presets. A stone's own voice belongs to its slot (stone 1 is the
 lowest note): if a retune leaves fewer stones it's kept, hidden, and comes back
 when the stones do — possibly on a different note.
 - *Bell*: level, decay, tone (upper partials), clang (bar-like ↔ clangy
@@ -285,6 +290,11 @@ voice editor untouched you hear exactly the Phase 1c bell.
     A stone's own voice and a hand-placed spot belong to its slot, so
     changing the count can move them to another note — fine, or should they
     follow a note?
+32. **Stones by hand:** tap a stone to lift it, tap the water to put it down;
+    or drag it. While playing fast, do you ever lift a stone by accident
+    (then your next tap puts it down instead of playing)? Is the stone easy
+    enough to hit on the phone? Does editing the lifted stone's voice feel
+    natural?
 
 ### Decisions for Dash
 

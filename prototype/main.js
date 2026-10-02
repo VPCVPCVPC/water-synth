@@ -25,7 +25,9 @@ import {
 const SAMPLE_RATE = 48000;
 const GRID_W = SURFACE_W, GRID_H = SURFACE_H; // the water's cells
 const ASPECT = GRID_H / GRID_W;
-const GRAB_RADIUS_PX = 28; // how close a touch must be to pick up a stone
+const STONE_HIT_MOUSE_PX = 10, STONE_HIT_TOUCH_PX = 18; // how close a tap must be to pick up a stone
+const LIFT_TAP_MS = 300; // a press on a stone shorter than this (and still) lifts it
+const LIFT_TIMEOUT_MS = 5000; // a lifted stone left alone goes back down
 
 const surface = document.getElementById('surface');
 const status = document.getElementById('status');
@@ -191,18 +193,8 @@ function buildTuningControls() {
   document.getElementById('ref432').addEventListener('click', () => setRef(432));
 }
 
-let moveMode = false;
+// Stones are picked up by tapping them (see the pond's pointer handling).
 function buildStoneControls() {
-  const move = document.getElementById('move');
-  move.addEventListener('click', () => {
-    moveMode = !moveMode;
-    if (moveMode) pickMode = false; // one pond gesture at a time
-    refreshVoice(); // also tells the pond's label which mode it's in
-    move.classList.toggle('on', moveMode);
-    move.setAttribute('aria-pressed', moveMode ? 'true' : 'false');
-    move.textContent = moveMode ? 'done moving' : 'move stones';
-    surface.classList.toggle('moving', moveMode);
-  });
   document.getElementById('randomize').addEventListener('click', () => { layout.seed++; rearrange(); });
   confirmButton(document.getElementById('release'), () => { placed.clear(); rearrange(); });
   // Spread: gathered ↔ spread evenly over the whole pond.
@@ -417,8 +409,11 @@ function buildKnobs() {
 
 const voiceKnobs = [];
 let playingStatus = '';
-let pickMode = false;
 let refreshVoice = () => {};
+let lastSelected = -1; // the stone last tapped on the pond (−1: none yet)
+const grabs = new Map(); // pointerId → { i, x, y, moved, at } — a press that began on a stone
+let heldStone = -1; // the lifted stone, waiting for a tap to put it down
+let hover = null; // the mouse over the pond while a stone is lifted (a preview of where it goes)
 
 function buildVoiceControls() {
   for (const k of VOICE_KNOBS) {
@@ -430,7 +425,7 @@ function buildVoiceControls() {
     voiceKnobs.push(row);
     document.getElementById(`${k.group}-controls`).append(row.el);
   }
-  const pick = document.getElementById('voice-pick');
+  const one = document.getElementById('voice-one');
   const all = document.getElementById('voice-all');
   const own = document.getElementById('voice-own');
   const label = document.getElementById('voice-target');
@@ -443,35 +438,35 @@ function buildVoiceControls() {
     for (const row of voiceKnobs) row.refresh();
   });
   refreshVoice = () => {
-    const one = voiceTarget !== SHARED && voiceTarget < stones.count;
-    if (!one && voiceTarget !== SHARED) { voiceTarget = SHARED; pickMode = false; }
-    const isOwn = one && overridden.has(voiceTarget);
+    if (lastSelected >= stones.count) lastSelected = -1;
+    if (heldStone >= stones.count) heldStone = -1;
+    for (const [id, gr] of grabs) if (gr.i >= stones.count) grabs.delete(id);
+    const isOne = voiceTarget !== SHARED && voiceTarget < stones.count;
+    if (!isOne && voiceTarget !== SHARED) voiceTarget = SHARED;
+    const isOwn = isOne && overridden.has(voiceTarget);
     voiceMarks++;
-    const text = one
-      ? `stone ${voiceTarget + 1} · ${stones.labels[voiceTarget]}${isOwn ? ' · its own voice' : ' · still follows the shared voice'}`
-      : 'all stones';
+    const text = isOne
+      ? `stone ${voiceTarget + 1} · ${stones.labels[voiceTarget]}${isOwn ? ' · its own voice' : ' · follows the shared voice'}`
+      : lastSelected < 0 ? 'all stones · tap a stone on the pond to select it' : 'all stones';
     if (label.textContent !== text) label.textContent = text; // aria-live: announce changes only
-    ownReset.disabled = one && !isOwn;
-    ownReset.textContent = one ? 'this stone\'s voice back to defaults' : 'shared voice back to defaults';
-    own.disabled = !one;
-    all.hidden = !one;
+    ownReset.disabled = isOne && !isOwn;
+    ownReset.textContent = isOne ? 'this stone\'s voice back to defaults' : 'shared voice back to defaults';
+    own.hidden = !isOne;
     own.textContent = isOwn ? 'back to the shared voice' : 'give it its own voice';
     own.classList.toggle('on', isOwn);
-    for (const row of voiceKnobs) { row.setDisabled(one && !isOwn); row.refresh(); }
-    pick.classList.toggle('on', pickMode);
-    pick.setAttribute('aria-pressed', pickMode ? 'true' : 'false');
-    pick.textContent = pickMode ? 'tap a stone… (cancel)' : one ? 'pick another stone' : 'edit one stone';
-    if (pickMode) status.textContent = 'tap a stone to edit its voice — the pond is quiet until you do';
-    else if (status.textContent.startsWith('tap a stone')) status.textContent = playingStatus;
-    surface.setAttribute('aria-label', pickMode ? 'Water surface: tap a stone to edit its voice'
-      : moveMode ? 'Water surface: drag a stone to move it' : 'Water surface: touch to drop, drag to disturb');
+    for (const row of voiceKnobs) { row.setDisabled(isOne && !isOwn); row.refresh(); }
+    all.setAttribute('aria-pressed', isOne ? 'false' : 'true');
+    one.setAttribute('aria-pressed', isOne ? 'true' : 'false');
+    if (lastSelected < 0 && document.activeElement === one) all.focus(); // never lose focus to a disabled button
+    one.disabled = lastSelected < 0;
+    const lifted = heldStone >= 0 ? `stone ${heldStone + 1} lifted — tap the water to put it down, or the stone to put it back` : '';
+    if (lifted) status.textContent = lifted;
+    else if (status.textContent.startsWith('stone ')) status.textContent = playingStatus;
+    surface.setAttribute('aria-label', heldStone >= 0 ? 'Water surface: tap to put the lifted stone down'
+      : 'Water surface: touch to drop, drag to disturb; tap a stone to pick it up');
   };
-  pick.addEventListener('click', () => {
-    pickMode = !pickMode;
-    if (pickMode && moveMode) document.getElementById('move').click(); // one pond gesture at a time
-    refreshVoice();
-  });
-  all.addEventListener('click', () => { voiceTarget = SHARED; pickMode = false; refreshVoice(); });
+  all.addEventListener('click', () => { voiceTarget = SHARED; refreshVoice(); });
+  one.addEventListener('click', () => { if (lastSelected >= 0) { voiceTarget = lastSelected; refreshVoice(); } });
   own.addEventListener('click', () => {
     if (voiceTarget === SHARED) return;
     if (overridden.has(voiceTarget)) {
@@ -894,7 +889,21 @@ async function startAudio() {
 // ---- gestures: every finger, pen or mouse is its own disturbance ------------------------
 
 const drags = new Map(); // pointerId → last sample { x, y, t }
-const grabs = new Map(); // pointerId → stone index (move mode)
+// Stones by hand: tap a stone to pick it up (it lifts, and the voice editor
+// turns to it); tap the water to put it down there, or the stone to put it
+// back. Pressing a stone and dragging moves it directly.
+
+function selectStone(i) {
+  lastSelected = i;
+  voiceTarget = i;
+  refreshVoice();
+}
+function putStone(i, p) {
+  if (!(i >= 0 && i < stones.count)) return; // gone in a retune
+  stones.xs[i] = p.x; stones.ys[i] = p.y;
+  placed.set(i, { x: p.x, y: p.y });
+  if (!events.push(EV_STONE_MOVE, i, p.x, p.y)) stonesUnsent = true;
+}
 
 surface.addEventListener('pointerdown', (e) => {
   if (!events) return;
@@ -903,20 +912,17 @@ surface.addEventListener('pointerdown', (e) => {
   // Keep receiving this finger's moves even if it slides off the surface.
   try { surface.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   const p = toSurface(e);
-  if (pickMode) { // choosing which stone the voice editor is changing
-    const i = nearestStone(e);
-    pickMode = false;
-    if (i >= 0) {
-      voiceTarget = i;
-      refreshVoice();
-      document.getElementById('voice').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      return;
-    }
-    refreshVoice(); // a miss: back to playing, and this touch plays (the water is never dead)
+  const hit = stoneAt(e);
+  if (heldStone >= 0 && hit >= 0 && hit !== heldStone) { // another stone: the lift moves to it
+    setLift(-1);
+  } else if (heldStone >= 0) { // putting the lifted stone down (this tap doesn't play)
+    if (hit !== heldStone) putStone(heldStone, p);
+    setLift(-1);
+    return;
   }
-  if (moveMode) {
-    const i = nearestStone(e);
-    if (i >= 0) grabs.set(e.pointerId, i);
+  if (hit >= 0) { // a press on a stone: a quick, still tap lifts it, a drag moves it
+    grabs.set(e.pointerId, { i: hit, x: e.clientX, y: e.clientY, moved: false, at: e.timeStamp });
+    selectStone(hit);
     return;
   }
   // Apple Pencil pressure sets strength (with a floor: first-contact pressure
@@ -933,11 +939,11 @@ surface.addEventListener('pointerdown', (e) => {
 surface.addEventListener('pointermove', (e) => {
   if (!events) return;
   const p = toSurface(e);
-  const grabbed = grabs.get(e.pointerId);
-  if (grabbed !== undefined) {
-    stones.xs[grabbed] = p.x; stones.ys[grabbed] = p.y;
-    placed.set(grabbed, { x: p.x, y: p.y });
-    if (!events.push(EV_STONE_MOVE, grabbed, p.x, p.y)) stonesUnsent = true;
+  if (heldStone >= 0 && e.pointerType === 'mouse') hover = p;
+  const grab = grabs.get(e.pointerId);
+  if (grab) {
+    if (!grab.moved && Math.hypot(e.clientX - grab.x, e.clientY - grab.y) > 6) grab.moved = true;
+    if (grab.moved) putStone(grab.i, p); // dragged: it follows, ringing as it crosses crests
     return;
   }
   const drag = drags.get(e.pointerId);
@@ -949,9 +955,56 @@ surface.addEventListener('pointermove', (e) => {
   drags.set(e.pointerId, { x: p.x, y: p.y, t: e.timeStamp });
 });
 
+surface.addEventListener('pointerup', (e) => {
+  const grab = grabs.get(e.pointerId);
+  // Only a quick, still tap lifts (a lingering press just selects).
+  if (grab && !grab.moved && e.timeStamp - grab.at < LIFT_TAP_MS) setLift(grab.i);
+});
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   surface.addEventListener(type, (e) => { drags.delete(e.pointerId); grabs.delete(e.pointerId); });
 }
+surface.addEventListener('pointerleave', () => { hover = null; });
+window.addEventListener('keydown', (e) => { // Escape: put a lifted stone back where it was lifted from
+  if (e.key === 'Escape' && heldStone >= 0) {
+    if (liftFrom && liftFrom.i === heldStone) putStone(heldStone, liftFrom);
+    setLift(-1);
+  }
+});
+// Lift a stone (−1: none). A lifted stone left alone goes back down where it
+// was after LIFT_TIMEOUT_MS, so a stray tap never leaves the pond in a mode.
+let liftTimer = 0, liftFrom = null; // where the lifted stone was when it was lifted
+function setLift(i) {
+  clearTimeout(liftTimer);
+  if (i >= 0 && i !== heldStone) liftFrom = { i, x: stones.xs[i], y: stones.ys[i] };
+  if (i < 0) liftFrom = null;
+  heldStone = i;
+  hover = null;
+  if (i >= 0) liftTimer = setTimeout(() => { if (heldStone === i) setLift(-1); }, LIFT_TIMEOUT_MS);
+  refreshVoice();
+}
+// The keyboard: with the pond focused, ←/→ select a stone, Enter lifts it (or
+// puts it down), the arrows move a lifted stone, Escape puts it back.
+surface.tabIndex = 0;
+surface.addEventListener('keydown', (e) => {
+  if (!events || stones.count === 0) return;
+  const step = 0.02;
+  if (heldStone >= 0 && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+    const i = heldStone;
+    // Arrows follow the screen: on a portrait screen the pond is drawn turned a quarter.
+    const sx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0, sy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+    const dx = rotated ? sy : sx, dy = rotated ? -sx : sy;
+    putStone(i, { x: Math.min(1, Math.max(0, stones.xs[i] + dx)), y: Math.min(1, Math.max(0, stones.ys[i] + dy)) });
+    setLift(i); // keeps it lifted (and restarts the timer)
+    e.preventDefault();
+  } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    const n = stones.count, from = lastSelected;
+    selectStone(e.key === 'ArrowRight' ? (from < 0 ? 0 : (from + 1) % n) : (from < 0 ? n - 1 : (from - 1 + n) % n));
+    e.preventDefault();
+  } else if (e.key === 'Enter' && lastSelected >= 0) {
+    setLift(heldStone >= 0 ? -1 : lastSelected);
+    e.preventDefault();
+  }
+});
 surface.addEventListener('contextmenu', (e) => e.preventDefault()); // long-press menus on touch
 
 function toSurface(e) {
@@ -961,9 +1014,14 @@ function toSurface(e) {
   return fromCanvas(u, v);
 }
 
-function nearestStone(e) {
+// The stone under a pointer, if it lands right on one: a fingertip gets a
+// little more room than a mouse, but near-misses still play the water.
+function stoneAt(e) {
   const r = surface.getBoundingClientRect();
-  let best = -1, bestD = GRAB_RADIUS_PX * GRAB_RADIUS_PX;
+  // A crowded pond gives each stone a smaller handle, so most taps still play.
+  const crowd = Math.min(1, Math.sqrt(16 / Math.max(1, stones.count)));
+  const reach = Math.max(6, (e.pointerType === 'mouse' ? STONE_HIT_MOUSE_PX : STONE_HIT_TOUCH_PX) * crowd);
+  let best = -1, bestD = reach * reach;
   for (let i = 0; i < stones.count; i++) {
     const c = toCanvas(stones.xs[i], stones.ys[i]);
     const dx = r.left + c.u * r.width - e.clientX, dy = r.top + c.v * r.height - e.clientY;
@@ -1024,8 +1082,8 @@ function draw(now) {
   let glowing = false;
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
-  const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${moveMode}x${showLabels}x${pickMode}x${voiceTarget}x${voiceMarks}`;
-  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && size === lastSize) { requestAnimationFrame(draw); return; }
+  const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceTarget}x${voiceMarks}x${heldStone}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
+  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && heldStone < 0 && size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
   if (frame) {
     const px = image.data;
@@ -1057,15 +1115,14 @@ function draw(now) {
     g.drawImage(grid, 0, 0, w, h);
   }
 
-  // Stones: a small dot; when one rings it glows, harder strikes brighter. In
-  // move mode, stones are larger targets and hand-placed ones are ringed. A
-  // stone with its own voice is hollow; the one the voice editor is
-  // on has a dashed ring (stones are larger targets while picking one).
-  const r = Math.max(2, Math.max(w, h) / 180) * (moveMode || pickMode ? 1.8 : 1);
+  // Stones: a small dot; when one rings it glows, harder strikes brighter. A
+  // stone with its own voice is hollow; the one the voice editor is on has a
+  // dashed ring; a lifted one glows inside a slow pulsing ring.
+  const r = Math.max(2, Math.max(w, h) / 180);
   g.font = `${Math.round(11 * dpr)}px ui-sans-serif, system-ui, sans-serif`;
   for (let i = 0; i < stones.count; i++) {
-    let grabbed = false;
-    for (const s of grabs.values()) if (s === i) grabbed = true;
+    let grabbed = i === heldStone;
+    for (const gr of grabs.values()) if (gr.i === i) grabbed = true;
     const c = toCanvas(stones.xs[i], stones.ys[i]);
     const x = c.u * w, y = c.v * h, f = flashShown[i];
     if (f > 0.01) {
@@ -1091,10 +1148,21 @@ function draw(now) {
       g.beginPath(); g.arc(x, y, r * 2.6, 0, Math.PI * 2); g.stroke();
       g.setLineDash([]);
     }
-    if (moveMode && placed.has(i)) {
-      g.strokeStyle = 'rgba(236, 236, 232, 0.5)';
-      g.lineWidth = Math.max(1, dpr);
-      g.beginPath(); g.arc(x, y, r * 1.9, 0, Math.PI * 2); g.stroke();
+    if (i === heldStone) { // lifted: a soft glow and a slow pulsing ring, clear even on a phone; on a mouse, a preview where it would go
+      const pulse = 0.5 + 0.5 * Math.sin(now / 260), ring = Math.max(r * 4, 11 * dpr) * (1 + 0.12 * pulse);
+      const glow = g.createRadialGradient(x, y, 0, x, y, ring * 1.4);
+      glow.addColorStop(0, 'rgba(255, 255, 255, 0.35)'); glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      g.fillStyle = glow;
+      g.beginPath(); g.arc(x, y, ring * 1.4, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = `rgba(255, 255, 255, ${(0.7 + 0.3 * pulse).toFixed(3)})`;
+      g.lineWidth = Math.max(1.5, 1.8 * dpr);
+      g.beginPath(); g.arc(x, y, ring, 0, Math.PI * 2); g.stroke();
+      if (hover) {
+        const hc = toCanvas(hover.x, hover.y);
+        g.setLineDash([2 * dpr, 3 * dpr]);
+        g.beginPath(); g.arc(hc.u * w, hc.v * h, r * 1.6, 0, Math.PI * 2); g.stroke();
+        g.setLineDash([]);
+      }
     }
     if (showLabels) {
       g.fillStyle = 'rgba(236, 236, 232, 0.7)';

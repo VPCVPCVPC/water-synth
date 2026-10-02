@@ -57,8 +57,11 @@ its neighbours. Distances between where you disturb and where the stones sit
 make the rhythm (pulled toward the beat when quantize is on); reflections make
 echoes that repeat but drift.
 
-The performer can **move stones** — drag them by hand, randomize them, or
-change how they spread (Dash, Phase 1c). A stone moved through moving water
+The performer can **move stones** — drag them by hand, or tap one to lift it
+and tap the water to set it down; randomize them, or change how they spread
+(Dash, Phase 1c / Oct 2026). A tap right on a stone handles it rather than
+disturbing the water, and the stone last tapped is the one the voice editor's
+"selected stone" reaches. A stone moved through moving water
 rings as crests pass over it. Whether the *water* can move stones stays open.
 A stone struck while still ringing rings on: it is one object, not a sampler.
 
@@ -216,7 +219,8 @@ Later, if it earns its place: MTS-ESP support and MPE per-note pitch.
 
 Build in this order:
 1. **XY surface in the plugin UI** — click = Drop, drag = Stir, swipe = Wave,
-   press-and-hold = Still. No hardware needed; the primary way to play.
+   press-and-hold = Still (a tap right on a stone lifts it instead — see Tuned
+   stones). No hardware needed; the primary way to play.
    **Touch first:** on iPad and iPhone — likely the ideal way to play — every
    finger is its own disturbance (multi-touch), and Apple Pencil pressure sets
    strength.
@@ -318,5 +322,7 @@ Inside `processBlock` and anything it calls:
 - How Phase changes the surface and the bell voices (ice / liquid / vapor).
 - How Vessel works now: outside audio disturbing the water, or becoming the
   stones' voice.
+- When Still arrives: does a press-and-hold resting on a stone calm the water
+  or handle the stone? (Suggested: holds mean Still; only a short tap lifts.)
 - How camera / body motion maps to gestures, and when camera input is scheduled.
 - Instrument name.

@@ -1,12 +1,12 @@
 # Prototype: the generative medium
 
-Phase 1c sketch of the instrument (see [CLAUDE.md](../CLAUDE.md)). A pond of
+Browser prototype of the instrument (see [CLAUDE.md](../CLAUDE.md)) — Phase 1
+follow-ups, and the first of build phase 2's designed interface. A pond of
 water you can watch, with tuned stones in it. You disturb the water; ripples
 travel, reflect and meet; when a crest reaches a stone, the stone rings like a
 water-struck bell at its pitch in the scale you've set. You don't pick notes
-directly — the water does. Loops record your touches and replay them into the
-moving water, or record the sound itself. A voice editor shapes what the
-stones sound like. No plugin here, and only two gestures (drop and drag).
+directly — the water does. A four-track tape records the sound itself. A
+voice editor shapes what the stones sound like. No plugin here, and only two gestures (drop and drag).
 
 ## Run it
 
@@ -75,42 +75,45 @@ CPU; say if it stutters.
 
 The controls live under the pond (tucked into a "Controls" drawer on phones).
 
-**Loops** — four tracks, each one of two kinds, chosen when you start it:
-- **record touches** makes a *touch loop*: it records your touches, not
-  sound, and replays them into the water, so each pass lands in water still
-  moving from the last and plays a different phrase.
-- **record sound** makes a *sound loop* — "a tape beside the pond": it records
-  the water's sound and plays it back fixed, like a loop pedal (every pass the
-  same — the one part that isn't the water). It records the water, never
-  another loop, and always plays exactly what it recorded — retuning never
-  touches it — so you can lay a bassline, retune, add a melody, retune, add
-  harmonies. Up to 30 s.
-- On either kind: **finish** ends the take and it plays; **overdub** adds more
-  on top (heard live once, replayed from the next pass); **mute** silences it
-  and keeps its place; **stop** then **play** restarts it from its top;
-  **clear** (tap twice) erases it. Sound loops fade (0.3 s) when stopped,
-  muted or cleared and wrap without a click; their overdubs add up with no
-  decay, so a much-overdubbed one gets louder. **sound loops** sets their
-  level under (or over) the live water.
-- **clear all loops** (tap twice) erases every track and starts a fresh beat.
-  Clearing never touches the water: what's already moving rings out.
-- Tracks have their own lengths, so they drift against each other. A touch
-  loop holds 4096 gestures; if one fills, it says so and stops recording.
-- **Quantize** (off by default) pulls toward a beat grid — strength from lean
-  to snap (snap by default), swing, BPM and grid size:
-  - *the notes*: a struck stone can wait for the next grid point (never sound
-    early). At full strength every note lands on the grid, like a sequencer —
-    the water still picks which stones ring and how hard; lower, the water
-    keeps more of its own time. The water itself is never delayed.
-  - *your touches*: a touch just before a grid point waits for it (a faint
-    ring at your finger closes in until it lands); one just after lands at
-    once, its loop copy pulled back onto the grid. Drags flow: never delayed,
-    and a looped drag keeps its own timing.
-  - *the loops*: touch loops become whole bars; sound loops start on a beat
-    and **finish** waits for the next beat, so each is a whole number of beats
-    of its own (3, 5, 7…) and they line up differently each time.
-  While quantize is on, the beat runs and the pond's rim pulses on it
-  (brighter on each bar's first beat). BPM and bars only appear when it's on.
+**Tape** — a four-track tape machine beside the pond (styled after Dieter
+Rams): it records the water's *sound* and plays it back fixed, like a loop
+pedal — every pass the same, the one part that isn't the water. It records
+the water, never another track, and always plays exactly what it recorded —
+retuning never touches it — so you can lay a bassline, retune, add a melody,
+retune, add harmonies. Each track up to 30 s. (Touch loops, which replayed
+your touches into the water, are set aside for now.)
+- Each track: **rec** starts a take, **finish** ends it and it plays; **dub**
+  adds more on top (heard live once, replayed from the next pass); **mute**
+  silences it and keeps its place; **stop** then **play** restarts it from its
+  top; **clear** (tap twice) erases it. Stop, mute and clear fade (0.3 s);
+  the loop wraps without a click; overdubs add up with no decay, so a
+  much-overdubbed track gets louder. The lamp is solid while a track plays,
+  blinks while it records, and goes dotted when muted; the reels turn while
+  any track runs, and the counter follows the longest one.
+- **level** sets the tape under (or over) the live water; **clear all** (tap
+  twice) erases every track. Clearing never touches the water.
+- Tracks have their own lengths, so they drift against each other.
+
+**Beat** — **quantize** (off by default) pulls toward a beat grid — strength
+from lean to snap (snap by default), swing, BPM and grid size:
+- *the notes*: a struck stone can wait for the next grid point (never sound
+  early). At full strength every note lands on the grid, like a sequencer —
+  the water still picks which stones ring and how hard; lower, the water
+  keeps more of its own time. The water itself is never delayed.
+- *your touches*: a touch just before a grid point waits for it (a faint ring
+  at your finger closes in until it lands); one just after lands at once.
+  Drags flow: never delayed.
+- *the tape*: a take starts on a beat and **finish** waits for the next beat,
+  so each track is a whole number of beats of its own (3, 5, 7…) and they
+  line up differently each time.
+
+While quantize is on, the beat runs and the pond's rim pulses on it (brighter
+on each bar's first beat). BPM and grid only appear when it's on.
+
+**Look** — zen garden minimalism (CLAUDE.md, "Look and feel"): black and
+white, Syncopate in wide-tracked capitals, the water in greys — light crests,
+dark troughs. Syncopate loads from Google Fonts; offline the page falls back
+to the system font.
 
 **Water**
 
@@ -141,8 +144,8 @@ next struck, then its old ring crossfades out over 100 ms.
 **Voice** — what a struck stone sounds like. Every stone shares one voice;
 **edit one stone**, then tap a stone, to edit just that one (the pond is quiet
 while you pick; a tap away from every stone cancels and plays as usual):
-**give it its own voice** (a copy of the shared one; it gets an amber rim on
-the pond, and the stone you're editing an amber ring), **back to the shared
+**give it its own voice** (a copy of the shared one; it gets a white rim on
+the pond, and the stone you're editing a dashed ring), **back to the shared
 voice** undoes it, **back to all stones** returns the editor to the shared
 voice. No presets. A stone's own voice belongs to its slot (stone 1 is the
 lowest note): if a retune leaves fewer stones it's kept, hidden, and comes back
@@ -170,7 +173,7 @@ resets only the voice the knobs show. **Volume** and **water knobs back to
 defaults** are with the water; **show note names** is a dev aid, off by
 default.
 
-The output meter turns orange when the limiter is working.
+The output meter blinks when the limiter is working.
 
 ## Listening check 2 — what to evaluate
 
@@ -182,10 +185,10 @@ voice editor untouched you hear exactly the Phase 1c bell.
 2. **Strike:** turn dynamics and strike brightness down. With both at zero
    every strike sounds the same — does the water lose its say in *how hard*?
    Should those knobs have a floor?
-3. **Water-held sustain:** turn it up and play — loops help, since moving
+3. **Water-held sustain:** turn it up and play — keep touching, since moving
    water is what holds a note. Do notes bloom and sustain while ripples cross
-   their stones, then let go as the water calms? Does a long-running loop with
-   hold on keep getting louder or harsher (the output meter turning orange)?
+   their stones, then let go as the water calms? Does long playing with
+   hold on keep getting louder or harsher (the output meter blinking)?
 4. **Synth layer:** raise synth level. Does the bell + synth blend work, or
    does the synth bury the water's character? Try a slow attack (it can be up
    to 2 s): still the water playing, or a pad that ignores it?
@@ -211,7 +214,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
     at all — and if so, is the wait clear?
 14. Tapes, loops and the water together: does it get too loud? **tape level**
     sets the tapes under (or over) the water. (The tape mix has a soft clip
-    above 0.9; the orange meter shows it.)
+    above 0.9; the blinking meter shows it.)
 15. Did the voice editor pull you away from playing the water? Which knobs
     would you never touch mid-performance?
 16. After shaping a voice, did you want to keep it for next time? (Answered:
@@ -241,15 +244,16 @@ voice editor untouched you hear exactly the Phase 1c bell.
 **Notes on the grid, and one looper (since your last notes):**
 
 23. **Quantize at full strength:** do notes now squash into time like a
-    sequencer? Find a sequence you like and loop it — does it hold together
+    sequencer? Find a sequence you like and record it to tape — does it hold together
     as a song part? Try lean (around 50%): does it sit between water and
     grid in a useful way?
 24. A note that comes just after a grid point (within 12 ms) rings at once;
     any later and it waits for the next one — up to a whole grid step. Does
     that sound tight, or do some notes feel late?
-25. **One looper:** each track is a touch loop or a sound loop, chosen when
-    you start it. Clear now? Four tracks in all (it was four of each) —
-    enough?
+25. **Tape:** the looper is now a four-track tape machine (touch loops set
+    aside). Does it feel like an instrument you'd reach for? Anything a
+    tape machine should have that it doesn't? With several tracks running,
+    does the pond still feel like the instrument?
 26. Turning quantize on now snaps notes as well as touches straight away
     (snap is the default). Should notes and touches share one strength and
     one default, or should notes start at lean?
@@ -260,6 +264,11 @@ voice editor untouched you hear exactly the Phase 1c bell.
 28. A stone glows when it's *heard*, which can be up to a grid step after
     the crest visibly passed it (1.5 s at 40 BPM on a 1/4 grid). Does the
     pond still read as the cause of the sound?
+29. **The look:** black and white, wide capitals, grey water. Calm and zen,
+    or too stark? Is everything still readable on the phone (the small
+    hint text especially)? The light tape machine is the brightest thing on
+    the page and sits first among the controls — right, or should it come
+    after the water and stones, or be a little darker?
 
 ### Decisions for Dash
 
@@ -297,7 +306,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
 - Very rarely the display shows a frame mixed from two consecutive frames.
 - A very dense chromatic range at maximum splash and long bell decay can push
   into the limiter.
-- A hard-driven pond sits in the limiter, with the meter orange as normal rather
+- A hard-driven pond sits in the limiter, with the meter blinking as normal rather
   than as a fault. The level comes from how many stones the drops ring at once
   and how long the sustain holds them ringing, not from any runaway: in the
   test's never-calming water, hold on vs off is pre-limiter peak 1.98 vs 0.66

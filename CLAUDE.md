@@ -84,10 +84,11 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   mechanism.
 
 ### Layers: loopers
-- **One looper, two kinds of track** (Dash, Oct 2026): a *touch loop* (the
-  gesture looper below) or a *sound loop* (the audio looper, a tape). On the
-  page they are one set of tracks; each track is one kind or the other.
-- **Gesture looper** (a *touch loop* on the page) — records disturbances
+- **On the page, the looper is the Tape** (Dash, Oct 2026): a 4-track tape
+  machine that records the water's sound. Touch loops (the gesture looper
+  below) are set aside for now — the engine and its checks stay in the code,
+  unused by the page, for Erosion or a later return.
+- **Gesture looper** (set aside on the page, Oct 2026) — records disturbances
   (drops and drags, with their timing), not notes, and replays them into the
   living water, so each pass lands in water that is already moving and
   differs. Several loops of different lengths can layer and drift. Loop
@@ -96,7 +97,8 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
 - **Quantize** (optional, off by default) moves *when you touch the water*
   toward a beat grid — live touches and recorded ones — with a strength
   control from lean to snap (the default when enabled), plus swing. Touches
-  lean; drags flow (never delayed, and a looped drag keeps its own timing).
+  lean; drags flow (never delayed — and, when the gesture looper is in use,
+  a looped drag keeps its own timing).
   While it's on, the beat is visible on the pond. The same strength also pulls
   *when stones ring* toward the grid (a struck stone can wait for the next
   grid point, never sound early): at 0% the water keeps its own time, at 100%
@@ -105,7 +107,7 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   notes: which stones ring, and how hard, is still the water's. Note quantize
   never delays the water — only when struck stones are heard. (Dash,
   Oct 2026: quantizing only touches was too subtle to hear.)
-- **Audio looper** (a *sound loop* on the page) — "a tape beside the pond":
+- **Audio looper** (the *Tape* on the page) — "a tape beside the pond":
   records the instrument's output and layers fixed audio, like a loop pedal.
   The one feature that isn't the water; mainly for the standalone app. Several
   tape tracks of their own lengths, each with record, overdub, mute and clear
@@ -168,6 +170,13 @@ before the app, for user testing (see Build phases).
 - **Cycle** — optional slow autonomous arc through phase states, for
   installations and long-form restorative pieces.
 
+## Look and feel (Dash, Oct 2026)
+Zen garden minimalism: black and white, generous empty space, nothing
+decorative that the water doesn't need. Type is all caps, wide and slightly
+futurist (Syncopate), with extra letter spacing for a quiet sci-fi feel. The
+tape section looks like a real 4-track tape machine. The water is drawn in
+greys — light crests, dark troughs — like light on still water.
+
 ## Tuning and scales
 
 What is tuned is the **stones**: each holds a scale degree within the set
@@ -218,8 +227,8 @@ the camera frame becomes gesture events, like touch — at first drops and drags
 where movement happens, stronger for faster motion; how body motion maps to
 Stir, Wave and Still stays open — so the water, the stones and the loopers
 don't care where a gesture came from. Every
-input source enters through one gesture path, and the gesture looper records
-gestures from any source. Motion analysis stays on the device.
+input source enters through one gesture path, and the gesture looper (when in
+use) records gestures from any source. Motion analysis stays on the device.
 
 Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
 
@@ -250,9 +259,9 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    sustain) and the audio looper. 1d: follow-ups from listening check 2.
 2. **Web prototype for user testing** (Dash, Oct 2026) — a close-to-final
    instrument in the browser that other people play before any app ships:
-   a designed interface, fun and pretty (the water visuals, and a tape
-   section that looks like a real tape deck); the remaining gestures (Stir,
-   Wave, Still) and Phase (ice / liquid / vapor); and some of MIDI, Vessel
+   a designed interface, fun and pretty (the water visuals, and the Tape as
+   a 4-track tape machine — see Look and feel); the remaining gestures
+   (Stir, Wave, Still) and Phase (ice / liquid / vapor); and some of MIDI, Vessel
    and hosting for testers, scoped with Dash when we get there. It ends in
    user testing; what testers find feeds the phases below.
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.

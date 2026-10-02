@@ -3,7 +3,7 @@
 // loops, stones, tuning and knob changes to the audio thread.
 
 import {
-  createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE,
+  createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_STONE_MOVE,
   EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE,
 } from './ring.js';
 import {
@@ -19,8 +19,7 @@ import { REFERENCE_SPEED, SURFACE_W, SURFACE_H, SIM_RATE } from './surface.js';
 import { MAX_STONES } from './stones.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
 import {
-  LOOP_LAYERS, LOOP_RECORD, LOOP_PLAY_STOP, LOOP_MUTE, LOOP_CLEAR, LOOP_CLEAR_ALL,
-  EMPTY, RECORDING, PLAYING, OVERDUB, STOPPED,
+  LOOP_LAYERS, EMPTY, RECORDING, PLAYING, OVERDUB, STOPPED,
 } from './looper.js';
 
 const SAMPLE_RATE = 48000;
@@ -67,16 +66,26 @@ const fromCanvas = (u, v) => (rotated ? { x: v, y: 1 - u } : { x: u, y: v });
 
 // Two taps to confirm anything that can't be undone.
 function confirmButton(button, action) {
-  const label = button.textContent;
-  let armed = 0;
+  let armed = 0, saved = null, savedAria = null;
+  const restore = () => {
+    clearTimeout(armed); armed = 0;
+    if (saved) button.replaceChildren(...saved);
+    if (savedAria !== null) button.setAttribute('aria-label', savedAria);
+    saved = null; savedAria = null;
+    button.classList.remove('confirm');
+  };
+  button.disarm = () => { if (armed) restore(); };
   button.addEventListener('click', () => {
     if (armed) {
-      clearTimeout(armed); armed = 0;
-      button.textContent = label; button.classList.remove('confirm');
+      clearTimeout(armed);
+      restore();
       action();
     } else {
+      saved = [...button.childNodes]; // keeps a key's glyph and label
+      savedAria = button.getAttribute('aria-label');
+      if (savedAria !== null) button.setAttribute('aria-label', `${savedAria}: tap again to confirm`);
       button.textContent = 'tap again'; button.classList.add('confirm');
-      armed = setTimeout(() => { armed = 0; button.textContent = label; button.classList.remove('confirm'); }, 2500);
+      armed = setTimeout(restore, 2500);
     }
   });
 }
@@ -231,10 +240,10 @@ const KNOBS = [
     show: (v) => `${Math.round((v / PARAMS.splash.max) * 100)}%`, hint: 'ringing stones send ripples back into the water (never more than you put in)' },
   { group: 'water', key: 'volume', label: 'volume', map: linMap('volume'),
     show: (v) => `${v.toFixed(2)}×`, hint: 'listening level' },
-  { group: 'tapes', key: 'tapeLevel', label: 'sound loops', map: linMap('tapeLevel'),
-    show: (v) => `${v.toFixed(2)}×`, hint: 'the level of the sound loops (tapes), under or over the live water' },
+  { group: 'tapes', key: 'tapeLevel', label: 'level', map: linMap('tapeLevel'),
+    show: (v) => `${v.toFixed(2)}×`, hint: 'the tape under (or over) the live water' },
   { group: 'quantize', key: 'quantizeStrength', label: 'strength', map: linMap('quantizeStrength'),
-    show: (v) => (v >= 0.995 ? 'snap' : v <= 0.005 ? 'as played' : `lean ${Math.round(v * 100)}%`), hint: 'how far recorded touches move toward the grid' },
+    show: (v) => (v >= 0.995 ? 'snap' : v <= 0.005 ? 'as played' : `lean ${Math.round(v * 100)}%`), hint: 'how far touches and notes move toward the beat' },
   { group: 'quantize', key: 'swing', label: 'swing', map: linMap('swing'),
     show: (v) => `${Math.round(v * 200)}%`, hint: 'every second grid point lands late' },
 ];
@@ -558,57 +567,35 @@ function shapeName(v) {
 
 // ---- loops ---------------------------------------------------------------------------
 
-// One looper, two kinds of track (Dash): a *touch loop* replays your touches
-// into the water (different every pass); a *sound loop* is a tape of the
-// water's sound (the same every pass). Track t is gesture layer t or tape
-// track t — whichever it was recorded as.
-const TRACKS = Math.min(LOOP_LAYERS, TAPE_TRACKS);
+// The Tape (Dash): a four-track machine that records the water's sound and
+// plays it back the same every pass. (Touch loops — the gesture looper — are
+// set aside on the page; the engine stays.) Track t is tape track t.
+const TRACKS = TAPE_TRACKS;
 const trackUi = [];
 function buildLoopControls() {
   const host = document.getElementById('layers');
   for (let t = 0; t < TRACKS; t++) {
-    const row = document.createElement('div');
-    row.className = 'layer';
-    const name = document.createElement('div');
-    name.className = 'name';
-    name.textContent = String(t + 1);
-    const buttons = document.createElement('div');
-    buttons.className = 'buttons';
-    const mk = () => { const b = document.createElement('button'); b.type = 'button'; buttons.append(b); return b; };
-    const b0 = mk(), b1 = mk(), mute = mk(), clear = mk();
-    mute.textContent = 'mute'; clear.textContent = 'clear';
-    const ui = { row, b0, b1, mute, clear, kind: null, pending: null, pendingUntil: 0, last: '', lastPos: '' };
-    // Whichever kind the track is (or, empty: the two ways to start one).
-    const send = (act) => (ui.kind === 'sound' ? sendTape(t, act) : sendLoop(t, act));
-    b0.addEventListener('click', () => {
-      if (ui.kind) { send(LOOP_RECORD); return; }
-      if (ui.pending) return; // starting: one kind per track
-      ui.pending = 'touch'; ui.pendingUntil = performance.now() + 1000; sendLoop(t, LOOP_RECORD); paintTrack(ui, t);
-    });
-    b1.addEventListener('click', () => {
-      if (ui.kind) { send(LOOP_PLAY_STOP); return; }
-      if (ui.pending) return; // starting: one kind per track
-      ui.pending = 'sound'; ui.pendingUntil = performance.now() + 1000; sendTape(t, TAPE_RECORD); paintTrack(ui, t);
-    });
-    mute.addEventListener('click', () => send(LOOP_MUTE));
-    // Clear whatever is on the track (both, should a track ever hold both).
-    confirmButton(clear, () => { if (ui.both || ui.kind !== 'sound') sendLoop(t, LOOP_CLEAR); if (ui.both || ui.kind === 'sound') sendTape(t, TAPE_CLEAR); });
-    mute.setAttribute('aria-pressed', 'false');
-    const info = document.createElement('div');
-    info.className = 'info';
-    const bar = document.createElement('div');
-    bar.className = 'bar';
-    const pos = document.createElement('div');
-    bar.append(pos);
-    const text = document.createElement('span');
-    info.append(bar, text);
-    row.append(name, buttons, document.createElement('span'), info);
-    host.append(row);
-    Object.assign(ui, { pos, text });
+    const ch = document.createElement('div');
+    ch.className = 'ch';
+    ch.setAttribute('role', 'group');
+    ch.setAttribute('aria-label', `track ${t + 1}`);
+    ch.innerHTML = `<div class="ch-head"><span class="ch-num">${t + 1}</span><span class="lamp"></span></div>
+      <div class="ch-pos"><div></div></div><div class="ch-len">—</div><div class="keys"></div>`;
+    const keys = ch.querySelector('.keys');
+    const mk = () => { const b = document.createElement('button'); b.type = 'button'; b.className = 'key'; keys.append(b); return b; };
+    const rec = mk(), play = mk(), mute = mk(), clear = mk();
+    const ui = { ch, rec, play, mute, clear, pos: ch.querySelector('.ch-pos > div'), len: ch.querySelector('.ch-len'), last: '', lastPos: '' };
+    rec.addEventListener('click', () => sendTape(t, TAPE_RECORD));
+    play.addEventListener('click', () => sendTape(t, TAPE_PLAY_STOP));
+    mute.addEventListener('click', () => sendTape(t, TAPE_MUTE));
+    setKey(clear, '×', 'clear');
+    clear.setAttribute('aria-label', `track ${t + 1} clear`);
+    confirmButton(clear, () => sendTape(t, TAPE_CLEAR));
+    host.append(ch);
     trackUi.push(ui);
     paintTrack(ui, t);
   }
-  confirmButton(document.getElementById('clear-all'), () => { sendLoop(0, LOOP_CLEAR_ALL); sendTape(0, TAPE_CLEAR_ALL); });
+  confirmButton(document.getElementById('clear-all'), () => sendTape(0, TAPE_CLEAR_ALL));
 
   const quantize = document.getElementById('quantize');
   const shown = document.querySelector('.quantized');
@@ -628,10 +615,6 @@ function buildLoopControls() {
   grid.addEventListener('change', () => { values.grid = Number(grid.value); sendParam('grid'); });
 }
 
-function sendLoop(layer, action) {
-  if (events) events.push(EV_LOOP, layer, action);
-}
-
 // ---- sound loops (tapes) -------------------------------------------------------------
 
 function sendTape(track, action) {
@@ -640,73 +623,73 @@ function sendTape(track, action) {
 
 
 // Each track's state from the latest frame (only touching the DOM on change).
-let lastFrameTracks = null;
+let lastFrameTracks = null, lastRunning = null, lastCounter = '';
 function updateTracks(frame) {
   lastFrameTracks = frame;
-  for (let t = 0; t < TRACKS; t++) paintTrack(trackUi[t], t);
+  let running = false, counter = 0, longest = -1;
+  for (let t = 0; t < TRACKS; t++) {
+    const o = FRAME_TAPES + t * TAPE_FIELDS, st = frame[o];
+    // The counter follows the longest track that's turning (a recording one
+    // counts up its own length).
+    if (st === RECORDING || st === PLAYING || st === OVERDUB) {
+      running = true;
+      if (frame[o + 2] > longest) { longest = frame[o + 2]; counter = st === RECORDING ? frame[o + 2] : frame[o + 3]; }
+    }
+    paintTrack(trackUi[t], t);
+  }
+  if (running !== lastRunning) { document.getElementById('deck').classList.toggle('running', running); lastRunning = running; }
+  const tenths = Math.round(counter * 10), m = Math.floor(tenths / 600), sec = (tenths - m * 600) / 10;
+  const text = `${String(m).padStart(2, '0')}:${sec.toFixed(1).padStart(4, '0')}`;
+  if (text !== lastCounter) { document.getElementById('tape-counter').textContent = text; lastCounter = text; }
+}
+// Key glyphs, in text style (U+FE0E) so iOS never draws them as emoji.
+const REC = '●\uFE0E', PLAY = '▶\uFE0E', STOP = '■\uFE0E', MUTE = '◐\uFE0E';
+// A key: a glyph over a small label.
+function setKey(b, glyph, label) {
+  b.replaceChildren();
+  const gl = document.createElement('span');
+  gl.className = 'glyph';
+  gl.textContent = glyph;
+  b.append(gl, label);
 }
 function paintTrack(ui, t) {
-  const frame = lastFrameTracks;
-  const lo = FRAME_LOOPS + t * LOOP_FIELDS, to = FRAME_TAPES + t * TAPE_FIELDS;
-  const loopState = frame ? frame[lo] : EMPTY, tapeState = frame ? frame[to] : EMPTY;
-  ui.kind = loopState !== EMPTY ? 'touch' : tapeState !== EMPTY ? 'sound' : null;
-  ui.both = loopState !== EMPTY && tapeState !== EMPTY;
-  if (ui.kind || performance.now() > ui.pendingUntil) ui.pending = null;
-  const kind = ui.kind || ui.pending;
-  const touch = kind === 'touch';
-  // Both kinds report state, muted, length, position; touch loops in steps, tapes in seconds.
-  const o = touch ? lo : to;
-  const state = frame && kind ? frame[o] : EMPTY, muted = frame && kind ? frame[o + 1] : 0;
-  const length = frame && kind ? (touch ? frame[o + 2] / SIM_RATE : frame[o + 2]) : 0;
-  const pos = frame && kind ? (touch ? frame[o + 3] / SIM_RATE : frame[o + 3]) : 0;
-  const waiting = frame && kind ? frame[o + (touch ? 5 : 4)] : 0;
-  const fading = frame && kind === 'sound' ? frame[o + 5] : 0;
-  const full = frame && touch ? frame[o + 4] >= 0.99 : false;
+  const frame = lastFrameTracks, o = FRAME_TAPES + t * TAPE_FIELDS;
+  const state = frame ? frame[o] : EMPTY, muted = frame ? frame[o + 1] : 0;
+  const length = frame ? frame[o + 2] : 0, pos = frame ? frame[o + 3] : 0;
+  const waiting = frame ? frame[o + 4] : 0, fading = frame ? frame[o + 5] : 0;
   const width = state === PLAYING || state === OVERDUB ? `${Math.min(100, (pos / Math.max(1e-3, length)) * 100).toFixed(0)}%` : state === RECORDING ? '100%' : '0';
   if (width !== ui.lastPos) { ui.pos.style.width = width; ui.lastPos = width; }
-  const beat = 60 / values.bpm, unit = touch ? beat * 4 : beat; // touch loops are whole bars, sound loops whole beats
+  const beat = 60 / values.bpm, beats = length / beat, whole = Math.abs(beats - Math.round(beats)) < 0.01 && beats >= 0.99;
   let text;
-  if (!kind) text = 'empty';
-  else if (state === EMPTY) text = touch ? 'touch loop · starting…' : 'sound loop · starting…';
-  else {
-    const units = length / unit, whole = Math.abs(units - Math.round(units)) < 0.01 && units >= 0.99;
-    const size = state === RECORDING ? `recording ${length.toFixed(1)} s`
-      : values.quantize && whole ? `${Math.round(units)} ${touch ? 'bars' : 'beats'}` : `${length.toFixed(1)} s`;
-    text = `${touch ? 'touch loop' : 'sound loop'} · ${size}`;
-    if (ui.both) text += ' · and a sound loop (clear removes both)';
-    if (state === STOPPED) text += ' · stopped';
-    if (muted) text += ' · muted';
-    if (waiting) text += touch ? ' · waiting for the bar' : ' · waiting for the beat';
-    if (state === OVERDUB) text += ' · overdubbing';
-    if (fading === 1) text += ' · stopping';
-    if (fading === 2) text += ' · clearing';
-    if (full) text += " · full: new gestures aren't recorded";
-  }
-  const key = `${kind}|${state}|${muted}|${text}`;
+  if (state === EMPTY) text = 'empty';
+  else if (state === RECORDING) text = `rec ${length.toFixed(1)} s`;
+  else text = values.quantize && whole ? `${Math.round(beats)} beats` : `${length.toFixed(1)} s`;
+  if (state === STOPPED) text += ' · stop';
+  if (muted) text += ' · mute';
+  if (waiting) text += ' · on the beat…';
+  if (state === OVERDUB) text += ' · dub';
+  if (fading === 1) text += ' · stopping';
+  if (fading === 2) text += ' · clearing';
+  const key = `${state}|${muted}|${text}`;
   if (key === ui.last) return;
   ui.last = key;
-  ui.text.textContent = text;
-  ui.text.classList.toggle('full', full);
-  ui.row.classList.toggle('recording', state === RECORDING || state === OVERDUB);
-  ui.row.dataset.kind = kind || '';
-  const name = kind ? `${touch ? 'touch' : 'sound'} loop ` : '';
-  const label = (b, s, aria) => { b.textContent = s; b.setAttribute('aria-label', `track ${t + 1} ${name}${aria || s}`); };
-  if (!kind) {
-    label(ui.b0, 'record touches'); label(ui.b1, 'record sound');
-    ui.b0.classList.remove('rec'); ui.b0.disabled = ui.b1.disabled = false;
-  } else {
-    label(ui.b0, state === RECORDING ? 'finish' : state === OVERDUB ? 'end overdub' : state === EMPTY ? '…' : 'overdub',
-      state === EMPTY ? 'starting' : undefined);
-    ui.b0.disabled = state === EMPTY;
-    ui.b0.classList.toggle('rec', state === RECORDING || state === OVERDUB);
-    label(ui.b1, state === PLAYING || state === OVERDUB ? 'stop' : state === RECORDING ? 'finish' : 'play');
-    ui.b1.disabled = state === EMPTY;
-  }
+  ui.len.textContent = text;
+  ui.ch.dataset.state = state === RECORDING || state === OVERDUB ? 'rec' : state === PLAYING ? 'play' : state === EMPTY ? 'empty' : 'stop';
+  ui.ch.dataset.muted = muted ? '1' : '0';
+  const [rg, rl] = state === EMPTY ? [REC, 'rec'] : state === RECORDING ? [REC, 'finish'] : state === OVERDUB ? [REC, 'end'] : [REC, 'dub'];
+  setKey(ui.rec, rg, rl);
+  ui.rec.classList.toggle('rec', state === RECORDING || state === OVERDUB);
+  ui.rec.setAttribute('aria-label', `track ${t + 1} ${rl === 'rec' ? 'record' : rl === 'dub' ? 'overdub' : rl === 'end' ? 'end overdub' : rl}`);
+  const playing = state === PLAYING || state === OVERDUB;
+  setKey(ui.play, playing ? STOP : PLAY, playing ? 'stop' : state === RECORDING ? 'finish' : 'play');
+  ui.play.setAttribute('aria-label', `track ${t + 1} ${playing ? 'stop' : state === RECORDING ? 'finish' : 'play'}`);
+  ui.play.disabled = state === EMPTY;
+  setKey(ui.mute, MUTE, 'mute');
+  if (state === EMPTY && ui.clear.disarm) ui.clear.disarm(); // a cleared track's key isn't left armed
   ui.mute.classList.toggle('on', Boolean(muted));
   ui.mute.setAttribute('aria-pressed', muted ? 'true' : 'false');
-  ui.mute.setAttribute('aria-label', `track ${t + 1} ${name}mute`);
-  ui.clear.setAttribute('aria-label', `track ${t + 1} ${name}clear`);
-  ui.mute.disabled = ui.clear.disabled = !kind || state === EMPTY;
+  ui.mute.setAttribute('aria-label', `track ${t + 1} mute`);
+  ui.mute.disabled = ui.clear.disabled = state === EMPTY;
 }
 
 // ---- start ---------------------------------------------------------------------------
@@ -866,10 +849,10 @@ function nearestStone(e) {
 
 // ---- drawing -------------------------------------------------------------------------
 
-// The water: crests light, troughs dark, still water a deep blue. Heights are
+// The water in greys: crests light, troughs black, still water charcoal. Heights are
 // compressed (tanh) so small ripples stay visible next to fresh drops.
 const HEIGHT_SCALE = 0.05;
-const STILL = [14, 30, 48], CREST = [196, 230, 246], TROUGH = [4, 10, 18];
+const STILL = [18, 18, 18], CREST = [236, 236, 232], TROUGH = [0, 0, 0]; // light on still water, in greys
 const g = surface.getContext('2d');
 const grid = document.createElement('canvas');
 grid.width = GRID_W; grid.height = GRID_H;
@@ -950,8 +933,8 @@ function draw(now) {
 
   // Stones: a small dot; when one rings it glows, harder strikes brighter. In
   // move mode, stones are larger targets and hand-placed ones are ringed. A
-  // stone with its own voice has an amber centre; the one the voice editor
-  // is on has an amber ring (stones are larger targets while picking one).
+  // stone with its own voice is hollow; the one the voice editor is
+  // on has a dashed ring (stones are larger targets while picking one).
   const r = Math.max(2, Math.max(w, h) / 180) * (moveMode || pickMode ? 1.8 : 1);
   g.font = `${Math.round(11 * dpr)}px ui-sans-serif, system-ui, sans-serif`;
   for (let i = 0; i < stones.count; i++) {
@@ -960,28 +943,35 @@ function draw(now) {
     const c = toCanvas(stones.xs[i], stones.ys[i]);
     const x = c.u * w, y = c.v * h, f = flashShown[i];
     if (f > 0.01) {
-      g.fillStyle = `rgba(255, 236, 190, ${(0.25 + 0.6 * f).toFixed(3)})`;
+      g.fillStyle = `rgba(255, 255, 255, ${(0.2 + 0.6 * f).toFixed(3)})`;
       g.beginPath(); g.arc(x, y, r * (1.5 + 4 * f), 0, Math.PI * 2); g.fill();
     }
-    g.fillStyle = grabbed ? 'rgba(255, 255, 255, 0.95)' : 'rgba(225, 235, 245, 0.75)';
-    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-    if (overridden.has(i)) { // its own voice: an amber rim, visible at any size
-      g.strokeStyle = 'rgba(255, 196, 110, 0.95)';
-      g.lineWidth = Math.max(1.5, 1.2 * dpr);
-      g.beginPath(); g.arc(x, y, r + g.lineWidth, 0, Math.PI * 2); g.stroke();
+    // A dark hairline keeps every stone visible on a bright crest; a stone
+    // with its own voice is hollow (a white ring around a dark centre).
+    const own = overridden.has(i);
+    g.beginPath(); g.arc(x, y, r + Math.max(1, dpr), 0, Math.PI * 2);
+    g.fillStyle = 'rgba(0, 0, 0, 0.6)'; g.fill();
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
+    g.fillStyle = grabbed ? 'rgba(255, 255, 255, 1)' : 'rgba(236, 236, 232, 0.85)';
+    g.fill();
+    if (own) {
+      g.beginPath(); g.arc(x, y, r * 0.5, 0, Math.PI * 2);
+      g.fillStyle = 'rgba(0, 0, 0, 0.9)'; g.fill();
     }
-    if (i === voiceTarget) {
-      g.strokeStyle = 'rgba(255, 196, 110, 0.9)';
-      g.lineWidth = Math.max(1.5, 1.5 * dpr);
-      g.beginPath(); g.arc(x, y, r * 2.4, 0, Math.PI * 2); g.stroke();
+    if (i === voiceTarget) { // the stone the voice editor is on: a dashed ring
+      g.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      g.lineWidth = Math.max(1, dpr);
+      g.setLineDash([3 * dpr, 3 * dpr]);
+      g.beginPath(); g.arc(x, y, r * 2.6, 0, Math.PI * 2); g.stroke();
+      g.setLineDash([]);
     }
     if (moveMode && placed.has(i)) {
-      g.strokeStyle = 'rgba(225, 235, 245, 0.6)';
+      g.strokeStyle = 'rgba(236, 236, 232, 0.5)';
       g.lineWidth = Math.max(1, dpr);
       g.beginPath(); g.arc(x, y, r * 1.9, 0, Math.PI * 2); g.stroke();
     }
     if (showLabels) {
-      g.fillStyle = 'rgba(225, 235, 245, 0.7)';
+      g.fillStyle = 'rgba(236, 236, 232, 0.7)';
       g.fillText(stones.labels[i], x + r * 2, y - r * 1.5);
     }
   }
@@ -990,7 +980,7 @@ function draw(now) {
   // in as its moment comes (then the ripple itself takes over).
   for (const m of pending) {
     const c = toCanvas(m.x, m.y), left = Math.max(0, (m.until - now) / (m.until - m.from));
-    g.strokeStyle = `rgba(200, 230, 255, ${(0.25 + 0.45 * (1 - left)).toFixed(3)})`;
+    g.strokeStyle = `rgba(255, 255, 255, ${(0.25 + 0.45 * (1 - left)).toFixed(3)})`;
     g.lineWidth = Math.max(1, dpr);
     g.beginPath(); g.arc(c.u * w, c.v * h, (4 + 14 * left) * dpr, 0, Math.PI * 2); g.stroke();
   }
@@ -1000,7 +990,7 @@ function draw(now) {
     const frac = beat - Math.floor(beat), downbeat = ((Math.floor(beat) % 4) + 4) % 4 === 0;
     const pulse = Math.exp(-frac * 7) * (downbeat ? 1 : 0.55);
     if (pulse > 0.01) {
-      g.strokeStyle = `rgba(150, 205, 255, ${(0.85 * pulse).toFixed(3)})`;
+      g.strokeStyle = `rgba(255, 255, 255, ${(0.7 * pulse).toFixed(3)})`;
       g.lineWidth = (2 + 4 * pulse) * dpr;
       g.strokeRect(g.lineWidth / 2, g.lineWidth / 2, w - g.lineWidth, h - g.lineWidth);
     }

@@ -203,7 +203,7 @@ ripple); that motif carries through the knobs, the tape reels and the start
 screen. Controls are knobs where a knob reads as part of an instrument.
 Controls never fold away, and most sit above the fold (Dash, Oct 2026): water
 and stones form a strip along the bottom of the pond (tabbed: water | stones),
-the beat right under it, the tape below; voice runs down the right side. On a
+the beat right under it, the tape below; tuning and voice run down the right side. On a
 phone the controls are one strip of pages with tabs as labels — swipe or tap.
 Fonts are
 bundled, so the page works offline.
@@ -242,8 +242,9 @@ Later, if it earns its place: MTS-ESP support and MPE per-note pitch.
 
 Build in this order:
 1. **XY surface in the plugin UI** — click = Drop, drag = Stir, swipe = Wave,
-   press-and-hold = Still (a tap right on a stone lifts it instead — see Tuned
-   stones). No hardware needed; the primary way to play.
+   press-and-hold = Still (a quick tap right on a stone lifts it instead — see
+   Tuned stones; a hold on a stone is Still, around the stone — provisional,
+   see Open questions). No hardware needed; the primary way to play.
    **Touch first:** on iPad and iPhone — likely the ideal way to play — every
    finger is its own disturbance (multi-touch), and Apple Pencil pressure sets
    strength.
@@ -301,7 +302,8 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    testing release (Dash, Oct 2026): hosted on Netlify or Cloudflare Pages,
    record piece (WAV), a first-run "how to play" guide that stays true to
    "you don't play notes", a feedback form link, and settings kept in the
-   browser. Stir, Wave, Still, Phase and MIDI come later in this phase.
+   browser. Stir, Wave, Still, Phase and MIDI come later in this phase (Still
+   was built first, Oct 2026, after Dash's "keep building").
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
    including its gestures and the Phase modes).
@@ -352,7 +354,11 @@ Inside `processBlock` and anything it calls:
 - How Phase changes the surface and the bell voices (ice / liquid / vapor).
 - How Vessel works now: outside audio disturbing the water, or becoming the
   stones' voice.
-- When Still arrives: does a press-and-hold resting on a stone calm the water
-  or handle the stone? (Suggested: holds mean Still; only a short tap lifts.)
+- Still (built Oct 2026, to try): a press held ~⅓ s without moving becomes a
+  hand that flattens the water under it (a drag stays a drag). Provisionally
+  a hold on a stone is Still too (only a quick tap lifts; a drag that starts
+  at once moves) — Dash to confirm. A hold on open water starts with the
+  touch's drop — fine, or should Still never make a sound? Still isn't
+  recorded by the gesture looper yet (a gap for its return, or Erosion).
 - How camera / body motion maps to gestures, and when camera input is scheduled.
 - Instrument name.

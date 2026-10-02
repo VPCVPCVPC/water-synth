@@ -18,6 +18,7 @@ export const EV_VOICE = 8; // target (−1 shared voice, else a stone), paramInd
 export const EV_VOICE_OVERRIDE = 9; // stone, on (1: its own voice, copied from the shared one; 0: back to shared)
 export const EV_TAPE = 10; // track, action (tape.js TAPE_*: record, play/stop, mute, clear, clear all)
 export const EV_STONE_TUNE = 11; // index, hz — one stone's pitch, now (a stone moved into another note's place)
+export const EV_STILL = 12; // hand, x, y, pressure — Still: a hand resting on the water (pressure 0 lifts it)
 
 const HEADER_BYTES = 8;
 

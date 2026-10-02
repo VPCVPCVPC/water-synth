@@ -8,7 +8,7 @@ import { Bells, BELL_PARAMS } from './bells.js';
 import { MAX_STONES, StrikeBuffer } from './stones.js';
 import { VOICE_PARAMS, VOICE_KEYS, SHARED } from './voice.js';
 import {
-  EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE, EV_VOICE, EV_VOICE_OVERRIDE,
+  EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE, EV_VOICE, EV_VOICE_OVERRIDE, EV_STILL,
   EV_TAPE, EV_STONE_TUNE,
 } from './ring.js';
 import { GestureLooper, LOOPER_PARAMS, GESTURE_DROP, GESTURE_TRAIL } from './looper.js';
@@ -140,6 +140,7 @@ export class Instrument {
       case EV_LOOP: this.looper.action(d[o + 1], d[o + 2]); break;
       case EV_STONE_MOVE: e.stones.moveStone(e.surface, d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_STONE_TUNE: e.stones.setPitch(e.surface, d[o + 1], d[o + 2]); break;
+      case EV_STILL: e.still(d[o + 1], d[o + 2], d[o + 3], d[o + 4]); break; // not recorded: the tape hears what it does
       case EV_PARAM: this.setParamIndex(d[o + 1], d[o + 2]); break;
       case EV_VOICE: this.bells.voices.set(d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_VOICE_OVERRIDE: this.bells.voices.override(d[o + 1], d[o + 2] === 1); break;

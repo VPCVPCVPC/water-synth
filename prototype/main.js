@@ -4,7 +4,7 @@
 
 import {
   createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_STONE_MOVE,
-  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE, EV_STONE_TUNE,
+  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE, EV_STONE_TUNE, EV_STILL,
 } from './ring.js';
 import {
   createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
@@ -15,7 +15,7 @@ import { PARAMS, PARAM_KEYS, VOICE_PARAMS, VOICE_KEYS, SHARED } from './instrume
 import {
   TAPE_TRACKS, TAPE_FIELDS, TAPE_RECORD, TAPE_PLAY_STOP, TAPE_MUTE, TAPE_CLEAR, TAPE_CLEAR_ALL,
 } from './tape.js';
-import { REFERENCE_SPEED, SURFACE_W, SURFACE_H, SIM_RATE } from './surface.js';
+import { REFERENCE_SPEED, SURFACE_W, SURFACE_H, SIM_RATE, MAX_HANDS, HAND_RADIUS } from './surface.js';
 import { MAX_STONES } from './stones.js';
 import { PieceRecorder, pieceName, MAX_RECORD_SECONDS } from './record.js';
 import { FEEDBACK_URL } from './config.js';
@@ -32,6 +32,8 @@ const ASPECT = GRID_H / GRID_W;
 const STONE_HIT_MOUSE_PX = 10, STONE_HIT_TOUCH_PX = 18; // how close a tap must be to pick up a stone
 const LIFT_TAP_MS = 300; // a press on a stone shorter than this (and still) lifts it
 const LIFT_TIMEOUT_MS = 5000; // a lifted stone left alone goes back down
+const HOLD_MS = 350; // a press held this long without moving becomes Still: a hand resting on the water
+const HOLD_MOVE_PX = 8; // moving further than this first makes it a drag instead
 
 const surface = document.getElementById('surface');
 const status = document.getElementById('status');
@@ -1255,6 +1257,62 @@ function finishPiece(note) {
 // ---- gestures: every finger, pen or mouse is its own disturbance ------------------------
 
 const drags = new Map(); // pointerId → last sample { x, y, t }
+// Still: a press held without moving rests a hand on the water (it damps
+// and calms the water under it); sliding it calms along the way; lifting
+// the finger lifts the hand. pointerId → { slot, x, y } (pond terms).
+const hands = new Map();
+const holds = new Map(); // pointerId → { timer, cx, cy } — a press that may yet become Still
+function freeHandSlot() {
+  for (let k = 0; k < MAX_HANDS; k++) {
+    let used = liftsUnsent.has(k); // still waiting for its lift to go
+    for (const h of hands.values()) if (h.slot === k) used = true;
+    if (!used) return k;
+  }
+  return -1;
+}
+// Only a press that hasn't moved can become Still; once it's a drag, it
+// stays a drag (a pause mid-drag doesn't turn into a hand).
+function watchHold(e, p, after = HOLD_MS) {
+  cancelHold(e.pointerId);
+  const pressure = handPressure(e);
+  holds.set(e.pointerId, { cx: e.clientX, cy: e.clientY,
+    timer: setTimeout(() => { holds.delete(e.pointerId); restHand(e.pointerId, p, pressure); }, after) });
+}
+// Apple Pencil pressure sets how firmly the hand rests; a finger or mouse rests fully.
+const handPressure = (e) => (e.pointerType === 'pen' && e.pressure > 0 ? Math.max(0.3, Math.min(1, e.pressure * 1.5)) : 1);
+function cancelHold(id) { const h = holds.get(id); if (h) { clearTimeout(h.timer); holds.delete(id); } }
+function restHand(id, p, pressure = 1) {
+  const slot = freeHandSlot();
+  if (slot < 0 || !events) return;
+  if (!events.push(EV_STILL, slot, p.x, p.y, pressure)) return; // the queue was full: no hand (the page never shows one the water lacks)
+  grabs.delete(id); // a held stone press is Still now, not handling
+  hands.set(id, { slot, x: p.x, y: p.y, pressure, t: 0 });
+}
+// The page hidden or left: every hold and hand lets go (nothing stays calmed).
+function releaseAllHands() {
+  for (const id of [...holds.keys()]) cancelHold(id);
+  for (const id of [...hands.keys()]) liftHand(id);
+}
+window.addEventListener('blur', releaseAllHands);
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllHands(); });
+// A lift must reach the water, or that spot stays calmed: one the queue
+// couldn't take is sent again every frame until it goes.
+const liftsUnsent = new Map(); // slot → { x, y }
+function liftHand(id) {
+  const h = hands.get(id);
+  if (!h) return;
+  hands.delete(id);
+  liftsUnsent.set(h.slot, { x: h.x, y: h.y });
+  sendLifts();
+}
+function sendLifts() {
+  if (!events) return;
+  for (const [slot, q] of liftsUnsent) {
+    if (!events.push(EV_STILL, slot, q.x, q.y, 0)) return;
+    liftsUnsent.delete(slot);
+  }
+}
+
 // Stones by hand: tap a stone to pick it up (it lifts, and the voice editor
 // turns to it); tap the water to put it down there, or the stone to put it
 // back. Pressing a stone and dragging moves it directly.
@@ -1291,6 +1349,7 @@ surface.addEventListener('pointerdown', (e) => {
   if (hit >= 0) { // a press on a stone: a quick, still tap lifts it, a drag moves it
     grabs.set(e.pointerId, { i: hit, x: e.clientX, y: e.clientY, moved: false, at: e.timeStamp });
     selectStone(hit);
+    watchHold(e, p); // held on the stone: Still there (a quick tap lifts, a drag moves)
     return;
   }
   // Apple Pencil pressure sets strength (with a floor: first-contact pressure
@@ -1302,6 +1361,8 @@ surface.addEventListener('pointerdown', (e) => {
   const hold = heldFor();
   if (hold > 0.02) pending.push({ x: p.x, y: p.y, from: performance.now(), until: performance.now() + hold * 1000 });
   drags.set(e.pointerId, { x: p.x, y: p.y, t: e.timeStamp });
+  // The hand always comes down after this touch's drop (which quantize may hold for the beat).
+  watchHold(e, p, Math.max(HOLD_MS, hold * 1000 + 60));
 });
 
 surface.addEventListener('pointermove', (e) => {
@@ -1313,9 +1374,18 @@ surface.addEventListener('pointermove', (e) => {
     return;
   }
   if (heldStone >= 0 && e.pointerType === 'mouse') hover = p;
+  const hand = hands.get(e.pointerId);
+  if (hand) { // Still, sliding: the hand calms along the way (no ripples)
+    hand.x = p.x; hand.y = p.y;
+    if (e.pointerType === 'pen') hand.pressure = handPressure(e);
+    if (e.timeStamp - hand.t >= 8) { hand.t = e.timeStamp; events.push(EV_STILL, hand.slot, p.x, p.y, hand.pressure); } // like drags: ≤ ~120 a second
+    return;
+  }
+  const hold = holds.get(e.pointerId);
+  if (hold && Math.hypot(e.clientX - hold.cx, e.clientY - hold.cy) > HOLD_MOVE_PX) cancelHold(e.pointerId); // a drag, not a rest
   const grab = grabs.get(e.pointerId);
   if (grab) {
-    if (!grab.moved && Math.hypot(e.clientX - grab.x, e.clientY - grab.y) > 6) grab.moved = true;
+    if (!grab.moved && Math.hypot(e.clientX - grab.x, e.clientY - grab.y) > 6) { grab.moved = true; cancelHold(e.pointerId); } // moving the stone: never a hand
     if (grab.moved) putStone(grab.i, p); // dragged: it follows, ringing as it crosses crests
     return;
   }
@@ -1342,6 +1412,7 @@ surface.addEventListener('pointerup', (e) => {
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   surface.addEventListener(type, (e) => {
     drags.delete(e.pointerId); grabs.delete(e.pointerId);
+    cancelHold(e.pointerId); liftHand(e.pointerId);
     if (pathDrawing && e.pointerId === drawingPointer) finishPath();
   });
 }
@@ -1446,6 +1517,7 @@ function draw(now) {
   if (stonesUnsent) sendStones();
   for (const key of unsent) sendParam(key);
   if (voiceQueue.size) flushVoice();
+  if (liftsUnsent.size) sendLifts();
   const dt = lastFrameTime ? Math.min(0.1, (now - lastFrameTime) / 1000) : 0;
   lastFrameTime = now;
 
@@ -1466,8 +1538,8 @@ function draw(now) {
   let glowing = false;
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
-  const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceTarget}x${voiceMarks}x${heldStone}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
-  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && heldStone < 0 && !animating && drawingPointer < 0 &&
+  const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceTarget}x${voiceMarks}x${heldStone}x${hands.size}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
+  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && hands.size === 0 && heldStone < 0 && !animating && drawingPointer < 0 &&
       size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
   if (frame) {
@@ -1563,6 +1635,18 @@ function draw(now) {
     g.strokeStyle = `rgba(255, 255, 255, ${(0.25 + 0.45 * (1 - left)).toFixed(3)})`;
     g.lineWidth = Math.max(1, dpr);
     g.beginPath(); g.arc(c.u * w, c.v * h, (4 + 14 * left) * dpr, 0, Math.PI * 2); g.stroke();
+  }
+
+  // Still: each resting hand, a soft pale patch the size of what it calms.
+  for (const hd of hands.values()) {
+    const c = toCanvas(hd.x, hd.y), x = c.u * w, y = c.v * h, rr = (HAND_RADIUS * 1.6 / GRID_W) * (rotated ? h : w);
+    const glow = g.createRadialGradient(x, y, 0, x, y, rr);
+    glow.addColorStop(0, 'rgba(255, 255, 255, 0.16)'); glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    g.fillStyle = glow;
+    g.beginPath(); g.arc(x, y, rr, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    g.lineWidth = Math.max(1, dpr);
+    g.beginPath(); g.arc(x, y, rr * 0.75, 0, Math.PI * 2); g.stroke();
   }
 
   // A drawn path (path mode): a faint dashed line the stones travel.

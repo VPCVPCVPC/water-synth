@@ -2,8 +2,8 @@
 // engine), without sound. Agents can't hear; these are what we can prove.
 //   node check-water.mjs
 
-import { Surface, SURFACE_PARAMS, SIM_RATE, REFERENCE_SPEED } from './surface.js';
-import { Stones, StrikeBuffer } from './stones.js';
+import { Surface, SURFACE_PARAMS, SIM_RATE, REFERENCE_SPEED, MAX_HANDS } from './surface.js';
+import { Stones, StrikeBuffer, STONE_PARAMS } from './stones.js';
 import { Engine, ENGINE_PARAMS } from './engine.js';
 import { buildPitches, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
@@ -389,6 +389,136 @@ console.log('\n12. Bad input');
 }
 
 // ---- 13. CPU ----------------------------------------------------------------------
+console.log('\n12b. Still: a hand resting on the water');
+{
+  const steps = (s, n) => { for (let k = 0; k < n; k++) s.step(); };
+  const travel = (cells, speed) => Math.round((cells / speed) * SIM_RATE); // steps for ripples to travel this far
+  const at = (speed) => { const s = new Surface(); s.setParam('waveSpeed', speed); return s; };
+  for (const speed of [SURFACE_PARAMS.waveSpeed.min, 39, SURFACE_PARAMS.waveSpeed.max]) {
+    // A hand where the drop landed calms the water much faster — the same
+    // in cells of travel at every flow (a time-lapse) — and energy, checked
+    // every step, never rises by more than a hair (the gentle pull to rest
+    // isn't in the energy's books).
+    const free = at(speed), held = at(speed);
+    held.setHand(0, 0.5, 0.5, 1);
+    held.step(); // settled on (in still water a hand rests at once; it eases over ~50 ms of real time)
+    for (const s of [free, held]) s.drop(0.5, 0.5, 1, 1.5);
+    const e0 = held.energy();
+    let last = e0, worstRise = 0;
+    for (let k = 0; k < travel(40, speed); k++) {
+      free.step(); held.step();
+      const e = held.energy();
+      if (e > last) worstRise = Math.max(worstRise, (e - last) / e0);
+      last = e;
+    }
+    const ratio = held.energy() / free.energy();
+    // A ripple reaching the hand is absorbed, not sent back: what returns to
+    // a point between the drop and the hand, against the direct crest.
+    const echo = (hand) => {
+      const s = at(speed);
+      if (hand) { s.setHand(0, 0.5, 0.5, 1); s.step(); }
+      s.drop(0.2, 0.5, 1, 1.5);
+      const tr = [];
+      for (let k = 0; k < travel(60, speed); k++) { s.step(); tr.push(s.heightAt(s.toGridX(0.3), s.toGridY(0.5))); }
+      return tr;
+    };
+    const open = echo(false), shaded = echo(true);
+    let back = 0, direct = 0;
+    for (let k = 0; k < open.length; k++) {
+      if (k > travel(25, speed)) back = Math.max(back, Math.abs(shaded[k] - open[k]));
+      else direct = Math.max(direct, Math.abs(open[k]));
+    }
+    report(ratio < 0.05 && worstRise < 1e-3 && back / direct < 0.05,
+      `flow ${speed}: a hand calms the water, never feeds it, and absorbs ripples rather than echoing them`,
+      `energy left after 40 cells of travel ${(ratio * 100).toFixed(1)}%; worst one-step rise ${(worstRise * 100).toFixed(3)}%; echo ${(back / direct * 100).toFixed(1)}%`);
+  }
+
+  // A ripple reaching a hand dies there: a stone under the hand hears little.
+  const crest = (hand) => {
+    const s = testSurface();
+    if (hand) { s.setHand(3, 0.5, 0.5, 1); steps(s, 200); } // settled on
+    s.drop(0.2, 0.5, 1, 1.5);
+    let top = 0;
+    for (let k = 0; k < 2500; k++) { s.step(); top = Math.max(top, s.heightAt(s.toGridX(0.5), s.toGridY(0.5))); }
+    return top;
+  };
+  const open = crest(false), shaded = crest(true);
+  report(shaded < open * 0.3, 'a ripple reaching a hand dies there (a stone under it hears little)',
+    `crest under the hand ${(shaded / open * 100).toFixed(0)}% of open water`);
+
+  // Lifting the hand: the water carries on as before (no damping left behind).
+  const a = testSurface(), b = testSurface();
+  b.setHand(1, 0.3, 0.3, 1); steps(b, 10); b.setHand(1, 0.3, 0.3, 0); steps(b, 400);
+  for (const s of [a, b]) { s.drop(0.3, 0.3, 1, 1.5); steps(s, 1500); }
+  report(Math.abs(b.energy() / a.energy() - 1) < 1e-6 && b.handPressure(1) === 0, 'a lifted hand leaves nothing behind',
+    `energy ratio ${(b.energy() / a.energy()).toFixed(6)}`);
+
+  // A big bump held under a hand at the fastest flow: it flattens (doesn't
+  // freeze), and the pond's rest level stays put — far below what a stone
+  // hears (an offset would leave crests riding on it).
+  const big = new Surface();
+  big.setParam('waveSpeed', SURFACE_PARAMS.waveSpeed.max);
+  big.setHand(0, 0.5, 0.5, 1);
+  big.drop(0.5, 0.5, 4, 4);
+  steps(big, Math.round((200 / SURFACE_PARAMS.waveSpeed.max) * SIM_RATE));
+  const level = Math.abs(big.netVolume()) / (big.w * big.h), threshold = STONE_PARAMS.threshold.def;
+  let under = 0;
+  for (let y = -3; y <= 3; y++) for (let x = -3; x <= 3; x++) under = Math.max(under, Math.abs(big.heightAt(big.toGridX(0.5) + x, big.toGridY(0.5) + y)));
+  report(level < 0.3 * threshold && under < 0.1 * threshold, 'a bump under a hand flattens, and the rest level stays put',
+    `level ${level.toExponential(1)}, under the hand ${under.toExponential(1)} (a stone hears ${threshold})`);
+
+  // What a hand takes is given back evenly at once, so the far side's level
+  // moves before any ripple could get there: it must stay well under what
+  // the most sensitive stone hears, for the hardest touch a performer can
+  // make (strength 2: a Pencil pressed fully) into a settled hand. The rise
+  // is proportional to strength (~0.6e-3 per unit), so a broad, strong
+  // gesture (Wave, still to come) must revisit this — e.g. by giving the
+  // water back as a broad smooth patch around the hand instead.
+  {
+    const e = testEngine({ sampleRate: 48000 });
+    e.setParam('waveSpeed', SURFACE_PARAMS.waveSpeed.min);
+    e.still(0, 0.5, 0.5, 1);
+    e.process(480);
+    e.drop(0.5, 0.5, 2);
+    const fs = e.surface, far = Math.hypot(0.5 * (fs.w - 1), 0.5 * (fs.h - 1)) - 20; // cells before a ripple reaches the corner
+    let worst = 0;
+    const until = (far / SURFACE_PARAMS.waveSpeed.min) * 48000;
+    for (let t = 0; t < until; t += 128) { e.process(128); worst = Math.max(worst, Math.abs(fs.heightAt(1, 1))); }
+    const minThreshold = STONE_PARAMS.threshold.min;
+    report(worst < 0.3 * minThreshold, 'the far side barely stirs before a ripple could get there',
+      `corner level ${worst.toExponential(1)} (the most sensitive stone hears ${minThreshold})`);
+  }
+
+  // Still adds no water and nothing to still water; bad hands are ignored.
+  const c = testSurface();
+  c.setHand(0, 0.5, 0.5, 1); steps(c, 100);
+  const asleep = c.asleep && c.energy() === 0;
+  c.drop(0.4, 0.6, 2, 1.5); steps(c, 3000);
+  // The hand flattens: what it takes is only the deviation under it, so the
+  const vol = Math.abs(c.netVolume()) / (c.w * c.h);
+  c.setHand(-1, 0.5, 0.5, 1); c.setHand(MAX_HANDS, 0.5, 0.5, 1); c.setHand(0.5, 0.5, 0.5, 1);
+  c.setHand(2, NaN, 0.5, 1); c.setHand(2, 0.5, 0.5, Infinity);
+  steps(c, 100);
+  let finite = true;
+  for (let k = 0; k < c.u.length; k++) if (!Number.isFinite(c.u[k])) { finite = false; break; }
+  report(asleep && vol < 1e-9 && finite && c.handPressure(2) === 0, 'a hand on still water does nothing; no water gained or lost; bad hands ignored',
+    `mean level ${vol.toExponential(1)}`);
+
+  // At every flow the hand still calms, and stays stable at the fastest.
+  let ok = true, worst = 0;
+  for (const speed of [SURFACE_PARAMS.waveSpeed.min, 39, SURFACE_PARAMS.waveSpeed.max]) {
+    const f = new Surface(), h = new Surface();
+    for (const s of [f, h]) { s.setParam('waveSpeed', speed); s.drop(0.5, 0.5, 1, 1.5); }
+    for (let k = 0; k < MAX_HANDS; k++) h.setHand(k, 0.1 + 0.08 * k, 0.5, 1);
+    const n = Math.round(4 * SIM_RATE * (REFERENCE_SPEED / speed) * 0.25);
+    steps(f, n); steps(h, n);
+    const r = h.energy() / f.energy();
+    worst = Math.max(worst, r);
+    if (!(r < 0.9) || !Number.isFinite(h.energy())) ok = false;
+  }
+  report(ok, 'all ten hands down, at the slowest, default and fastest flow: calmer, never unstable', `worst energy left ${(worst * 100).toFixed(0)}%`);
+}
+
 console.log('\n13. CPU per 128-sample block at 48 kHz (budget 2667 µs)');
 {
   const e = makeEngine({ params: { splash: 0.5 } });
@@ -399,6 +529,17 @@ console.log('\n13. CPU per 128-sample block at 48 kHz (budget 2667 µs)');
   for (let k = 0; k < blocks; k++) { drive(); e.process(128); }
   const us = ((performance.now() - t0) * 1000) / blocks, pct = (us / 2667) * 100;
   report(pct < 15, `128×97 water + ${PENTA.length} stones, playing: ${us.toFixed(0)} µs/block, ${pct.toFixed(1)}% of real time`, 'limit 15%');
+
+  // Ten hands resting on moving water (every finger stilling).
+  const hh = makeEngine({ params: { splash: 0.5 } });
+  for (let k = 0; k < MAX_HANDS; k++) hh.still(k, 0.05 + 0.09 * k, 0.3 + 0.04 * k, 1);
+  let j = 0;
+  const driveH = () => { if (j % 40 === 0) hh.drop((j * 0.13) % 1, (j * 0.29) % 1, 1); j++; };
+  for (let k = 0; k < 500; k++) { driveH(); hh.process(128); }
+  const t2 = performance.now();
+  for (let k = 0; k < blocks; k++) { driveH(); hh.process(128); }
+  const usH = ((performance.now() - t2) * 1000) / blocks, pctH = (usH / 2667) * 100;
+  report(pctH < 25, `the same, with all ${MAX_HANDS} hands resting: ${usH.toFixed(0)} µs/block, ${pctH.toFixed(1)}%`, 'limit 25%');
 
   // Worst burst: a full gesture queue landing on one step (64 hard drops).
   // Measured as the 95th percentile of the burst blocks, not the single worst:

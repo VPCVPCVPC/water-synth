@@ -91,6 +91,16 @@ Voice) forgets them.
   finger is its own drop or drag, so two hands play at once. Apple Pencil
   pressure sets how hard; a mouse click is fixed strength.
 - **Drag** — a trail of small drops along your path; faster is stronger.
+- **Hold** (Still) — press and keep still for about a third of a second: a
+  hand rests on the water, a soft pale patch. The water under it flattens
+  and ripples reaching it die there (and any note the water was holding
+  there lets go). Slide it to calm along the way; lift your finger to lift
+  the hand. Several fingers can rest at once. Only a press that hasn't moved
+  becomes a hand: a drag that pauses stays a drag. With quantize on, the
+  hand waits for its touch's drop to land on the beat first, so at a slow
+  tempo a hold can take a little longer. A hold starts with the touch's
+  drop (the hand comes down after it); held on a stone, there's no drop —
+  the stone is selected and the hand calms around it.
 - Stones ring when a crest reaches them, harder for higher crests, and glow
   as they do (the glow shows how hard the water hit, not how loud the stone
   then rings). Two ripples too small to ring a stone alone can ring it together.
@@ -374,6 +384,13 @@ voice editor untouched you hear exactly the Phase 1c bell.
     (water | stones) feel like part of the pond? Is everything you reach for
     while playing above the fold? On the phone, are the tabs clear, and does
     swiping between pages feel natural (and never fight turning a knob)?
+41. **Still:** hold a finger on the water. Does it feel like a hand calming
+    it? Is a third of a second the right wait (does Still ever start when
+    you meant a slow drag, or a drag when you meant to rest)? A drag that
+    pauses stays a drag — should pausing calm instead? Is the hand's
+    size and strength right? Holding on a stone now stills around it
+    instead of only selecting it — and you can no longer drag a stone after
+    resting on it first (start the drag straight away). OK?
 
 ### Decisions for Dash
 

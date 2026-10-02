@@ -131,6 +131,12 @@ export class Engine {
     }
   }
 
+  // Still: hand `id` rests at (x, y) with `pressure` 0..1 (0 lifts it).
+  // Takes effect from the next step; never delayed by quantize.
+  still(id, x, y, pressure) {
+    this.surface.setHand(id, x, y, pressure);
+  }
+
   schedule(x, y, strength, radius, atSeconds) {
     const step = atSeconds === undefined || !Number.isFinite(atSeconds)
       ? this.simStep + 1

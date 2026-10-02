@@ -40,6 +40,19 @@ const CRATER_GAIN = 1.66;
 // slower. (Damping per second at a fixed decay would otherwise thin out slow
 // tempos and crowd fast ones.)
 export const REFERENCE_SPEED = 64; // cells per second
+// Still: a hand resting on the water damps its motion under the hand (a soft
+// round patch), so ripples die there and passing ones are absorbed. Damping
+// per step at full pressure in the hand's centre, at the reference speed; it
+// scales with flow like everything else (a time-lapse).
+export const MAX_HANDS = 10;
+export const HAND_RADIUS = 7; // cells (the patch's Gaussian radius)
+const HAND_DAMP = 0.06;
+// …plus a weak pull toward rest (∝ damping², so its spring keeps pace with
+// flow and stays overdamped): bumps under the hand flatten instead of
+// freezing, without the stiffness that would make the hand reflect ripples.
+export const HAND_PULL = 0.25;
+const HAND_REACH = 2.5; // the patch is cut off at this many radii
+const HAND_EASE = 0.02; // per step: a hand settles on (or lifts off) over ~50 ms
 
 export const SURFACE_PARAMS = {
   // Defaults from Dash's Phase 1b listening session: slow (≈3.3 s to cross 128
@@ -75,10 +88,34 @@ export class Surface {
     this.hfDecay = SURFACE_PARAMS.hfDecay.def;
     this.updateCoefficients();
 
+    // Hands (Still): position in interior cells, pressure wanted and as eased.
+    this.handX = new Float64Array(MAX_HANDS);
+    this.handY = new Float64Array(MAX_HANDS);
+    this.handWant = new Float64Array(MAX_HANDS);
+    this.handOn = new Float64Array(MAX_HANDS);
+    this.handsActive = 0;
+    // One row of a hand's patch weights (separable Gaussian), reused.
+    this.handRow = new Float64Array(2 * Math.ceil(HAND_REACH * HAND_RADIUS) + 2);
+    this.handCol = new Float64Array(2 * Math.ceil(HAND_REACH * HAND_RADIUS) + 2);
+
     this.asleep = true;
     this.silenceCounter = 0;
     this.resets = 0;
   }
+
+  // Still: hand `id` (0..MAX_HANDS−1) rests at (x, y) in [0, 1]² with
+  // `pressure` 0..1 (0 lifts it). It eases on and off; it never adds water.
+  setHand(id, x, y, pressure) {
+    if (!Number.isInteger(id) || id < 0 || id >= MAX_HANDS) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(pressure)) return;
+    this.handX[id] = 1 + clamp(x, 0, 1) * (this.w - 1);
+    this.handY[id] = 1 + clamp(y, 0, 1) * (this.h - 1);
+    this.handWant[id] = clamp(pressure, 0, 1);
+    this.handsActive = 1; // (recounted on the next step)
+  }
+
+  // How firmly hand `id` is resting now (0..1), for drawing and checks.
+  handPressure(id) { return id >= 0 && id < MAX_HANDS ? this.handOn[id] : 0; }
 
   // ---- control ----------------------------------------------------------------
 
@@ -105,6 +142,7 @@ export class Surface {
   }
 
   reset() {
+    // Hands stay where they rest (a reset only stills the water).
     this.u.fill(0); this.up.fill(0); this.un.fill(0);
     this.lapPrev.fill(0); this.lapCur.fill(0);
     this.asleep = true;
@@ -113,7 +151,10 @@ export class Surface {
   // ---- simulation (audio thread) ----------------------------------------------
 
   step() {
-    if (this.asleep) return;
+    if (this.asleep) { // still water: a hand just rests (nothing to damp)
+      if (this.handsActive) { for (let k = 0; k < MAX_HANDS; k++) this.handOn[k] = this.handWant[k]; this.handsActive = 0; }
+      return;
+    }
     this.mirrorEdges(this.u);
     const W = this.W, w = this.w, h = this.h;
     const u = this.u, up = this.up, un = this.un;
@@ -130,6 +171,7 @@ export class Surface {
         un[i] = (2 * c - a * up[i] + lk * lap - k * lp[i]) * inv;
       }
     }
+    this.stillHands(u, un);
     this.up = u; this.u = un; this.un = up;
     this.lapPrev = lc; this.lapCur = lp;
 
@@ -205,6 +247,56 @@ export class Surface {
   }
 
   // ---- internals ----------------------------------------------------------------
+
+  // Still: under each hand the water's motion is damped (the new heights
+  // drawn back toward the current ones), so ripples reaching it are absorbed,
+  // not reflected; a weak pull toward rest flattens any bump left there. Only
+  // the freshly computed heights change, so the cached Laplacian stays right.
+  stillHands(u, un) {
+    let active = 0, taken = 0;
+    const damp = HAND_DAMP * (this.waveSpeed / REFERENCE_SPEED);
+    for (let k = 0; k < MAX_HANDS; k++) {
+      const want = this.handWant[k];
+      let on = this.handOn[k];
+      if (on === want) { if (on === 0) continue; }
+      else {
+        on += (want - on) * HAND_EASE;
+        if (Math.abs(want - on) < 1e-4) on = want;
+        this.handOn[k] = on;
+        if (on === 0) continue;
+      }
+      active++;
+      const r = HAND_RADIUS, reach = Math.ceil(HAND_REACH * r), cx = this.handX[k], cy = this.handY[k];
+      const x0 = Math.max(1, Math.floor(cx - reach)), x1 = Math.min(this.w, Math.ceil(cx + reach));
+      const y0 = Math.max(1, Math.floor(cy - reach)), y1 = Math.min(this.h, Math.ceil(cy + reach));
+      const row = this.handRow, col = this.handCol, inv = 1 / (2 * r * r), g = Math.min(0.9, damp * on);
+      for (let x = x0; x <= x1; x++) { const d = x - cx; row[x - x0] = Math.exp(-d * d * inv); }
+      for (let y = y0; y <= y1; y++) { const d = y - cy; col[y - y0] = g * Math.exp(-d * d * inv); }
+      const W = this.W;
+      for (let y = y0; y <= y1; y++) {
+        const cy2 = col[y - y0];
+        let i = y * W + x0;
+        for (let x = x0; x <= x1; x++, i++) {
+          const m = cy2 * row[x - x0];
+          const was = un[i], v = was - (was - u[i]) * m; // motion damped
+          un[i] = v - v * HAND_PULL * m * m; // and drawn gently to rest
+          taken += was - un[i];
+        }
+      }
+    }
+    this.handsActive = active;
+    // What the hands took is given back evenly over the whole pond, so the
+    // pond holds exactly the water it would have without them: the rest
+    // level never drifts. (An even shift has no slope, so it makes no waves;
+    // the cached Laplacian, of the current heights, is untouched.)
+    if (active && taken !== 0) {
+      const c = taken / (this.w * this.h), W = this.W;
+      for (let y = 1; y <= this.h; y++) {
+        let i = y * W + 1;
+        for (let x = 1; x <= this.w; x++, i++) un[i] += c;
+      }
+    }
+  }
 
   // Decay times in seconds at the current tempo.
   effectiveDecay() { return this.decay * (REFERENCE_SPEED / this.waveSpeed); }

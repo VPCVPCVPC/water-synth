@@ -2,7 +2,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node check-tuning.mjs && node check-water.mjs && node check-bells.mjs && node check-voices.mjs && node check-tape.mjs && node check-looper.mjs",
-    "serve": "node serve.mjs"
+    "check": "node check-tuning.mjs && node check-record.mjs && node check-water.mjs && node check-bells.mjs && node check-voices.mjs && node check-tape.mjs && node check-looper.mjs",
+    "serve": "node serve.mjs",
+    "build": "node build.mjs"
   }
 }

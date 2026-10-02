@@ -33,3 +33,6 @@ tests/output/
 
 # Local HTTPS certificates for testing on devices (made with mkcert)
 prototype/certs/
+
+# The hosted build (node prototype/build.mjs)
+prototype/dist/

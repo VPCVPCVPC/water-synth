@@ -1,0 +1,5 @@
+# Netlify: builds the testing prototype. Headers come from prototype/dist/_headers
+# (written by the build; Cloudflare Pages reads the same file).
+[build]
+  command = "node prototype/build.mjs"
+  publish = "prototype/dist"

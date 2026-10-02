@@ -120,6 +120,9 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   quantize on, a take starts on a beat and lasts whole beats: tapes follow the
   beat, but their lengths differ, so the way they line up keeps changing.
   Stopping, muting and clearing fade, never cut.
+- **Record piece** (Dash, Oct 2026) — saves everything you hear (the water and
+  the tape) as a WAV to keep or share. A capture, not a layer: it never plays
+  back into the instrument, and tapes still record only the water.
 
 ### Prototype findings (Phase 1a, Sept 2026)
 An audio-rate 2D wave grid read directly as audio sounded like a metal plate,
@@ -270,9 +273,13 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    instrument in the browser that other people play before any app ships:
    a designed interface, fun and pretty (the water visuals, and the Tape as
    a 4-track tape machine — see Look and feel); the remaining gestures
-   (Stir, Wave, Still) and Phase (ice / liquid / vapor); and some of MIDI, Vessel
-   and hosting for testers, scoped with Dash when we get there. It ends in
-   user testing; what testers find feeds the phases below.
+   (Stir, Wave, Still) and Phase (ice / liquid / vapor); and some of MIDI,
+   Vessel and hosting for testers, scoped with Dash when we get there. It ends
+   in user testing; what testers find feeds the phases below. The first
+   testing release (Dash, Oct 2026): hosted on Netlify or Cloudflare Pages,
+   record piece (WAV), a first-run "how to play" guide that stays true to
+   "you don't play notes", a feedback form link, and settings kept in the
+   browser. Stir, Wave, Still, Phase and MIDI come later in this phase.
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
    including its gestures and the Phase modes).

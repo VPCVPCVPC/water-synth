@@ -2,6 +2,8 @@
 //   node serve.mjs            → http://localhost:8123 (this computer only)
 //   node serve.mjs --https    → https://<this computer's address>:8443, for an
 //                               iPad or iPhone on the same network
+//   node serve.mjs --dist     → serves the hosted build (prototype/dist, after
+//                               node build.mjs), to try it before uploading
 //
 // Sends the cross-origin isolation headers that SharedArrayBuffer needs (the
 // page ↔ audio-thread queues). Browsers only allow that on a secure page:
@@ -20,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = fileURLToPath(new URL('.', import.meta.url));
+const ROOT = fileURLToPath(new URL(process.argv.includes('--dist') ? './dist/' : '.', import.meta.url));
 const HTTPS = process.argv.includes('--https');
 const PORT = Number(process.env.PORT) || (HTTPS ? 8443 : 8123);
 const TYPES = {

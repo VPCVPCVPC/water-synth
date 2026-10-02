@@ -56,6 +56,30 @@
     .track { height: 1px; background: var(--faint); overflow: hidden; }
     .fill { height: 100%; width: 0; background: var(--fg); }
     .fill.hot { animation: blink 0.5s steps(2) infinite; }
+    /* Record piece: what you hear, saved as a WAV. */
+    .piece { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    #piece-rec { display: inline-flex; align-items: center; gap: 10px; }
+    #piece-rec .dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; }
+    #piece-rec.rec .dot { background: currentColor; animation: blink 0.8s steps(2) infinite; }
+    .piece-time { color: var(--muted); font: 400 12px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.12em; }
+    .piece-save { color: var(--fg); border: 1px solid var(--fg); padding: 8px 12px; text-decoration: none; }
+    .piece-save:hover { background: var(--fg); color: var(--bg); }
+    .piece-save[hidden] { display: none; }
+    .piece .spacer { flex: 1; }
+    #help { width: 44px; min-height: 44px; padding: 0; }
+    .link { color: var(--fg); text-decoration: none; display: inline-flex; align-items: center; min-height: 44px;
+      padding: 0 6px; border-bottom: 1px solid var(--muted); }
+    .link[hidden] { display: none; }
+    /* First run: how to play. */
+    .guide { position: fixed; inset: 0; z-index: 11; background: rgba(0, 0, 0, 0.88); display: flex;
+      align-items: flex-start; justify-content: center; padding: 16px; overflow-y: auto; }
+    .guide[hidden] { display: none; }
+    .guide-card { margin: auto; max-width: 520px; border: 1px solid var(--edge); background: #000; padding: 28px 26px 24px;
+      display: flex; flex-direction: column; gap: 16px; }
+    .guide-card h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.32em; }
+    .guide-card ol { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 10px; line-height: 1.75; }
+    .logo.small { width: 44px; }
+    .logo.small circle { fill: none; stroke: var(--fg); stroke-width: 4; }
     #status { color: var(--muted); min-height: 1.7em; text-align: center; -webkit-user-select: none; user-select: none; }
     button:disabled { opacity: 0.3; cursor: default; }
     b { font-weight: 700; }
@@ -238,6 +262,15 @@
     <div class="stage">
       <canvas id="surface" aria-label="Water surface: touch to drop, drag to disturb"></canvas>
       <div class="meter"><span>output</span><div class="track"><div id="output" class="fill"></div></div></div>
+      <div class="piece">
+        <button id="piece-rec" type="button" disabled><span class="dot"></span><span id="piece-label">record piece</span></button>
+        <span id="piece-time" class="piece-time" aria-live="off"></span>
+        <a id="piece-save" class="piece-save" hidden>save .wav</a>
+        <span class="spacer"></span>
+        <button id="help" type="button" aria-label="how to play">?</button>
+        <a id="feedback" class="link" target="_blank" rel="noopener" hidden
+          title="opens the feedback form; sends your device type and a few settings with it">feedback</a>
+      </div>
     </div>
     <section class="deck" id="deck" aria-label="Tape: a four-track machine">
       <div class="deck-top">
@@ -348,10 +381,29 @@
             you're editing (a stone that still follows the shared voice gets its own).</div>
           <label class="row" style="color: var(--muted); font-size: 12px">
             <input id="labels" type="checkbox"> show note names (dev aid)</label>
+          <button id="fresh" type="button">start fresh (forget saved settings, tap twice)</button>
         </fieldset>
       </div>
     </details>
   </main>
+  <div id="guide" class="guide" role="dialog" aria-modal="true" aria-labelledby="guide-title" hidden>
+    <div class="guide-card">
+      <svg class="logo small" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="10"/><circle cx="50" cy="50" r="22"/>
+        <circle cx="50" cy="50" r="34"/><circle cx="50" cy="50" r="46"/></svg>
+      <h2 id="guide-title">How to play</h2>
+      <ol>
+        <li><b>Touch the water.</b> Ripples spread; stones ring when they reach them. You don't pick notes — the water does.
+          Where you touch changes what plays, and the same touch never plays quite the same twice. Leave it and it falls quiet.</li>
+        <li><b>Drag</b> to draw a trail of ripples. Every finger is its own touch.</li>
+        <li><b>Tap a stone</b> to lift it, then tap the water to set it down. Its sound is under Voice.</li>
+        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks.</li>
+        <li><b>Record piece</b> saves everything you hear as a WAV.</li>
+      </ol>
+      <p class="note">Knobs: drag the dial up or down; double-tap to reset. Your settings stay in this browser.
+        The feedback link sends your device type and a few settings along with your answers.</p>
+      <button id="guide-close" type="button">begin</button>
+    </div>
+  </div>
   <button id="start"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true">
       <circle cx="50" cy="50" r="8"/><circle cx="50" cy="50" r="14"/><circle cx="50" cy="50" r="20"/>
       <circle cx="50" cy="50" r="26"/><circle cx="50" cy="50" r="32"/><circle cx="50" cy="50" r="38"/><circle cx="50" cy="50" r="44"/>

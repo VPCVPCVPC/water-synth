@@ -17,6 +17,8 @@ import {
 } from './tape.js';
 import { REFERENCE_SPEED, SURFACE_W, SURFACE_H, SIM_RATE } from './surface.js';
 import { MAX_STONES } from './stones.js';
+import { PieceRecorder, pieceName, MAX_RECORD_SECONDS } from './record.js';
+import { FEEDBACK_URL } from './config.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
 import {
   LOOP_LAYERS, EMPTY, RECORDING, PLAYING, OVERDUB, STOPPED,
@@ -47,7 +49,11 @@ if (window.matchMedia('(max-width: 700px), (max-height: 500px)').matches) docume
 function wake() {
   if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  wake();
+  if (recorder && recorder.recording) recorder.drain(); // catch up at once after being hidden
+});
 
 // The pond is landscape (128 × 97). On a portrait screen it's shown turned a
 // quarter-turn so it fills the height; touches and drawing map through the
@@ -211,7 +217,7 @@ function buildStoneControls() {
   stoneCountKnob = count;
   const row = knob({
     label: 'spread', hint: 'gathered in loose clumps ↔ spread evenly over the whole pond',
-    get: () => layout.spread, set: (v) => { layout.spread = v; rearrange(); }, def: layout.spread,
+    get: () => layout.spread, set: (v) => { layout.spread = v; rearrange(); }, def: 1,
     to: (v) => v, from: (f) => f, show: (v) => (v > 0.95 ? 'even' : v < 0.05 ? 'gathered' : `${Math.round(v * 100)}`),
   });
   document.getElementById('stone-controls').append(count.el, row.el);
@@ -720,6 +726,8 @@ function buildLoopControls() {
 
   const quantize = document.getElementById('quantize');
   const shown = document.querySelector('.quantized');
+  quantize.checked = values.quantize === 1; // a restored session
+  shown.hidden = !quantize.checked;
   quantize.addEventListener('change', () => {
     values.quantize = quantize.checked ? 1 : 0;
     shown.hidden = !quantize.checked;
@@ -815,6 +823,108 @@ function paintTrack(ui, t) {
 
 // ---- start ---------------------------------------------------------------------------
 
+// ---- the session: settings kept in this browser ----------------------------------------
+//
+// Knobs, tuning, the stone layout and voices come back when a tester returns.
+// Everything read back is checked and clamped; a broken or foreign entry is
+// ignored. (Tapes and recordings are not kept.)
+
+const SESSION_KEY = 'water-synth.session';
+const num = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined);
+function restoreSession() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return; }
+  if (!saved || saved.v !== 1) return;
+  for (const [k, p] of Object.entries(PARAMS)) {
+    const v = num(saved.values && saved.values[k], p.min, p.max);
+    if (v !== undefined) values[k] = (k === 'quantize' || k === 'grid' || k === 'bpm') ? Math.round(v) : v;
+  }
+  if (!(values.grid >= 1 && values.grid <= 4)) values.grid = PARAMS.grid.def; // the page offers quarters to sixteenths
+  const t = saved.tuning || {};
+  if (typeof t.scale === 'string' && Object.prototype.hasOwnProperty.call(SCALES, t.scale)) tuning.scale = t.scale;
+  const root = num(t.root, 0, 11); if (root !== undefined) tuning.root = Math.round(root);
+  const low = num(t.low, RANGE_LOW, RANGE_HIGH), high = num(t.high, RANGE_LOW, RANGE_HIGH);
+  if (low !== undefined && high !== undefined && low <= high) { tuning.low = Math.round(low); tuning.high = Math.round(high); }
+  const ref = num(t.refHz, REF_MIN_HZ, REF_MAX_HZ); if (ref !== undefined) tuning.refHz = ref;
+  const count = num(t.stoneCount, 0, MAX_STONES); if (count !== undefined) tuning.stoneCount = Math.round(count);
+  const l = saved.layout || {};
+  const seed = num(l.seed, 0, 1e9); if (seed !== undefined) layout.seed = Math.round(seed);
+  const spread = num(l.spread, 0, 1); if (spread !== undefined) layout.spread = spread;
+  for (const e of Array.isArray(saved.placed) ? saved.placed : []) {
+    const i = num(e && e[0], 0, MAX_STONES - 1), x = num(e && e[1], 0, 1), y = num(e && e[2], 0, 1);
+    if (i !== undefined && x !== undefined && y !== undefined) placed.set(Math.round(i), { x, y });
+  }
+  const voice = (o) => Object.fromEntries(VOICE_KEYS.map((k) => {
+    const p = VOICE_PARAMS[k], v = num(o && o[k], p.min, p.max);
+    return [k, v === undefined ? p.def : v];
+  }));
+  if (saved.voices && saved.voices.shared) voiceValues.set(SHARED, voice(saved.voices.shared));
+  for (const e of Array.isArray(saved.voices && saved.voices.own) ? saved.voices.own : []) {
+    const i = num(e && e[0], 0, MAX_STONES - 1);
+    if (i === undefined) continue;
+    voiceValues.set(Math.round(i), voice(e[1]));
+    overridden.add(Math.round(i));
+  }
+}
+let lastSaved = '';
+function saveSession() {
+  const own = [...overridden].map((i) => [i, voiceValues.get(i)]);
+  const json = JSON.stringify({
+    v: 1, values, tuning, layout, placed: [...placed].map(([i, p]) => [i, p.x, p.y]),
+    voices: { shared: voiceValues.get(SHARED), own },
+  });
+  if (json === lastSaved) return;
+  try { localStorage.setItem(SESSION_KEY, json); lastSaved = json; } catch { /* private window: not kept */ }
+}
+restoreSession();
+const autosave = setInterval(saveSession, 2000);
+window.addEventListener('pagehide', saveSession);
+confirmButton(document.getElementById('fresh'), () => {
+  clearInterval(autosave); // nothing may re-save the old settings on the way out
+  window.removeEventListener('pagehide', saveSession);
+  try { localStorage.removeItem(SESSION_KEY); } catch { /* nothing kept anyway */ }
+  location.reload();
+});
+
+// ---- first run: how to play; help and feedback ------------------------------------------
+
+const GUIDE_KEY = 'water-synth.guided';
+const guide = document.getElementById('guide'), guideClose = document.getElementById('guide-close');
+let guideOpener = null;
+function showGuide() {
+  guideOpener = document.activeElement !== document.body ? document.activeElement : surface;
+  guide.hidden = false;
+  guideClose.focus();
+}
+function hideGuide() {
+  if (guide.hidden) return;
+  guide.hidden = true;
+  try { localStorage.setItem(GUIDE_KEY, '1'); } catch { /* shows again next time */ }
+  if (guideOpener && guideOpener.focus) guideOpener.focus({ preventScroll: true });
+}
+guideClose.addEventListener('click', hideGuide);
+guide.addEventListener('click', (e) => { if (e.target === guide) hideGuide(); });
+document.addEventListener('keydown', (e) => {
+  if (guide.hidden) return;
+  if (e.key === 'Escape') hideGuide();
+  else if (e.key === 'Tab') { e.preventDefault(); guideClose.focus(); } // the guide's one control keeps focus
+});
+document.getElementById('help').addEventListener('click', showGuide);
+const firstRun = () => { try { return !localStorage.getItem(GUIDE_KEY); } catch { return true; } };
+const feedback = document.getElementById('feedback');
+if (FEEDBACK_URL) {
+  feedback.hidden = false;
+  // Device and settings, for context (only the tester's own setup), filled
+  // in whenever the link is about to be used — tap, click, long-press, focus.
+  const withInfo = () => {
+    const info = `${navigator.userAgent.replace(/\s+/g, ' ').slice(0, 160)} | ${tuning.scale} ${ROOTS[tuning.root]} ` +
+      `${stones.count} stones | flow ${values.waveSpeed.toFixed(0)} | quantize ${values.quantize ? 'on' : 'off'}`;
+    feedback.href = FEEDBACK_URL.replace('{info}', encodeURIComponent(info));
+  };
+  for (const type of ['pointerdown', 'focus', 'click', 'contextmenu']) feedback.addEventListener(type, withInfo);
+  feedback.href = FEEDBACK_URL.replace('{info}', '');
+}
+
 buildTuningControls();
 buildKnobs();
 buildVoiceControls();
@@ -847,6 +957,7 @@ async function startAudio() {
   ctx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
   const resumed = ctx.resume(); // inside the tap, before anything is awaited
   await ctx.audioWorklet.addModule('water-worklet.js');
+  await ctx.audioWorklet.addModule('rec-worklet.js');
 
   const eventBuffer = createRingBuffer(1024);
   const visualBuffer = createVisualBuffer(GRID_W * GRID_H);
@@ -860,6 +971,12 @@ async function startAudio() {
     processorOptions: { eventBuffer, visualBuffer, seed },
   });
   node.connect(ctx.destination);
+  // A phone gets a shorter cap: a long piece's samples, and the file built
+  // from them, have to fit in its memory at once.
+  const pieceMinutes = matchMedia('(pointer: coarse)').matches ? 6 : MAX_RECORD_SECONDS / 60;
+  recorder = new PieceRecorder(ctx, node, { maxSeconds: pieceMinutes * 60 });
+  recorder.onlimit = () => finishPiece(`stopped at the ${pieceMinutes}-minute limit`);
+  document.getElementById('piece-rec').disabled = false;
   node.onprocessorerror = () => {
     status.textContent = 'The audio engine stopped with an error — see the browser console.';
   };
@@ -878,12 +995,55 @@ async function startAudio() {
 
   for (const k of Object.keys(PARAMS)) sendParam(k);
   for (const k of VOICE_KEYS) sendVoice(k);
+  for (const i of overridden) sendOverride(i, 1); // stones with their own voice (restored)
   retune();
   requestAnimationFrame(draw); // draw even if iOS holds the resume back
   status.textContent = 'waking the water…';
+  if (firstRun()) showGuide();
   await resumed;
   playingStatus = `${ctx.sampleRate} Hz · touch to drop, drag to disturb — any number of fingers`;
   status.textContent = playingStatus;
+}
+
+// ---- record piece: what you hear, as a WAV -------------------------------------------------
+
+let recorder = null, pieceUrl = '', pieceTimer = 0, pieceSaved = true, discardArmed = 0;
+const pieceRec = document.getElementById('piece-rec'), pieceLabel = document.getElementById('piece-label');
+const pieceTime = document.getElementById('piece-time'), pieceSave = document.getElementById('piece-save');
+const clock = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+pieceRec.addEventListener('click', () => {
+  if (!recorder) return;
+  if (recorder.recording) { finishPiece(); return; }
+  // A take that hasn't been saved yet: the first tap only asks.
+  if (pieceUrl && !pieceSaved && !discardArmed) {
+    pieceLabel.textContent = 'tap again: discard the last piece';
+    discardArmed = setTimeout(() => { discardArmed = 0; pieceLabel.textContent = 'record piece'; }, 3000);
+    return;
+  }
+  clearTimeout(discardArmed); discardArmed = 0;
+  if (pieceUrl) { URL.revokeObjectURL(pieceUrl); pieceUrl = ''; }
+  pieceSave.hidden = true;
+  recorder.start();
+  pieceRec.classList.add('rec');
+  pieceLabel.textContent = 'stop';
+  pieceRec.setAttribute('aria-label', 'stop recording the piece');
+  pieceTimer = setInterval(() => { pieceTime.textContent = clock(recorder.seconds); }, 250);
+});
+pieceSave.addEventListener('click', () => { pieceSaved = true; });
+function finishPiece(note) {
+  clearInterval(pieceTimer);
+  const blob = recorder.stop();
+  pieceRec.classList.remove('rec');
+  pieceLabel.textContent = 'record piece';
+  pieceRec.setAttribute('aria-label', 'record the piece');
+  if (!blob) { pieceTime.textContent = ''; return; }
+  pieceUrl = URL.createObjectURL(blob);
+  pieceSaved = false;
+  pieceSave.href = pieceUrl;
+  pieceSave.download = pieceName();
+  pieceSave.hidden = false;
+  const gap = recorder.gapSeconds >= 0.05 ? ` · ${recorder.gapSeconds.toFixed(1)} s silent where the page fell behind` : '';
+  pieceTime.textContent = `${clock(recorder.seconds)} · ${(blob.size / 1048576).toFixed(1)} MB${gap}${note ? ` · ${note}` : ''}`;
 }
 
 // ---- gestures: every finger, pen or mouse is its own disturbance ------------------------

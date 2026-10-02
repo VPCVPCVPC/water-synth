@@ -57,6 +57,34 @@ water is the same, so stereo still follows the pond: its left and right are
 the top and bottom of an upright phone. Older devices may struggle with the
 CPU; say if it stutters.
 
+## Hosting it for testers
+
+The page is static, so any static host works — as long as it sends the two
+cross-origin isolation headers the audio engine needs. The build writes them.
+
+```bash
+node prototype/build.mjs
+```
+
+That makes `prototype/dist/` (the page, its modules and the fonts — not the
+checks) with a `_headers` file. To try the built copy before uploading:
+`node prototype/serve.mjs --dist`.
+
+- **Netlify:** `netlify.toml` at the repository root already says how to build.
+  Connect the repository (or drag `prototype/dist` onto Netlify's deploy page).
+- **Cloudflare Pages:** build command `node prototype/build.mjs`, output
+  directory `prototype/dist`. It reads the same `_headers`.
+
+**Feedback:** put your form's link in `prototype/config.js` (`FEEDBACK_URL`)
+and a **feedback** link appears under the pond. If the link contains
+`{info}`, the tester's device and a few settings are filled in there (for a
+Tally hidden field, or a Google Form pre-filled answer).
+
+Testers see a short **how to play** guide the first time (the **?** button
+shows it again). Their settings stay in their browser between visits — knobs,
+tuning, stones and voices, not tapes or recordings; **start fresh** (under
+Voice) forgets them.
+
 ## Playing
 
 - **Touch** — a drop: a ring of ripples spreads from where you touch. Every
@@ -74,6 +102,10 @@ CPU; say if it stutters.
 ## Controls
 
 The controls live under the pond (tucked into a "Controls" drawer on phones).
+
+**Record piece** (under the pond) — records everything you hear, the water
+and the tape, and **save .wav** downloads it (16-bit stereo, about 11 MB a
+minute; up to 10 minutes per piece on a computer, 6 on a phone or tablet).
 
 **Tape** — a four-track tape machine beside the pond (styled after Dieter
 Rams): it records the water's *sound* and plays it back fixed, like a loop
@@ -296,6 +328,16 @@ voice editor untouched you hear exactly the Phase 1c bell.
     enough to hit on the phone? Does editing the lifted stone's voice feel
     natural?
 
+**Before testers see it:**
+
+33. Read the how-to-play guide as a newcomer. Does it set the right
+    expectations — the water chooses the notes, where you touch changes the
+    phrase, and it falls quiet by itself?
+34. Record a piece and save it. Does anyone confuse the tape's **rec** with
+    **record piece**? Is 10 minutes per piece (6 on a phone) enough for slow-flow pieces?
+35. Come back later: are your settings as you left them? Is **start fresh**
+    easy to find?
+
 ### Decisions for Dash
 
 - **What makes a stone ring.** Phase 1b's hypothesis — a crest whose peak
@@ -355,8 +397,10 @@ voice editor untouched you hear exactly the Phase 1c bell.
 cd prototype && npm run check
 ```
 
-About four minutes; seven files (the voices CPU budget is a process of its own):
+About four minutes; eight files (the voices CPU budget is a process of its own):
 
+- `check-record.mjs` — record piece: 16-bit conversion with dither, clipping
+  and bad samples, the WAV header and data, the file name.
 - `check-tuning.mjs` — references (440, 432, any), scale building, maqam Rast,
   a non-octave scale, labels, bad input.
 - `check-water.mjs` — energy never rises once gestures stop; wave speed and
@@ -422,6 +466,9 @@ About four minutes; seven files (the voices CPU budget is a process of its own):
 | `ring.js` | Lock-free queue: page → audio thread. |
 | `visuals.js` | Lock-free frames: audio thread → page. |
 | `main.js`, `index.html` | The page: drawing, gestures, controls. |
+| `record.js`, `rec-worklet.js` | Record piece: a tap on the output, written as a WAV. |
+| `config.js` | The feedback form link for the hosted version. |
+| `build.mjs` | Builds `dist/` for hosting, with the headers file. |
 | `fonts/` | Syncopate (Apache 2.0), bundled so the page works offline. |
 | `serve.mjs` | Local server with the headers shared memory needs; `--https` for devices. |
 | `check-*.mjs` | The checks (`check-lib.mjs`: FFT and pitch measuring shared by them). |

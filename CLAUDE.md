@@ -200,8 +200,12 @@ tape section looks like a real 4-track tape machine, after Dieter Rams. The
 water is drawn in greys — light crests, dark troughs — like light on still
 water. Dash's brand mark is a set of white concentric rings on black (a
 ripple); that motif carries through the knobs, the tape reels and the start
-screen. Controls are knobs where a knob reads as part of an instrument; the
-tape sits beside the pond so the page needs little scrolling. Fonts are
+screen. Controls are knobs where a knob reads as part of an instrument.
+Controls never fold away, and most sit above the fold (Dash, Oct 2026): water
+and stones form a strip along the bottom of the pond (tabbed: water | stones),
+the beat right under it, the tape below; voice runs down the right side. On a
+phone the controls are one strip of pages with tabs as labels — swipe or tap.
+Fonts are
 bundled, so the page works offline.
 
 ## Tuning and scales

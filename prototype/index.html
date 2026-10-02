@@ -33,26 +33,119 @@
       --track: 0.16em;
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg);
       font: 400 11px/1.7 var(--font); letter-spacing: var(--track); text-transform: uppercase;
       -webkit-text-size-adjust: 100%; touch-action: manipulation; }
-    main { display: flex; flex-direction: column; align-items: center; gap: 22px;
-      padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    main { display: flex; flex-direction: column; align-items: center; gap: 14px;
+      padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
         max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-    /* The pond and the tape side by side on wide screens; stacked on phones. */
-    .top { width: min(100%, 1400px); display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; justify-items: center; }
-    /* Side by side on wide screens and in landscape; a portrait iPad keeps the pond big. */
-    @media (min-width: 1000px), (min-width: 720px) and (orientation: landscape) {
-      .top { grid-template-columns: minmax(0, 1fr) clamp(290px, 30vw, 360px); gap: 16px; align-items: start; justify-items: stretch; }
-      .top .stage { justify-self: end; }
+    /* The bar: record piece, help, feedback. */
+    .bar { width: min(100%, 1400px); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .bar .spacer { flex: 1; }
+    @media (max-width: 520px) {
+      .bar { gap: 8px; flex-wrap: nowrap; }
+      .bar > * { flex: none; }
+      .bar .spacer { flex: 1 1 0; min-width: 0; }
+      .bar .link { padding: 0 2px; }
+      #piece-rec { padding: 8px 10px; }
+      .piece-save { padding: 8px 8px; }
     }
-    .stage { width: min(100%, 980px); width: min(100%, 980px, calc((100dvh - 110px) * 128 / 97));
-      display: flex; flex-direction: column; gap: 10px; -webkit-user-select: none; user-select: none; }
+    @media (max-width: 360px) { .bar { flex-wrap: wrap; } }
+
+    /* ---- layout -------------------------------------------------------------
+       Phones and tablets (the default): the pond, then one strip of pages
+       with tabs — tap a tab or swipe. Wide screens: the pond with its control
+       strip along the bottom (water | stones), the beat under it, the tape
+       below; tuning and voice down the right. A phone on its side: the pond
+       on the left, the pages beside it. --below is the room kept under the
+       pond so the controls start above the fold. */
+    .instrument { --below: 330px; width: min(100%, 1400px); display: flex; flex-direction: column; align-items: center; }
+    .stage { width: min(100%, calc((100dvh - var(--below)) * 128 / 97)); min-width: min(100%, 300px);
+      display: flex; flex-direction: column; -webkit-user-select: none; user-select: none; }
+    .instrument.rotated .stage { width: min(100%, calc((100dvh - var(--below)) * 97 / 128)); }
+    .tabs { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-bottom: 1px solid var(--edge);
+      margin-top: 10px; position: sticky; top: 0; z-index: 2; background: var(--bg); }
+    .tabs button { border: 0; border-bottom: 2px solid transparent; padding: 10px 0 8px; font-size: 10px; letter-spacing: 0.06em;
+      color: var(--muted); min-width: 0; overflow: hidden; }
+    @media (max-width: 400px) {
+      /* Very narrow: the tabs scroll sideways rather than crowd. */
+      .tabs { grid-template-columns: repeat(6, minmax(58px, 1fr)); overflow-x: auto; scrollbar-width: none; }
+      .tabs::-webkit-scrollbar { display: none; }
+    }
+    .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+    .tabs button:focus-visible { outline: 1px solid var(--fg); outline-offset: -3px; }
+    .pages { width: 100%; padding-top: 18px; touch-action: pan-y; overflow-x: clip; }
+    .page:not(.active) { display: none; }
+    .page.in-right { animation: in-right 0.22s ease-out; }
+    .page.in-left { animation: in-left 0.22s ease-out; }
+    @keyframes in-right { from { transform: translateX(28px); opacity: 0; } }
+    @keyframes in-left { from { transform: translateX(-28px); opacity: 0; } }
+    .side { display: contents; }
+    .page fieldset { border-top: 0; padding-top: 0; }
+    .page fieldset > legend { display: none; } /* the tab is its label */
+    #page-tape .deck { margin: 0 auto; }
+
+    @media (orientation: landscape) and (max-height: 599px) {
+      /* A phone on its side: the pond fills the height, the pages beside it. */
+      .instrument { --below: 76px; display: grid; align-items: start; column-gap: 18px; grid-template-rows: auto 1fr;
+        grid-template-columns: min(62vw, calc((100dvh - var(--below)) * 128 / 97)) minmax(0, 1fr); }
+      .instrument > .stage, .instrument.rotated > .stage { grid-row: 1 / span 2; width: 100%; min-width: 0; position: sticky; top: 8px; }
+      .tabs { margin-top: 0; }
+    }
+
+    @media (min-width: 1000px) and (min-height: 600px) {
+      /* The pond with its strip along the bottom (tabs: water | stones), the
+         beat under it, the tape below; tuning and voice down the right. */
+      .instrument { --below: 325px; --side: clamp(300px, 26vw, 380px);
+        --pond: max(520px, min(calc(100vw - 32px - 26px - var(--side)), calc((100dvh - var(--below)) * 128 / 97)));
+        display: grid; align-items: start; justify-content: center; column-gap: 26px;
+        grid-template-columns: var(--pond) var(--side);
+        grid-template-rows: auto auto auto auto 1fr;
+        grid-template-areas: "stage side" "tabs side" "strip side" "beat side" "tape side"; }
+      .instrument > .stage, .instrument.rotated > .stage { grid-area: stage; width: 100%; min-width: 0; }
+      .pages { display: contents; }
+      /* The strip sits in the pond's frame. */
+      .tabs { grid-area: tabs; margin: 0; position: static; display: flex; background: var(--surface);
+        border: 1px solid var(--edge); border-top: 0; border-bottom: 1px solid var(--edge); padding: 0 8px; }
+      .tabs button { flex: none; padding: 9px 12px 7px; }
+      .tabs button:not([data-page="water"]):not([data-page="stones"]) { display: none; }
+      #page-water, #page-stones { grid-area: strip; background: var(--surface); border: 1px solid var(--edge); border-top: 0;
+        padding: 12px 16px 12px; min-height: 124px; }
+      #page-beat, #page-tuning, #page-voice, #page-tape { display: block; animation: none; }
+      #page-beat { grid-area: beat; padding: 12px 0 0; }
+      #page-tape { grid-area: tape; padding-top: 26px; }
+      .side { display: flex; flex-direction: column; gap: 22px; grid-area: side; }
+      .side .page fieldset > legend { display: block; }
+      .side fieldset { padding-top: 0; }
+      .page .note.long { display: none; }
+      .page .knobs { grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 12px 4px; }
+      .page .knob svg { width: 40px; height: 40px; }
+      /* Water and stones each in one row. */
+      #page-water fieldset, #page-stones fieldset { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+      #page-water fieldset > legend, #page-stones fieldset > legend { display: none; } /* the strip's tabs name them */
+      #page-water .knobs, #page-stones .knobs { display: flex; gap: 4px; }
+      #page-water .knob { width: 80px; }
+      #page-stones .knob { width: 62px; }
+      #page-water #defaults { margin-left: auto; max-width: 11em; }
+      #page-stones .row:first-of-type { flex-direction: column; align-items: stretch; gap: 6px; }
+      .animate { display: flex; flex-direction: column; gap: 4px; flex: 1 1 250px; min-width: 250px; }
+      .animate .sub { margin: 0; }
+      #page-stones #path-row, #page-stones #camera-row { flex-basis: 100%; }
+      /* The beat in one line. */
+      #page-beat fieldset { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+      #page-beat fieldset > legend { display: block; float: left; }
+      #page-beat .quantized:not([hidden]) { display: flex; align-items: center; gap: 10px 22px; flex-wrap: wrap; }
+      #page-beat .quantized .knobs { display: flex; gap: 4px; }
+      #page-beat .quantized .knob { width: 66px; }
+      #page-beat .field { display: flex; gap: 10px; }
+      #page-beat #bpm { width: 5em; }
+    }
     #surface { width: 100%; aspect-ratio: 128 / 97; display: block; background: var(--surface);
       border: 1px solid var(--edge); touch-action: none; cursor: crosshair;
       -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     #surface.moving { cursor: grab; }
-    .meter { display: grid; grid-template-columns: 6em 1fr; align-items: center; gap: 12px; color: var(--muted); }
+    .meter { padding: 0; }
     .track { height: 1px; background: var(--faint); overflow: hidden; }
     .fill { height: 100%; width: 0; background: var(--fg); }
     .fill.hot { animation: blink 0.5s steps(2) infinite; }
@@ -64,16 +157,12 @@
     .piece-time { color: var(--muted); font: 400 12px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.12em; }
     .piece-save { color: var(--fg); border: 1px solid var(--fg); padding: 8px 12px; text-decoration: none; }
     .piece-save:hover { background: var(--fg); color: var(--bg); }
-    .piece-save[hidden] { display: none; }
-    .piece .spacer { flex: 1; }
     #help { width: 44px; min-height: 44px; padding: 0; }
     .link { color: var(--fg); text-decoration: none; display: inline-flex; align-items: center; min-height: 44px;
       padding: 0 6px; border-bottom: 1px solid var(--muted); }
-    .link[hidden] { display: none; }
     /* First run: how to play. */
     .guide { position: fixed; inset: 0; z-index: 11; background: rgba(0, 0, 0, 0.88); display: flex;
       align-items: flex-start; justify-content: center; padding: 16px; overflow-y: auto; }
-    .guide[hidden] { display: none; }
     .guide-card { margin: auto; max-width: 520px; border: 1px solid var(--edge); background: #000; padding: 28px 26px 24px;
       display: flex; flex-direction: column; gap: 16px; }
     .guide-card h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.32em; }
@@ -84,14 +173,6 @@
     button:disabled { opacity: 0.3; cursor: default; }
     b { font-weight: 700; }
 
-    /* Controls: a drawer on small screens, always open on large ones. */
-    #drawer { width: min(100%, 1400px); }
-    #drawer > summary { list-style: none; cursor: pointer; text-align: center; color: var(--muted);
-      padding: 12px; border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge); min-height: 44px; }
-    #drawer > summary::-webkit-details-marker { display: none; }
-    #drawer[open] > summary { margin-bottom: 24px; }
-    .panel { display: grid; gap: 34px 32px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-    @media (min-width: 900px) { .panel .wide { grid-column: span 2; } }
     /* Knobs, after the logo's rings. */
     .knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 18px 6px; }
     .knob { display: flex; flex-direction: column; align-items: center; gap: 5px;
@@ -142,18 +223,13 @@
     input[type=checkbox] { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; min-height: 0;
       margin: 0 6px 0 0; border: 1px solid var(--fg); background: transparent; cursor: pointer; flex: none; }
     input[type=checkbox]:checked { background: var(--fg); box-shadow: inset 0 0 0 3px var(--bg); }
-    details.group > summary { cursor: pointer; min-height: 36px; display: flex; align-items: center;
-      border: 1px solid var(--faint); padding: 6px 10px; list-style: none; }
-    details.group > summary::-webkit-details-marker { display: none; }
-    details.group > summary::before { content: '+'; margin-right: 10px; }
-    details.group[open] > summary::before { content: '−'; }
     .saved { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
     .saved > span { overflow-wrap: anywhere; }
     .saved + .saved { margin-top: 8px; }
     .group-body { display: flex; flex-direction: column; gap: 14px; padding-top: 10px; }
-    .quantized[hidden] { display: none; }
     @keyframes blink { 50% { opacity: 0.25; } }
     @media (prefers-reduced-motion: reduce) {
+      .page.in-right, .page.in-left { animation: none; }
       .deck.running .reel svg, .ch[data-state="rec"] .lamp, .fill.hot, button.confirm { animation: none; }
       .ch[data-state="rec"] .lamp { background: transparent; box-shadow: inset 0 0 0 2px var(--ink); }
     }
@@ -162,14 +238,6 @@
     .deck { background: var(--panel); color: var(--ink); border-radius: 6px;
       padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 16px; max-width: 760px;
       width: 100%; justify-self: center; box-shadow: 0 1px 0 #fff inset, 0 20px 40px -20px #000; }
-    @media (min-width: 1000px), (min-width: 720px) and (orientation: landscape) {
-      .deck { padding: 14px 12px 12px; gap: 12px; }
-      .deck .reel { width: clamp(64px, 7vw, 96px); }
-      .deck .channels { gap: 8px; }
-      .deck .deck-foot { grid-template-columns: 1fr; }
-      .deck .note { display: none; }
-      .deck .counter { font-size: 12px; width: 7.6em; }
-    }
     @media (min-width: 1000px) and (pointer: fine), (min-width: 720px) and (orientation: landscape) and (pointer: fine) {
       .deck .key { min-height: 34px; }
     }
@@ -251,7 +319,6 @@
     #start { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 34px; align-items: center; justify-content: center;
       background: rgba(0, 0, 0, 0.92); color: var(--fg); font: 400 13px var(--font); letter-spacing: 0.4em;
       text-transform: uppercase; border: 0; cursor: pointer; width: 100%; border-radius: 0; z-index: 10; }
-    #start[hidden] { display: none; }
     #start .logo { width: min(42vw, 220px); }
     #start .logo circle { fill: none; stroke: var(--fg); stroke-width: 1.8; transform-origin: 50px 50px;
       animation: breathe 6s ease-in-out infinite; }
@@ -264,149 +331,164 @@
 </head>
 <body>
   <main>
-    <div class="top">
-    <div class="stage">
-      <canvas id="surface" aria-label="Water surface: touch to drop, drag to disturb"></canvas>
-      <div class="meter"><span>output</span><div class="track"><div id="output" class="fill"></div></div></div>
-      <div class="piece">
-        <button id="piece-rec" type="button" disabled><span class="dot"></span><span id="piece-label">record piece</span></button>
-        <span id="piece-time" class="piece-time" aria-live="off"></span>
-        <a id="piece-save" class="piece-save" hidden>save .wav</a>
-        <span class="spacer"></span>
-        <button id="help" type="button" aria-label="how to play">?</button>
-        <a id="feedback" class="link" target="_blank" rel="noopener" hidden
-          title="opens the feedback form; sends your device type and a few settings with it">feedback</a>
+    <header class="bar">
+      <button id="piece-rec" type="button" disabled><span class="dot"></span><span id="piece-label">record piece</span></button>
+      <span id="piece-time" class="piece-time" aria-live="off"></span>
+      <a id="piece-save" class="piece-save" hidden>save .wav</a>
+      <span class="spacer"></span>
+      <button id="help" type="button" aria-label="how to play">?</button>
+      <a id="feedback" class="link" target="_blank" rel="noopener" hidden
+        title="opens the feedback form; sends your device type and a few settings with it">feedback</a>
+    </header>
+    <!-- The pond, its control strip along the bottom (water, stones), the beat
+         under that, the tape below; tuning and voice down the right. On a phone
+         or tablet the controls are one strip of pages: tap a tab or swipe. -->
+    <div class="instrument" id="instrument">
+      <div class="stage">
+        <canvas id="surface" aria-label="Water surface: touch to drop, drag to disturb"></canvas>
+        <div class="meter" aria-hidden="true"><div class="track"><div id="output" class="fill"></div></div></div>
       </div>
-    </div>
-    <section class="deck" id="deck" aria-label="Tape: a four-track machine">
-      <div class="deck-top">
-      <div class="reel left" aria-hidden="true"><svg viewBox="0 0 100 100">
-            <circle class="flange" cx="50" cy="50" r="49"/><circle class="groove" cx="50" cy="50" r="44"/><circle class="groove" cx="50" cy="50" r="38"/><circle class="groove" cx="50" cy="50" r="32"/><circle class="groove" cx="50" cy="50" r="26"/><circle class="groove" cx="50" cy="50" r="20"/>
-            <circle class="hub" cx="50" cy="50" r="13"/>
-            <circle class="hole" cx="50" cy="42.5" r="2.6"/><circle class="hole" cx="56.5" cy="53.8" r="2.6"/><circle class="hole" cx="43.5" cy="53.8" r="2.6"/>
-          </svg></div>
-        <div class="deck-mid">
-          <div class="deck-name">Tape</div>
-          <div class="counter" id="tape-counter" role="timer" aria-label="tape counter">00:00.0</div>
-          <div class="deck-sub">4 track</div>
+      <nav class="tabs" role="tablist" aria-label="controls">
+        <button type="button" role="tab" id="tab-water" aria-controls="page-water" data-page="water" aria-selected="false" tabindex="-1">water</button>
+        <button type="button" role="tab" id="tab-stones" aria-controls="page-stones" data-page="stones" aria-selected="false" tabindex="-1">stones</button>
+        <button type="button" role="tab" id="tab-beat" aria-controls="page-beat" data-page="beat" aria-selected="false" tabindex="-1">beat</button>
+        <button type="button" role="tab" id="tab-tuning" aria-controls="page-tuning" data-page="tuning" aria-selected="false" tabindex="-1">tuning</button>
+        <button type="button" role="tab" id="tab-voice" aria-controls="page-voice" data-page="voice" aria-selected="false" tabindex="-1">voice</button>
+        <button type="button" role="tab" id="tab-tape" aria-controls="page-tape" data-page="tape" aria-selected="false" tabindex="-1">tape</button>
+      </nav>
+      <div class="pages" id="pages">
+      <section class="page" id="page-water" data-page="water" role="tabpanel" aria-labelledby="tab-water">
+          <fieldset>
+            <legend>Water</legend>
+            <div id="water-controls" class="knobs"></div>
+            <button id="defaults" type="button" aria-label="water knobs back to defaults" title="water knobs back to defaults">defaults</button>
+          </fieldset>
+      </section>
+      <section class="page" id="page-stones" data-page="stones" role="tabpanel" aria-labelledby="tab-stones">
+          <fieldset>
+            <legend>Stones</legend>
+            <div class="row">
+              <button id="randomize" type="button">randomize</button>
+              <button id="release" type="button">release placed</button>
+            </div>
+            <div id="stone-controls" class="knobs"></div>
+            <div class="animate">
+            <span class="sub" id="animate-label">animate</span>
+            <div class="toggle five" id="animate-modes" role="group" aria-labelledby="animate-label">
+              <button type="button" data-mode="off" aria-pressed="true">rest</button>
+              <button type="button" data-mode="drift" aria-pressed="false">drift</button>
+              <button type="button" data-mode="path" aria-pressed="false">path</button>
+              <button type="button" data-mode="water" aria-pressed="false">water</button>
+              <button type="button" data-mode="camera" aria-pressed="false">camera</button>
+            </div>
+            </div>
+            <div class="row" id="path-row" hidden>
+              <button id="path-draw" type="button">draw a path</button>
+              <span class="note" id="path-note">then drag on the pond: the stones travel your line, back and forth</span>
+            </div>
+            <div class="row" id="camera-row" hidden>
+              <video id="camera" class="camera" playsinline muted aria-label="camera preview (stays on this device)"></video>
+              <span class="note" id="camera-note">move in front of the camera; the stones follow. The picture stays on this device.</span>
+            </div>
+            <div class="note long" id="stone-note">Tap a stone to pick it up, tap the water to put it down (or drag
+              it). Placed stones stay put when you retune or randomize; a stone moved through moving water
+              rings.</div>
+          </fieldset>
+      </section>
+      <section class="page" id="page-beat" data-page="beat" role="tabpanel" aria-labelledby="tab-beat">
+          <fieldset>
+            <legend>Beat</legend>
+            <label class="row" style="color: var(--fg)" title="pulls touches and notes toward the beat; at full strength every note lands on the grid">
+              <input id="quantize" type="checkbox"> quantize</label>
+            <div class="quantized" hidden>
+              <div class="field"><span>BPM</span><input id="bpm" type="number" min="40" max="240" step="1"></div>
+              <div class="field"><span>grid</span><select id="grid"></select></div>
+              <div id="quantize-controls" class="knobs"></div>
+            </div>
+            <div class="note long">Pulls touches and notes toward the beat — the pond's rim pulses on it. At full
+              strength every note lands on the grid; lower, the water keeps more of its own time. Tapes
+              become whole beats long.</div>
+          </fieldset>
+      </section>
+      <section class="page" id="page-tape" data-page="tape" role="tabpanel" aria-labelledby="tab-tape">
+        <section class="deck" id="deck" aria-label="Tape: a four-track machine">
+          <div class="deck-top">
+          <div class="reel left" aria-hidden="true"><svg viewBox="0 0 100 100">
+                <circle class="flange" cx="50" cy="50" r="49"/><circle class="groove" cx="50" cy="50" r="44"/><circle class="groove" cx="50" cy="50" r="38"/><circle class="groove" cx="50" cy="50" r="32"/><circle class="groove" cx="50" cy="50" r="26"/><circle class="groove" cx="50" cy="50" r="20"/>
+                <circle class="hub" cx="50" cy="50" r="13"/>
+                <circle class="hole" cx="50" cy="42.5" r="2.6"/><circle class="hole" cx="56.5" cy="53.8" r="2.6"/><circle class="hole" cx="43.5" cy="53.8" r="2.6"/>
+              </svg></div>
+            <div class="deck-mid">
+              <div class="deck-name">Tape</div>
+              <div class="counter" id="tape-counter" role="timer" aria-label="tape counter">00:00.0</div>
+              <div class="deck-sub">4 track</div>
+            </div>
+          <div class="reel right" aria-hidden="true"><svg viewBox="0 0 100 100">
+                <circle class="flange" cx="50" cy="50" r="49"/><circle class="groove" cx="50" cy="50" r="44"/><circle class="groove" cx="50" cy="50" r="38"/><circle class="groove" cx="50" cy="50" r="32"/><circle class="groove" cx="50" cy="50" r="26"/><circle class="groove" cx="50" cy="50" r="20"/>
+                <circle class="hub" cx="50" cy="50" r="13"/>
+                <circle class="hole" cx="50" cy="42.5" r="2.6"/><circle class="hole" cx="56.5" cy="53.8" r="2.6"/><circle class="hole" cx="43.5" cy="53.8" r="2.6"/>
+              </svg></div>
+          </div>
+          <div class="channels" id="layers"></div>
+          <div class="deck-foot">
+            <div id="tapes-controls"></div>
+            <button id="clear-all" class="key" type="button"><span class="glyph">×</span>clear all</button>
+          </div>
+          <div class="note">Each track records the water's sound and plays it back the same every pass —
+            whatever you retune. Overdub adds more on top. Stop, mute and clear fade.</div>
+        </section>
+      </section>
+        <div class="side">
+        <section class="page" id="page-tuning" data-page="tuning" role="tabpanel" aria-labelledby="tab-tuning">
+            <fieldset>
+              <legend>Tuning</legend>
+              <label class="field"><span>scale</span><select id="scale"></select></label>
+              <label class="field"><span>root</span><select id="root"></select></label>
+              <label class="field"><span>lowest</span><select id="low"></select></label>
+              <label class="field"><span>highest</span><select id="high"></select></label>
+              <div class="field"><span>A4 =</span>
+                <div class="row"><input id="ref" type="number" min="400" max="480" step="0.1" style="width: 6em"> Hz
+                  <button id="ref440" type="button">440</button><button id="ref432" type="button">432</button></div>
+              </div>
+              <div id="tuning-note" class="note"></div>
+            </fieldset>
+          </section>
+        <section class="page" id="page-voice" data-page="voice" role="tabpanel" aria-labelledby="tab-voice">
+            <fieldset id="voice">
+              <legend>Voice</legend>
+              <div class="toggle" role="group" aria-label="which voice the knobs change">
+                <button id="voice-all" type="button" aria-pressed="true">all stones</button>
+                <button id="voice-one" type="button" aria-pressed="false">selected stone</button>
+              </div>
+              <div class="row">
+                <span id="voice-target" class="target" aria-live="polite">all stones</span>
+                <button id="voice-own" type="button" hidden>give it its own voice</button>
+              </div>
+              <div class="knobs">
+                <div id="voice-synthlevel-controls" style="display: contents"></div>
+                <div id="voice-bell-controls" style="display: contents"></div>
+                <div id="voice-strike-controls" style="display: contents"></div>
+                <div id="voice-sustain-controls" style="display: contents"></div>
+              </div>
+              <span class="sub">synth layer — oscillators, filter, envelope</span>
+              <div id="voice-synth-controls" class="knobs synth-knobs"></div>
+              <button id="voice-defaults" type="button">shared voice back to defaults</button>
+              <div class="row">
+                <input id="voice-name" type="text" maxlength="40" placeholder="name this voice" aria-label="name for the voice to save" style="flex: 1; min-width: 8em">
+                <button id="voice-save" type="button">save voice</button>
+              </div>
+              <div id="voice-saved"></div>
+              <div class="note" id="voice-saved-note" aria-live="polite">Your saved voices live in this browser. "use" puts one on the voice
+                you're editing (a stone that still follows the shared voice gets its own).</div>
+              <label class="row" style="color: var(--muted); font-size: 12px">
+                <input id="labels" type="checkbox"> show note names (dev aid)</label>
+              <button id="fresh" type="button">start fresh (forget saved settings, tap twice)</button>
+            </fieldset>
+          </section>
         </div>
-      <div class="reel right" aria-hidden="true"><svg viewBox="0 0 100 100">
-            <circle class="flange" cx="50" cy="50" r="49"/><circle class="groove" cx="50" cy="50" r="44"/><circle class="groove" cx="50" cy="50" r="38"/><circle class="groove" cx="50" cy="50" r="32"/><circle class="groove" cx="50" cy="50" r="26"/><circle class="groove" cx="50" cy="50" r="20"/>
-            <circle class="hub" cx="50" cy="50" r="13"/>
-            <circle class="hole" cx="50" cy="42.5" r="2.6"/><circle class="hole" cx="56.5" cy="53.8" r="2.6"/><circle class="hole" cx="43.5" cy="53.8" r="2.6"/>
-          </svg></div>
       </div>
-      <div class="channels" id="layers"></div>
-      <div class="deck-foot">
-        <div id="tapes-controls"></div>
-        <button id="clear-all" class="key" type="button"><span class="glyph">×</span>clear all</button>
-      </div>
-      <div class="note">Each track records the water's sound and plays it back the same every pass —
-        whatever you retune. Overdub adds more on top. Stop, mute and clear fade.</div>
-    </section>
     </div>
     <div id="status" aria-live="polite"></div>
-
-    <details id="drawer" open>
-      <summary>Controls</summary>
-      <div class="panel">
-
-        <fieldset>
-          <legend>Beat</legend>
-          <label class="row" style="color: var(--fg)">
-            <input id="quantize" type="checkbox"> quantize</label>
-          <div class="quantized" hidden>
-            <div class="field"><span>BPM</span><input id="bpm" type="number" min="40" max="240" step="1"></div>
-            <div class="field"><span>grid</span><select id="grid"></select></div>
-            <div id="quantize-controls" class="knobs"></div>
-          </div>
-          <div class="note">Pulls touches and notes toward the beat — the pond's rim pulses on it. At full
-            strength every note lands on the grid; lower, the water keeps more of its own time. Tapes
-            become whole beats long.</div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Water</legend>
-          <div id="water-controls" class="knobs"></div>
-          <button id="defaults" type="button">water knobs back to defaults</button>
-        </fieldset>
-
-        <fieldset>
-          <legend>Stones</legend>
-          <div class="row">
-            <button id="randomize" type="button">randomize</button>
-            <button id="release" type="button">release placed</button>
-          </div>
-          <div id="stone-controls" class="knobs"></div>
-          <span class="sub" id="animate-label">animate</span>
-          <div class="toggle five" id="animate-modes" role="group" aria-labelledby="animate-label">
-            <button type="button" data-mode="off" aria-pressed="true">rest</button>
-            <button type="button" data-mode="drift" aria-pressed="false">drift</button>
-            <button type="button" data-mode="path" aria-pressed="false">path</button>
-            <button type="button" data-mode="water" aria-pressed="false">water</button>
-            <button type="button" data-mode="camera" aria-pressed="false">camera</button>
-          </div>
-          <div class="row" id="path-row" hidden>
-            <button id="path-draw" type="button">draw a path</button>
-            <span class="note" id="path-note">then drag on the pond: the stones travel your line, back and forth</span>
-          </div>
-          <div class="row" id="camera-row" hidden>
-            <video id="camera" class="camera" playsinline muted aria-label="camera preview (stays on this device)"></video>
-            <span class="note" id="camera-note">move in front of the camera; the stones follow. The picture stays on this device.</span>
-          </div>
-          <div class="note" id="stone-note">Tap a stone to pick it up, tap the water to put it down (or drag
-            it). Placed stones stay put when you retune or randomize; a stone moved through moving water
-            rings.</div>
-        </fieldset>
-
-        <fieldset>
-          <legend>Tuning</legend>
-          <label class="field"><span>scale</span><select id="scale"></select></label>
-          <label class="field"><span>root</span><select id="root"></select></label>
-          <label class="field"><span>lowest</span><select id="low"></select></label>
-          <label class="field"><span>highest</span><select id="high"></select></label>
-          <div class="field"><span>A4 =</span>
-            <div class="row"><input id="ref" type="number" min="400" max="480" step="0.1" style="width: 6em"> Hz
-              <button id="ref440" type="button">440</button><button id="ref432" type="button">432</button></div>
-          </div>
-          <div id="tuning-note" class="note"></div>
-        </fieldset>
-
-
-        <fieldset id="voice" class="wide">
-          <legend>Voice</legend>
-          <div class="toggle" role="group" aria-label="which voice the knobs change">
-            <button id="voice-all" type="button" aria-pressed="true">all stones</button>
-            <button id="voice-one" type="button" aria-pressed="false">selected stone</button>
-          </div>
-          <div class="row">
-            <span id="voice-target" class="target" aria-live="polite">all stones</span>
-            <button id="voice-own" type="button" hidden>give it its own voice</button>
-          </div>
-          <div class="knobs">
-            <div id="voice-synthlevel-controls" style="display: contents"></div>
-            <div id="voice-bell-controls" style="display: contents"></div>
-            <div id="voice-strike-controls" style="display: contents"></div>
-            <div id="voice-sustain-controls" style="display: contents"></div>
-          </div>
-          <details class="group" id="synth-group">
-            <summary>shape the synth layer — oscillators, filter, envelope</summary>
-            <div id="voice-synth-controls" class="knobs synth-knobs"></div>
-          </details>
-          <button id="voice-defaults" type="button">shared voice back to defaults</button>
-          <div class="row">
-            <input id="voice-name" type="text" maxlength="40" placeholder="name this voice" aria-label="name for the voice to save" style="flex: 1; min-width: 8em">
-            <button id="voice-save" type="button">save voice</button>
-          </div>
-          <div id="voice-saved"></div>
-          <div class="note" id="voice-saved-note" aria-live="polite">Your saved voices live in this browser. "use" puts one on the voice
-            you're editing (a stone that still follows the shared voice gets its own).</div>
-          <label class="row" style="color: var(--muted); font-size: 12px">
-            <input id="labels" type="checkbox"> show note names (dev aid)</label>
-          <button id="fresh" type="button">start fresh (forget saved settings, tap twice)</button>
-        </fieldset>
-      </div>
-    </details>
   </main>
   <div id="guide" class="guide" role="dialog" aria-modal="true" aria-labelledby="guide-title" hidden>
     <div class="guide-card">

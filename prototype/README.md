@@ -101,13 +101,18 @@ Voice) forgets them.
 
 ## Controls
 
-The controls live under the pond (tucked into a "Controls" drawer on phones).
+Nothing folds away. On a wide screen the pond has a strip along its bottom
+edge with two tabs, **water** and **stones**. **Beat** sits right under it, and
+the **tape** below that. **Tuning** and **voice** run down the right. On a phone
+or tablet the controls are one strip of pages under the pond: water · stones ·
+beat · tuning · voice · tape. Tap a tab, or swipe the page sideways; ←/→ also
+move between focused tabs. A phone on its side puts the pages beside the pond.
 
-**Record piece** (under the pond) — records everything you hear, the water
+**Record piece** (top left) — records everything you hear, the water
 and the tape, and **save .wav** downloads it (16-bit stereo, about 11 MB a
 minute; up to 10 minutes per piece on a computer, 6 on a phone or tablet).
 
-**Tape** — a four-track tape machine beside the pond (styled after Dieter
+**Tape** — a four-track tape machine under the pond (styled after Dieter
 Rams): it records the water's *sound* and plays it back fixed, like a loop
 pedal — every pass the same, the one part that isn't the water. It records
 the water, never another track, and always plays exactly what it recorded —
@@ -146,7 +151,7 @@ on each bar's first beat). BPM and grid only appear when it's on.
 white, Syncopate in wide-tracked capitals, the water in greys — light crests,
 dark troughs — and the logo's concentric rings in the knobs, the reels and the
 start screen. Syncopate is bundled in `fonts/` (Apache 2.0), so the page works
-offline. On wide screens the tape sits beside the pond; on phones, under it.
+offline.
 
 **Knobs** — most controls are knobs: drag up or down (or sideways) to turn,
 Shift for fine; double-tap to return to the default; arrow keys, Page Up/Down,
@@ -281,7 +286,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
     would you never touch mid-performance?
 16. After shaping a voice, did you want to keep it for next time? (Answered:
     yes — now **save voice**.)
-17. On the iPad/phone: are the voice and tape controls usable in the drawer?
+17. On the iPad/phone: are the voice and tape controls usable on their pages?
 
 **Since your check-2 notes (Phase 1d):**
 
@@ -329,7 +334,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
 29. **The look:** black and white, wide capitals, grey water. Calm and zen,
     or too stark? Is everything still readable on the phone (the small
     hint text especially)? The light tape machine is the brightest thing on
-    the page and now sits beside the pond (under it on a phone) — right?
+    the page — right?
 30. **Knobs:** do they feel like an instrument? Easy to turn on the iPad
     (drag up/down; double-tap resets)? Any control that should stay a slider?
 31. **Number of stones:** try fewer stones than notes (a sparse pond) and
@@ -365,6 +370,10 @@ voice editor untouched you hear exactly the Phase 1c bell.
     musical? Which would you keep? Is **motion** slow enough at the bottom?
 39. Camera: does steering the stones with your movement work? (It needs the
     camera allowed; on the hosted link it'll ask.)
+40. **The layout:** on the computer, does the strip along the pond's bottom
+    (water | stones) feel like part of the pond? Is everything you reach for
+    while playing above the fold? On the phone, are the tabs clear, and does
+    swiping between pages feel natural (and never fight turning a knob)?
 
 ### Decisions for Dash
 

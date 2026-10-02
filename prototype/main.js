@@ -42,9 +42,94 @@ let events = null;
 let visuals = null;
 let ctx = null;
 
-// On small screens (or a phone held sideways) the controls start tucked away
-// so the water fills the screen.
-if (window.matchMedia('(max-width: 700px), (max-height: 500px)').matches) document.getElementById('drawer').open = false;
+// ---- the control pages: tabs and swipes ------------------------------------------------------
+//
+// On a phone or tablet the controls are one strip of pages: tap a tab, or
+// swipe the page sideways. On a wide screen only water and stones are tabs
+// (the strip along the pond's bottom); the other pages always show.
+const PAGES = ['water', 'stones', 'beat', 'tuning', 'voice', 'tape'];
+const TAB_KEY = 'water-synth.tab';
+const wideLayout = window.matchMedia('(min-width: 1000px) and (min-height: 600px)');
+let page = 'water';
+function showPage(name, { focus = false } = {}) {
+  if (!PAGES.includes(name)) return;
+  const from = PAGES.indexOf(page), to = PAGES.indexOf(name);
+  page = name;
+  for (const n of PAGES) {
+    const tab = document.getElementById(`tab-${n}`), panel = document.getElementById(`page-${n}`), on = n === name;
+    tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    tab.tabIndex = on ? 0 : -1;
+    panel.classList.toggle('active', on);
+    panel.classList.remove('in-right', 'in-left');
+  }
+  const panel = document.getElementById(`page-${name}`);
+  if (to !== from) { void panel.offsetWidth; panel.classList.add(to > from ? 'in-right' : 'in-left'); }
+  if (focus) document.getElementById(`tab-${name}`).focus();
+  // Tabs stuck to the top of a long page: show the new page from its start.
+  const tabs = document.querySelector('.tabs');
+  const tab = document.getElementById(`tab-${name}`); // very narrow, the tabs scroll: keep this one in view
+  if (tab.offsetLeft < tabs.scrollLeft) tabs.scrollLeft = tab.offsetLeft;
+  else if (tab.offsetLeft + tab.offsetWidth > tabs.scrollLeft + tabs.clientWidth) tabs.scrollLeft = tab.offsetLeft + tab.offsetWidth - tabs.clientWidth;
+  if (to !== from && !wideLayout.matches && tabs.getBoundingClientRect().top <= 1) {
+    window.scrollBy(0, document.getElementById('pages').getBoundingClientRect().top - tabs.getBoundingClientRect().height);
+  }
+  try { localStorage.setItem(TAB_KEY, name); } catch { /* storage off: fine */ }
+}
+// The tabs that show: on a wide screen only the strip's (water, stones).
+const STRIP = ['water', 'stones'];
+const visibleTabs = () => (wideLayout.matches ? STRIP : PAGES);
+for (const tab of document.querySelectorAll('.tabs [role=tab]')) {
+  tab.addEventListener('click', () => showPage(tab.dataset.page));
+  tab.addEventListener('keydown', (e) => { // arrow keys move between tabs
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    const tabs = visibleTabs();
+    if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); showPage(tabs[e.key === 'Home' ? 0 : tabs.length - 1], { focus: true }); }
+    if (!step) return;
+    e.preventDefault();
+    showPage(tabs[(tabs.indexOf(page) + step + tabs.length) % tabs.length], { focus: true });
+  });
+}
+// A sideways swipe on the pages turns the page (a dial, a slider or a field
+// keeps its own drag).
+{
+  const pagesEl = document.getElementById('pages');
+  let swipe = null;
+  pagesEl.addEventListener('pointerdown', (e) => {
+    if (wideLayout.matches || e.pointerType === 'mouse' || !e.isPrimary) return;
+    if (e.target.closest('.knob svg, input, select, textarea, video')) return;
+    swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, at: e.timeStamp };
+  });
+  pagesEl.addEventListener('pointerup', (e) => {
+    if (!swipe || e.pointerId !== swipe.id) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y, quick = e.timeStamp - swipe.at < 800;
+    swipe = null;
+    if (!quick || Math.abs(dx) < 50 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+    const i = PAGES.indexOf(page) + (dx < 0 ? 1 : -1);
+    if (i >= 0 && i < PAGES.length) showPage(PAGES[i]);
+  });
+  pagesEl.addEventListener('pointercancel', () => { swipe = null; });
+}
+{
+  let saved = null;
+  try { saved = localStorage.getItem(TAB_KEY); } catch { /* storage off */ }
+  page = PAGES.includes(saved) ? saved : 'water';
+  showPage(page);
+}
+// On a wide screen only water and stones share the strip (the rest always
+// show), so one of them is the page — and the always-shown ones are plain
+// regions, not tab panels.
+function fitPages() {
+  const wide = wideLayout.matches;
+  if (wide && !STRIP.includes(page)) showPage('water');
+  for (const n of PAGES) {
+    if (STRIP.includes(n)) continue;
+    const panel = document.getElementById(`page-${n}`);
+    panel.setAttribute('role', wide ? 'region' : 'tabpanel');
+    if (wide) { panel.removeAttribute('aria-labelledby'); panel.setAttribute('aria-label', n); } else { panel.removeAttribute('aria-label'); panel.setAttribute('aria-labelledby', `tab-${n}`); }
+  }
+}
+fitPages();
+wideLayout.addEventListener('change', fitPages);
 
 // iOS pauses audio on a lock, a call or an app switch; the next touch (or
 // coming back to the page) brings it back.
@@ -64,13 +149,12 @@ document.addEventListener('visibilitychange', () => {
 // turn, so the water itself is the same either way.
 let rotated = false;
 function fitOrientation() {
-  rotated = window.innerHeight > window.innerWidth;
+  rotated = window.innerHeight > window.innerWidth && !wideLayout.matches;
   surface.style.aspectRatio = rotated ? `${GRID_H} / ${GRID_W}` : `${GRID_W} / ${GRID_H}`;
-  document.querySelector('.stage').style.width = rotated
-    ? `min(100%, calc((100dvh - 130px) * ${GRID_H} / ${GRID_W}))` : '';
+  document.getElementById('instrument').classList.toggle('rotated', rotated); // the page's CSS sizes the pond
 }
 fitOrientation();
-window.addEventListener('resize', fitOrientation);
+window.addEventListener('resize', () => { fitOrientation(); fitPages(); });
 
 // Pond coordinates (x, y in [0, 1]) ↔ canvas coordinates (u, v in [0, 1]).
 // Upright, the pond turns a quarter so its left (low notes) is at the bottom
@@ -612,8 +696,6 @@ function giveOwnVoice(stone) {
 function setVoiceValue(key, v) {
   const voice = voiceValues.get(voiceTarget);
   if (!voice) return; // not an override: its knobs are disabled
-  // Raising the synth layer from off opens its controls, so it can be found.
-  if (key === 'synthLevel' && v > 0 && !(voice[key] > 0)) document.getElementById('synth-group').open = true;
   voice[key] = v;
   sendVoice(key);
 }
@@ -656,7 +738,6 @@ function useVoice(saved) {
   if (!voice) return;
   Object.assign(voice, voiceFrom(saved));
   for (const k of VOICE_KEYS) sendVoiceTo(voiceTarget, k);
-  if (voice.synthLevel > 0) document.getElementById('synth-group').open = true; // opens, never closes
   refreshVoice();
 }
 function buildSavedVoices() {

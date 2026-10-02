@@ -5,7 +5,7 @@ water you can watch, with tuned stones in it. You disturb the water; ripples
 travel, reflect and meet; when a crest reaches a stone, the stone rings like a
 water-struck bell at its pitch in the scale you've set. You don't pick notes
 directly — the water does. Loops record your touches and replay them into the
-moving water; tapes record the sound itself. A voice editor shapes what the
+moving water, or record the sound itself. A voice editor shapes what the
 stones sound like. No plugin here, and only two gestures (drop and drag).
 
 ## Run it
@@ -75,29 +75,42 @@ CPU; say if it stutters.
 
 The controls live under the pond (tucked into a "Controls" drawer on phones).
 
-**Loops** — four layers. Each records your touches, not sound, and replays
-them into the water, so each pass lands in water still moving from the last
-and plays a different phrase.
-- **record** starts a take; **finish** ends it and the loop starts playing.
-  On a playing loop, **overdub** adds more on top; what you add is heard live
-  once and replays from the next pass.
-- **mute** silences a loop and keeps its place; **stop** then **play**
-  restarts it from its top (at the next bar if quantize is on).
-- **clear** (tap twice) erases a layer completely; **clear all loops** (tap
-  twice) erases every layer and the beat grid — a fresh start (the grid stays
-  while a tape is still on it). Clearing never
-  touches the water: what's already moving rings out.
-- A layer holds 4096 gestures; if one fills, it says so and stops recording.
-- **Quantize** (off by default) moves when your touches land toward a beat
-  grid — strength from lean to snap (snap by default), swing, BPM and grid
-  size — and rounds new loops to whole bars so they stay in time. While it's
-  on, the beat runs and the pond's rim pulses on it (brighter on each bar's
-  first beat). A touch just before a grid point waits for it — a faint ring
-  at your finger closes in until it lands — and one just after lands at once
-  (nothing is sent into the past) with its loop copy pulled back onto the
-  grid. Drags flow: never delayed, and a looped drag keeps its own timing. A
-  touch held onto a loop's downbeat plays once there, then once a pass. The
-  water still decides when stones ring. BPM and bars only appear when quantize is on.
+**Loops** — four tracks, each one of two kinds, chosen when you start it:
+- **record touches** makes a *touch loop*: it records your touches, not
+  sound, and replays them into the water, so each pass lands in water still
+  moving from the last and plays a different phrase.
+- **record sound** makes a *sound loop* — "a tape beside the pond": it records
+  the water's sound and plays it back fixed, like a loop pedal (every pass the
+  same — the one part that isn't the water). It records the water, never
+  another loop, and always plays exactly what it recorded — retuning never
+  touches it — so you can lay a bassline, retune, add a melody, retune, add
+  harmonies. Up to 30 s.
+- On either kind: **finish** ends the take and it plays; **overdub** adds more
+  on top (heard live once, replayed from the next pass); **mute** silences it
+  and keeps its place; **stop** then **play** restarts it from its top;
+  **clear** (tap twice) erases it. Sound loops fade (0.3 s) when stopped,
+  muted or cleared and wrap without a click; their overdubs add up with no
+  decay, so a much-overdubbed one gets louder. **sound loops** sets their
+  level under (or over) the live water.
+- **clear all loops** (tap twice) erases every track and starts a fresh beat.
+  Clearing never touches the water: what's already moving rings out.
+- Tracks have their own lengths, so they drift against each other. A touch
+  loop holds 4096 gestures; if one fills, it says so and stops recording.
+- **Quantize** (off by default) pulls toward a beat grid — strength from lean
+  to snap (snap by default), swing, BPM and grid size:
+  - *the notes*: a struck stone can wait for the next grid point (never sound
+    early). At full strength every note lands on the grid, like a sequencer —
+    the water still picks which stones ring and how hard; lower, the water
+    keeps more of its own time. The water itself is never delayed.
+  - *your touches*: a touch just before a grid point waits for it (a faint
+    ring at your finger closes in until it lands); one just after lands at
+    once, its loop copy pulled back onto the grid. Drags flow: never delayed,
+    and a looped drag keeps its own timing.
+  - *the loops*: touch loops become whole bars; sound loops start on a beat
+    and **finish** waits for the next beat, so each is a whole number of beats
+    of its own (3, 5, 7…) and they line up differently each time.
+  While quantize is on, the beat runs and the pond's rim pulses on it
+  (brighter on each bar's first beat). BPM and bars only appear when it's on.
 
 **Water**
 
@@ -124,21 +137,6 @@ scale note in the range. Note names are relative to A4 at the chosen reference
 (at 432 Hz, A4 is still labelled "A4"). Changing these retunes the stones; it
 never touches the water. A stone still ringing keeps its old pitch until it's
 next struck, then its old ring crossfades out over 100 ms.
-
-**Tapes** — "a tape beside the pond": four tracks that record the water's
-*sound* and play it back fixed, like a loop pedal (every pass the same — the
-one part that isn't the water). **record** starts a take, **finish** ends it
-and it plays; **overdub** adds more on top (heard live once, replayed from the
-next pass). A tape records the water, never another tape. **mute**, **stop**
-and **clear** fade out over 0.3 s rather than cut; the loop wraps without a
-click. A tape always plays exactly what it recorded — retuning never touches
-it — so you can lay a bassline, retune, add a melody, retune, add harmonies.
-Each track has its own length (up to 30 s), so tapes drift against each
-other. With quantize on, a take starts on a beat and **finish** waits for the
-next beat: every tape is a whole number of beats, but each its own number
-(3, 5, 7…), so they follow the beat while the way they line up keeps
-changing. Clearing every loop keeps the grid while a tape is still on it. **tape level** sets the tapes under (or over) the
-water. Overdubs add up with no decay, so a much-overdubbed tape gets louder.
 
 **Voice** — what a struck stone sounds like. Every stone shares one voice;
 **edit one stone**, then tap a stone, to edit just that one (the pond is quiet
@@ -239,6 +237,29 @@ voice editor untouched you hear exactly the Phase 1c bell.
 22. **Very slow flow** (down to ~32 s to cross): at the slowest, water decay
     stretches with it (time-lapse), so the pond can take many minutes to fall
     silent. Is that the drift you wanted, or should decay not stretch so far?
+
+**Notes on the grid, and one looper (since your last notes):**
+
+23. **Quantize at full strength:** do notes now squash into time like a
+    sequencer? Find a sequence you like and loop it — does it hold together
+    as a song part? Try lean (around 50%): does it sit between water and
+    grid in a useful way?
+24. A note that comes just after a grid point (within 12 ms) rings at once;
+    any later and it waits for the next one — up to a whole grid step. Does
+    that sound tight, or do some notes feel late?
+25. **One looper:** each track is a touch loop or a sound loop, chosen when
+    you start it. Clear now? Four tracks in all (it was four of each) —
+    enough?
+26. Turning quantize on now snaps notes as well as touches straight away
+    (snap is the default). Should notes and touches share one strength and
+    one default, or should notes start at lean?
+27. At full strength, several crests on one stone within a grid step now
+    ring as **one** note on the grid point, as hard as the hardest (one note
+    per stone per step, like a sequencer). Right, or should each hit ring
+    (stacking, sometimes damping)?
+28. A stone glows when it's *heard*, which can be up to a grid step after
+    the crest visibly passed it (1.5 s at 40 BPM on a 1/4 grid). Does the
+    pond still read as the cause of the sound?
 
 ### Decisions for Dash
 
@@ -432,6 +453,14 @@ Collected from the real-time safety, DSP and tuning reviews of Phases 1a and 1b.
   (counting sort); budget recorded gestures per block and stop firing into a
   full gesture queue — MIDI, OSC and camera sources can burst. Benchmark a
   combined worst case (looper burst + water burst + retune burst in one block).
+- **Note quantize:** held notes as int64 stream samples (`std::floor` into
+  int64 for the grid index; `((k % 2) + 2) % 2` is right for signed ints);
+  one note per stone per grid point; a stone removed by a retune stays
+  silent; a ring buffer avoids the `copyWithin` shifts (optional — both are
+  bounded). Size the queue for the coarsest grid at lean strengths, where
+  notes don't merge: 128 busy stones at 90% on a 1.5 s grid peak near
+  8 × MAX_STONES, so the prototype holds 16 × MAX_STONES. A hit within the
+  on-beat window after its stone rang on that grid point is the same note.
 - **Quantize:** schedule a held touch by integer step (an `atStep` entry
   point), not by seconds (the JS round trip can land 1 ms late after ~75 min);
   hold at most half the gesture queue; record a copy only if the touch went

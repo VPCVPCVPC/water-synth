@@ -24,13 +24,17 @@ written, that still sit in your scale.
 - The performer never picks a note directly. Input is *energy* placed somewhere
   in the medium, with some shape and intensity. Output is notes, chosen by
   where that energy travels, when it arrives, and what it meets.
-- Where you disturb it matters: position sets which notes ring and when.
+- Where you disturb it matters: position sets which notes ring and when
+  (with quantize on, *when* leans toward the beat grid).
 - Waves interact: two disturbances meeting make something neither makes alone.
 - Silence is a state the medium returns to naturally.
 - The same gesture should never sound exactly the same twice — mostly because
   it lands in water that is already moving.
 - If a feature makes this feel like a preset synth or a step sequencer, it's
-  the wrong feature.
+  the wrong feature. (Quantize at full strength is Dash's deliberate
+  exception: it puts the water's timing on a grid, but the water still
+  chooses which notes, how hard, and what phrase — nothing is written in
+  steps.)
 
 ## Structure
 
@@ -42,14 +46,16 @@ travel across it. Its speed — **flow** — is adjustable, from slow drift
 time-lapse: the whole water speeds up or slows down together, so the same
 gesture plays the same phrase faster or slower. (Flow is the water's pace;
 "tempo/BPM" means only the loopers' beat grid.) The surface is the composer,
-not the oscillator: it decides *when*, *which*, and *how hard*.
+not the oscillator: it decides *when* (leaning toward the beat when quantize
+is on), *which*, and *how hard*.
 
 ### Tuned stones: how the medium sounds
 Points on the surface — **stones** — each hold one pitch from the current
 scale and range. When a ripple reaches a stone, the stone rings. How hard the
 water hits sets how loud; ripples arriving together ring it brighter or set off
 its neighbours. Distances between where you disturb and where the stones sit
-make the rhythm; reflections make echoes that repeat but drift.
+make the rhythm (pulled toward the beat when quantize is on); reflections make
+echoes that repeat but drift.
 
 The performer can **move stones** — drag them by hand, randomize them, or
 change how they spread (Dash, Phase 1c). A stone moved through moving water
@@ -59,9 +65,9 @@ A stone struck while still ringing rings on: it is one object, not a sampler.
 ### Voices: what a struck stone sounds like
 The default voice is the **water-struck bell**: clear, tuned resonant tones with
 a soft bell/marimba-like decay and a short "tick" of water touching the stone.
-The voice can be designed (Phase 1c) — but the water still decides when,
-which, and how hard: how hard a stone is struck shapes its loudness and
-brightness by default. A voice is the **bell** (its partials, decay, tick and
+The voice can be designed (Phase 1c) — but the water still decides when
+(within quantize), which, and how hard: how hard a stone is struck shapes its
+loudness and brightness by default. A voice is the **bell** (its partials, decay, tick and
 brightness, all editable) plus an optional **synth layer** (two oscillators →
 filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
 - All stones share one voice; any single stone can be given an override.
@@ -78,28 +84,37 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   mechanism.
 
 ### Layers: loopers
-- **Gesture looper** — records disturbances (drops and drags, with their
-  timing), not notes, and replays them into the living water, so each pass
-  lands in water that is already moving and differs. Several loops of
-  different lengths can layer and drift. Loop playback is a natural input for
-  Erosion later, so loops are stored as timed gesture events.
+- **One looper, two kinds of track** (Dash, Oct 2026): a *touch loop* (the
+  gesture looper below) or a *sound loop* (the audio looper, a tape). On the
+  page they are one set of tracks; each track is one kind or the other.
+- **Gesture looper** (a *touch loop* on the page) — records disturbances
+  (drops and drags, with their timing), not notes, and replays them into the
+  living water, so each pass lands in water that is already moving and
+  differs. Several loops of different lengths can layer and drift. Loop
+  playback is a natural input for Erosion later, so loops are stored as timed
+  gesture events.
 - **Quantize** (optional, off by default) moves *when you touch the water*
   toward a beat grid — live touches and recorded ones — with a strength
   control from lean to snap (the default when enabled), plus swing. Touches
-  lean; drags flow (never delayed, and a looped drag keeps its own timing). While it's
-  on, the beat is visible on the pond. It never places notes: when stones ring
-  is still decided by distance and the water. (Dash, Oct 2026: quantize was
-  too subtle to notice when it only moved recorded touches.)
-- **Audio looper** — "a tape beside the pond": records the instrument's output
-  and layers fixed audio, like a loop pedal. The one feature that isn't the
-  water; mainly for the standalone app. Several tape tracks of their own
-  lengths, each with record, overdub, mute and clear (Dash, Oct 2026); they
-  record the water's sound, not other tapes. A tape always plays back exactly
-  what was recorded — retuning never touches it — so you can lay a bassline,
-  then a melody, then harmonies in other tunings. With quantize on, a take
-  starts on a beat and lasts whole beats: tapes follow the beat, but their
-  lengths differ, so the way they line up keeps changing. Stopping, muting
-  and clearing fade, never cut.
+  lean; drags flow (never delayed, and a looped drag keeps its own timing).
+  While it's on, the beat is visible on the pond. The same strength also pulls
+  *when stones ring* toward the grid (a struck stone can wait for the next
+  grid point, never sound early): at 0% the water keeps its own time, at 100%
+  every note lands on the grid like a sequencer — a way to find serendipitous
+  sequences and build songs that aren't only ambient. Quantize never chooses
+  notes: which stones ring, and how hard, is still the water's. Note quantize
+  never delays the water — only when struck stones are heard. (Dash,
+  Oct 2026: quantizing only touches was too subtle to hear.)
+- **Audio looper** (a *sound loop* on the page) — "a tape beside the pond":
+  records the instrument's output and layers fixed audio, like a loop pedal.
+  The one feature that isn't the water; mainly for the standalone app. Several
+  tape tracks of their own lengths, each with record, overdub, mute and clear
+  (Dash, Oct 2026); they record the water's sound, not other tapes. A tape
+  always plays back exactly what was recorded — retuning never touches it — so
+  you can lay a bassline, then a melody, then harmonies in other tunings. With
+  quantize on, a take starts on a beat and lasts whole beats: tapes follow the
+  beat, but their lengths differ, so the way they line up keeps changing.
+  Stopping, muting and clearing fade, never cut.
 
 ### Prototype findings (Phase 1a, Sept 2026)
 An audio-rate 2D wave grid read directly as audio sounded like a metal plate,

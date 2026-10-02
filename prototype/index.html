@@ -74,6 +74,8 @@
     .layer { display: grid; grid-template-columns: 1.5em 1fr; gap: 4px 8px; align-items: center; }
     .layer .name { color: var(--muted); font-size: 12px; }
     .layer .buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .layer[data-kind=""] .buttons button:nth-child(-n+2) { border-style: dashed; }
+    .layer[data-kind="sound"] .name { color: var(--hot); }
     .layer .info { grid-column: 2; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
       color: var(--muted); font-size: 11px; }
     .layer .bar { height: 4px; background: var(--edge); border-radius: 2px; overflow: hidden; }
@@ -106,6 +108,11 @@
         <fieldset>
           <legend>Loops</legend>
           <div id="layers"></div>
+          <div id="tapes-controls" style="display: contents"></div>
+          <div class="note">Two kinds of track. A <b>touch loop</b> records your touches and replays
+            them into the water, so every pass plays something new. A <b>sound loop</b> is a tape of
+            the water's sound — never another loop — the same every pass, whatever you retune.
+            Overdub adds more on top; sound loops fade when stopped, muted or cleared.</div>
           <div class="row">
             <button id="clear-all" type="button">clear all loops</button>
             <label class="row" style="color: var(--muted); font-size: 12px">
@@ -115,9 +122,10 @@
             <div class="field"><span>BPM</span><input id="bpm" type="number" min="40" max="240" step="1"></div>
             <div class="field"><span>grid</span><select id="grid"></select></div>
             <div id="quantize-controls" style="display: contents"></div>
-            <div class="note">Quantize moves when your touches land toward the beat (the pond's rim
-              pulses on it): a touch just before a beat waits for it, one just after lands at once.
-              The water still decides when stones ring. Tapes become whole beats long.</div>
+            <div class="note">Quantize pulls your touches and the notes toward the beat (the pond's rim
+              pulses on it): at full strength every note lands on the grid like a sequencer; lower,
+              the water keeps more of its own time. The water still picks which notes ring. Touch
+              loops are whole bars, sound loops whole beats.</div>
           </div>
         </fieldset>
 
@@ -152,15 +160,6 @@
           <div id="tuning-note" class="note"></div>
         </fieldset>
 
-        <fieldset>
-          <legend>Tapes</legend>
-          <div id="tapes"></div>
-          <div id="tapes-controls" style="display: contents"></div>
-          <div class="row"><button id="clear-tapes" type="button">clear all tapes</button></div>
-          <div class="note">A tape records the water's sound — never another tape — and plays it
-            back fixed, so every pass is the same. Record, then finish; overdub adds more and is
-            heard live once. Stop, mute and clear fade; the loop wraps without a click.</div>
-        </fieldset>
 
         <fieldset id="voice">
           <legend>Voice</legend>

@@ -24,6 +24,8 @@ export { VOICE_PARAMS, VOICE_KEYS, SHARED };
 // tick ends an audio segment, and every stone can ring once per simulation
 // step, so a segment's strike list holds HOLD_STEPS × MAX_STONES of them.
 const HOLD_STEPS = 4;
+// A note this close after a grid point already counts as on it (rings now).
+const ON_BEAT_SECONDS = 0.012;
 const SEGMENT_STRIKES = HOLD_STEPS * MAX_STONES;
 const BELL_KEYS_END = Object.keys(ENGINE_PARAMS).length + Object.keys(BELL_PARAMS).length;
 const LOOPER_KEYS_END = BELL_KEYS_END + Object.keys(LOOPER_PARAMS).length;
@@ -51,6 +53,18 @@ export class Instrument {
     this.flash = new Float32Array(MAX_STONES);
     // Every strike of the last process() call (the engine's own list holds
     // only the last segment's); step / SIM_RATE is its stream time.
+    // Note quantize: struck stones held for the grid, in time order (stream
+    // sample to ring at). Fixed capacity; if it's ever full a note rings now.
+    this.heldCap = 16 * MAX_STONES; // the busiest pond at 90% on the coarsest grid peaks near 8 × MAX_STONES
+    this.heldAt = new Float64Array(this.heldCap);
+    this.heldStone = new Int32Array(this.heldCap);
+    this.heldVel = new Float64Array(this.heldCap);
+    this.heldCount = 0;
+    this.heldOverflow = 0; // diagnostics
+    // When each stone last rang on a grid point (stream sample; −∞ none): a
+    // hit just after it, within the on-beat window, is the same note.
+    this.gridRang = new Float64Array(MAX_STONES).fill(-Infinity);
+    this.onBeat = Math.round(ON_BEAT_SECONDS * sampleRate);
     this.strikes = new StrikeBuffer(SEGMENT_STRIKES);
     this.outputPeak = 0;
     this.frameEnergy = 0;
@@ -149,11 +163,82 @@ export class Instrument {
     }
   }
 
+  // ---- note quantize --------------------------------------------------------------
+
+  // When a stone struck at stream sample t is heard: t, or — with quantize
+  // on — leaning toward the next grid point by the strength (never earlier;
+  // a note within ON_BEAT_SECONDS after a grid point is already on it).
+  noteTarget(t) {
+    const lp = this.looper;
+    if (!lp.quantize || !(lp.quantizeStrength > 0) || lp.transportOrigin < 0) return t;
+    const fs = this.fs, g = (60 * fs) / (lp.bpm * lp.grid), x = (t - (lp.transportOrigin * fs) / SIM_RATE) / g;
+    let prev = -Infinity, next = Infinity;
+    for (let k = Math.floor(x) - 1, last = k + 3; k <= last; k++) { // swing moves a point by < 1 grid step
+      const p = k + ((((k % 2) + 2) % 2) === 1 ? lp.swing : 0);
+      if (p <= x && p > prev) prev = p;
+      if (p >= x && p < next) next = p;
+    }
+    if ((x - prev) * g <= this.onBeat || !(next < Infinity)) return t;
+    return t + Math.round(lp.quantizeStrength * (next - x) * g);
+  }
+
+  // Hold a note to ring at stream sample `at`; false if the queue is full.
+  // A stone already waiting for that same moment is struck once, as hard as
+  // the harder of the two (one note per stone per grid point).
+  hold(at, stone, velocity) {
+    for (let j = this.heldCount - 1; j >= 0 && this.heldAt[j] >= at; j--) {
+      if (this.heldAt[j] === at && this.heldStone[j] === stone) {
+        if (velocity > this.heldVel[j]) this.heldVel[j] = velocity;
+        return true;
+      }
+    }
+    let i = this.heldCount;
+    if (i >= this.heldCap) { this.heldOverflow++; return false; }
+    while (i > 0 && this.heldAt[i - 1] > at) { // keep time order (later of equal times after)
+      this.heldAt[i] = this.heldAt[i - 1]; this.heldStone[i] = this.heldStone[i - 1]; this.heldVel[i] = this.heldVel[i - 1];
+      i--;
+    }
+    this.heldAt[i] = at; this.heldStone[i] = stone; this.heldVel[i] = velocity;
+    this.heldCount++;
+    return true;
+  }
+
+  // Ring the held notes due before block sample `until` (or at it, with
+  // `inclusive`), rendering up to each. Returns the new render position.
+  ringHeld(outL, outR, pos, until, blockStream, inclusive) {
+    let n = 0;
+    while (n < this.heldCount) {
+      const at = this.heldAt[n] - blockStream;
+      if (inclusive ? at > until : at >= until) break;
+      const t = at > pos ? at : pos;
+      if (t > pos) { this.bells.renderRange(outL, outR, pos, t); pos = t; }
+      this.ring(this.heldStone[n], this.heldVel[n], t);
+      this.gridRang[this.heldStone[n]] = blockStream + t;
+      n++;
+    }
+    if (n > 0) {
+      this.heldAt.copyWithin(0, n, this.heldCount);
+      this.heldStone.copyWithin(0, n, this.heldCount);
+      this.heldVel.copyWithin(0, n, this.heldCount);
+      this.heldCount -= n;
+    }
+    return pos;
+  }
+
+  // A stone heard now, at block sample `at` (its pitch and place as they are
+  // now). A stone a retune has since removed or disabled stays silent.
+  ring(k, velocity, at) {
+    const stones = this.engine.stones;
+    if (!(k < stones.count) || !stones.enabled[k]) return;
+    if (this.bells.strike(k, stones.hz[k], velocity, stones.x[k], at) && velocity > this.flash[k]) this.flash[k] = velocity;
+  }
+
   // Render n samples into outL / outR.
   process(outL, outR, n) {
     for (let i = 0; i < n; i++) outL[i] = outR[i] = 0;
     if (!Number.isInteger(n) || n <= 0) return;
     const e = this.engine, stones = e.stones, bells = this.bells, tape = this.tape;
+    const blockStream = e.sample; // stream sample of this block's first sample
     // The tapes run on the same stream position the water does, so their loop
     // positions never depend on how the stream is split into blocks.
     tape.now = e.sample;
@@ -177,15 +262,19 @@ export class Instrument {
       const st = e.strikes, segment = pos;
       this.strikes.append(st);
       // Strikes come in time order. Render the bells up to each strike's
-      // sample, then strike, so every bell starts exactly on its sample.
+      // sample, then strike, so every bell starts exactly on its sample. With
+      // quantize on, a strike may instead wait for the grid (held notes ring
+      // in time order among the rest).
       for (let i = 0; i < st.count; i++) {
-        const at = segment + e.strikeSample(i);
+        const at = segment + e.strikeSample(i), k = st.stone[i];
+        const target = this.noteTarget(blockStream + at) - blockStream;
+        if (target > at && this.hold(blockStream + target, k, st.velocity[i])) continue;
+        pos = this.ringHeld(outL, outR, pos, at, blockStream, true); // held notes due by now ring first
+        if (blockStream + at - this.gridRang[k] <= this.onBeat) continue; // already rang on this grid point
         if (at > pos) { bells.renderRange(outL, outR, pos, at); pos = at; }
-        const k = st.stone[i];
-        if (bells.strike(k, stones.hz[k], st.velocity[i], stones.x[k], at) && st.velocity[i] > this.flash[k]) {
-          this.flash[k] = st.velocity[i];
-        }
+        this.ring(k, st.velocity[i], at);
       }
+      pos = this.ringHeld(outL, outR, pos, end, blockStream, false);
       bells.renderRange(outL, outR, pos, end);
       pos = end;
       if (e.simStep >= tick) bells.updateHold(stones);

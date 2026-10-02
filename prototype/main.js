@@ -231,8 +231,8 @@ const KNOBS = [
     show: (v) => `${Math.round((v / PARAMS.splash.max) * 100)}%`, hint: 'ringing stones send ripples back into the water (never more than you put in)' },
   { group: 'water', key: 'volume', label: 'volume', map: linMap('volume'),
     show: (v) => `${v.toFixed(2)}×`, hint: 'listening level' },
-  { group: 'tapes', key: 'tapeLevel', label: 'tape level', map: linMap('tapeLevel'),
-    show: (v) => `${v.toFixed(2)}×`, hint: 'the tapes under (or over) the water' },
+  { group: 'tapes', key: 'tapeLevel', label: 'sound loops', map: linMap('tapeLevel'),
+    show: (v) => `${v.toFixed(2)}×`, hint: 'the level of the sound loops (tapes), under or over the live water' },
   { group: 'quantize', key: 'quantizeStrength', label: 'strength', map: linMap('quantizeStrength'),
     show: (v) => (v >= 0.995 ? 'snap' : v <= 0.005 ? 'as played' : `lean ${Math.round(v * 100)}%`), hint: 'how far recorded touches move toward the grid' },
   { group: 'quantize', key: 'swing', label: 'swing', map: linMap('swing'),
@@ -558,25 +558,42 @@ function shapeName(v) {
 
 // ---- loops ---------------------------------------------------------------------------
 
-const layerUi = [];
+// One looper, two kinds of track (Dash): a *touch loop* replays your touches
+// into the water (different every pass); a *sound loop* is a tape of the
+// water's sound (the same every pass). Track t is gesture layer t or tape
+// track t — whichever it was recorded as.
+const TRACKS = Math.min(LOOP_LAYERS, TAPE_TRACKS);
+const trackUi = [];
 function buildLoopControls() {
   const host = document.getElementById('layers');
-  for (let l = 0; l < LOOP_LAYERS; l++) {
+  for (let t = 0; t < TRACKS; t++) {
     const row = document.createElement('div');
     row.className = 'layer';
     const name = document.createElement('div');
     name.className = 'name';
-    name.textContent = String(l + 1);
+    name.textContent = String(t + 1);
     const buttons = document.createElement('div');
     buttons.className = 'buttons';
-    const mk = (text) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; buttons.append(b); return b; };
-    const rec = mk('record'), play = mk('play'), mute = mk('mute'), clear = mk('clear');
-    for (const [b, what] of [[rec, 'record'], [play, 'play or stop'], [mute, 'mute'], [clear, 'clear']]) b.setAttribute('aria-label', `loop ${l + 1} ${what}`);
+    const mk = () => { const b = document.createElement('button'); b.type = 'button'; buttons.append(b); return b; };
+    const b0 = mk(), b1 = mk(), mute = mk(), clear = mk();
+    mute.textContent = 'mute'; clear.textContent = 'clear';
+    const ui = { row, b0, b1, mute, clear, kind: null, pending: null, pendingUntil: 0, last: '', lastPos: '' };
+    // Whichever kind the track is (or, empty: the two ways to start one).
+    const send = (act) => (ui.kind === 'sound' ? sendTape(t, act) : sendLoop(t, act));
+    b0.addEventListener('click', () => {
+      if (ui.kind) { send(LOOP_RECORD); return; }
+      if (ui.pending) return; // starting: one kind per track
+      ui.pending = 'touch'; ui.pendingUntil = performance.now() + 1000; sendLoop(t, LOOP_RECORD); paintTrack(ui, t);
+    });
+    b1.addEventListener('click', () => {
+      if (ui.kind) { send(LOOP_PLAY_STOP); return; }
+      if (ui.pending) return; // starting: one kind per track
+      ui.pending = 'sound'; ui.pendingUntil = performance.now() + 1000; sendTape(t, TAPE_RECORD); paintTrack(ui, t);
+    });
+    mute.addEventListener('click', () => send(LOOP_MUTE));
+    // Clear whatever is on the track (both, should a track ever hold both).
+    confirmButton(clear, () => { if (ui.both || ui.kind !== 'sound') sendLoop(t, LOOP_CLEAR); if (ui.both || ui.kind === 'sound') sendTape(t, TAPE_CLEAR); });
     mute.setAttribute('aria-pressed', 'false');
-    rec.addEventListener('click', () => sendLoop(l, LOOP_RECORD));
-    play.addEventListener('click', () => sendLoop(l, LOOP_PLAY_STOP));
-    mute.addEventListener('click', () => sendLoop(l, LOOP_MUTE));
-    confirmButton(clear, () => sendLoop(l, LOOP_CLEAR));
     const info = document.createElement('div');
     info.className = 'info';
     const bar = document.createElement('div');
@@ -587,9 +604,11 @@ function buildLoopControls() {
     info.append(bar, text);
     row.append(name, buttons, document.createElement('span'), info);
     host.append(row);
-    layerUi.push({ row, rec, play, mute, pos, text, last: '', lastPos: '' });
+    Object.assign(ui, { pos, text });
+    trackUi.push(ui);
+    paintTrack(ui, t);
   }
-  confirmButton(document.getElementById('clear-all'), () => sendLoop(0, LOOP_CLEAR_ALL));
+  confirmButton(document.getElementById('clear-all'), () => { sendLoop(0, LOOP_CLEAR_ALL); sendTape(0, TAPE_CLEAR_ALL); });
 
   const quantize = document.getElementById('quantize');
   const shown = document.querySelector('.quantized');
@@ -613,114 +632,81 @@ function sendLoop(layer, action) {
   if (events) events.push(EV_LOOP, layer, action);
 }
 
-// ---- tapes ---------------------------------------------------------------------------
-
-const tapeUi = [];
-function buildTapeControls() {
-  const host = document.getElementById('tapes');
-  for (let t = 0; t < TAPE_TRACKS; t++) {
-    const row = document.createElement('div');
-    row.className = 'layer';
-    const name = document.createElement('div');
-    name.className = 'name';
-    name.textContent = String(t + 1);
-    const buttons = document.createElement('div');
-    buttons.className = 'buttons';
-    const mk = (text) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; buttons.append(b); return b; };
-    const rec = mk('record'), play = mk('play'), mute = mk('mute'), clear = mk('clear');
-    for (const [b, what] of [[rec, 'record'], [play, 'play or stop'], [mute, 'mute'], [clear, 'clear']]) b.setAttribute('aria-label', `tape ${t + 1} ${what}`);
-    mute.setAttribute('aria-pressed', 'false');
-    rec.addEventListener('click', () => sendTape(t, TAPE_RECORD));
-    play.addEventListener('click', () => sendTape(t, TAPE_PLAY_STOP));
-    mute.addEventListener('click', () => sendTape(t, TAPE_MUTE));
-    confirmButton(clear, () => sendTape(t, TAPE_CLEAR));
-    const info = document.createElement('div');
-    info.className = 'info';
-    const bar = document.createElement('div');
-    bar.className = 'bar';
-    const pos = document.createElement('div');
-    bar.append(pos);
-    const text = document.createElement('span');
-    info.append(bar, text);
-    row.append(name, buttons, document.createElement('span'), info);
-    host.append(row);
-    tapeUi.push({ row, rec, play, mute, pos, text, last: '', lastPos: '' });
-  }
-  confirmButton(document.getElementById('clear-tapes'), () => sendTape(0, TAPE_CLEAR_ALL));
-}
+// ---- sound loops (tapes) -------------------------------------------------------------
 
 function sendTape(track, action) {
   if (events) events.push(EV_TAPE, track, action);
 }
 
-// Show each tape's state from the latest frame (only touching the DOM on change).
-function updateTapes(frame) {
-  for (let t = 0; t < TAPE_TRACKS; t++) {
-    const o = FRAME_TAPES + t * TAPE_FIELDS;
-    const state = frame[o], muted = frame[o + 1], length = frame[o + 2], pos = frame[o + 3], waiting = frame[o + 4], fading = frame[o + 5];
-    const ui = tapeUi[t];
-    const width = state === PLAYING || state === OVERDUB
-      ? `${Math.min(100, (pos / Math.max(1e-3, length)) * 100).toFixed(0)}%` : state === RECORDING ? '100%' : '0';
-    if (width !== ui.lastPos) { ui.pos.style.width = width; ui.lastPos = width; }
-    let text = state === EMPTY ? 'empty' : `${length.toFixed(1)} s`;
-    if (state === RECORDING) text = `recording ${length.toFixed(1)} s`;
+
+// Each track's state from the latest frame (only touching the DOM on change).
+let lastFrameTracks = null;
+function updateTracks(frame) {
+  lastFrameTracks = frame;
+  for (let t = 0; t < TRACKS; t++) paintTrack(trackUi[t], t);
+}
+function paintTrack(ui, t) {
+  const frame = lastFrameTracks;
+  const lo = FRAME_LOOPS + t * LOOP_FIELDS, to = FRAME_TAPES + t * TAPE_FIELDS;
+  const loopState = frame ? frame[lo] : EMPTY, tapeState = frame ? frame[to] : EMPTY;
+  ui.kind = loopState !== EMPTY ? 'touch' : tapeState !== EMPTY ? 'sound' : null;
+  ui.both = loopState !== EMPTY && tapeState !== EMPTY;
+  if (ui.kind || performance.now() > ui.pendingUntil) ui.pending = null;
+  const kind = ui.kind || ui.pending;
+  const touch = kind === 'touch';
+  // Both kinds report state, muted, length, position; touch loops in steps, tapes in seconds.
+  const o = touch ? lo : to;
+  const state = frame && kind ? frame[o] : EMPTY, muted = frame && kind ? frame[o + 1] : 0;
+  const length = frame && kind ? (touch ? frame[o + 2] / SIM_RATE : frame[o + 2]) : 0;
+  const pos = frame && kind ? (touch ? frame[o + 3] / SIM_RATE : frame[o + 3]) : 0;
+  const waiting = frame && kind ? frame[o + (touch ? 5 : 4)] : 0;
+  const fading = frame && kind === 'sound' ? frame[o + 5] : 0;
+  const full = frame && touch ? frame[o + 4] >= 0.99 : false;
+  const width = state === PLAYING || state === OVERDUB ? `${Math.min(100, (pos / Math.max(1e-3, length)) * 100).toFixed(0)}%` : state === RECORDING ? '100%' : '0';
+  if (width !== ui.lastPos) { ui.pos.style.width = width; ui.lastPos = width; }
+  const beat = 60 / values.bpm, unit = touch ? beat * 4 : beat; // touch loops are whole bars, sound loops whole beats
+  let text;
+  if (!kind) text = 'empty';
+  else if (state === EMPTY) text = touch ? 'touch loop · starting…' : 'sound loop · starting…';
+  else {
+    const units = length / unit, whole = Math.abs(units - Math.round(units)) < 0.01 && units >= 0.99;
+    const size = state === RECORDING ? `recording ${length.toFixed(1)} s`
+      : values.quantize && whole ? `${Math.round(units)} ${touch ? 'bars' : 'beats'}` : `${length.toFixed(1)} s`;
+    text = `${touch ? 'touch loop' : 'sound loop'} · ${size}`;
+    if (ui.both) text += ' · and a sound loop (clear removes both)';
     if (state === STOPPED) text += ' · stopped';
     if (muted) text += ' · muted';
-    if (waiting) text += ' · waiting for the bar';
+    if (waiting) text += touch ? ' · waiting for the bar' : ' · waiting for the beat';
     if (state === OVERDUB) text += ' · overdubbing';
     if (fading === 1) text += ' · stopping';
     if (fading === 2) text += ' · clearing';
-    const key = `${state}|${muted}|${text}`;
-    if (key === ui.last) continue;
-    ui.last = key;
-    ui.text.textContent = text;
-    ui.row.classList.toggle('recording', state === RECORDING || state === OVERDUB);
-    ui.rec.textContent = state === EMPTY ? 'record' : state === RECORDING ? 'finish' : state === OVERDUB ? 'end overdub' : 'overdub';
-    ui.rec.setAttribute('aria-label', `tape ${t + 1} ${ui.rec.textContent}`);
-    ui.rec.classList.toggle('rec', state === RECORDING || state === OVERDUB);
-    ui.play.textContent = state === PLAYING || state === OVERDUB ? 'stop' : state === RECORDING ? 'finish' : 'play';
-    ui.play.setAttribute('aria-label', `tape ${t + 1} ${ui.play.textContent}`);
-    ui.play.disabled = state === EMPTY;
-    ui.mute.classList.toggle('on', Boolean(muted));
-    ui.mute.setAttribute('aria-pressed', muted ? 'true' : 'false');
-    ui.mute.disabled = state === EMPTY;
+    if (full) text += " · full: new gestures aren't recorded";
   }
-}
-
-// Show each layer's state from the latest frame (only touching the DOM on change).
-function updateLoops(frame) {
-  const bar = (4 * 60 * SIM_RATE) / values.bpm;
-  for (let l = 0; l < LOOP_LAYERS; l++) {
-    const o = FRAME_LOOPS + l * LOOP_FIELDS;
-    const state = frame[o], muted = frame[o + 1], length = frame[o + 2], pos = frame[o + 3], fill = frame[o + 4], waiting = frame[o + 5];
-    const ui = layerUi[l];
-    const width = state === PLAYING || state === OVERDUB
-      ? `${Math.min(100, (pos / Math.max(1, length)) * 100).toFixed(0)}%` : state === RECORDING ? '100%' : '0';
-    if (width !== ui.lastPos) { ui.pos.style.width = width; ui.lastPos = width; }
-    const secs = (length / SIM_RATE).toFixed(1);
-    // Bars only exist when quantize is on; a free loop is just seconds.
-    let text = state === EMPTY ? 'empty' : state === RECORDING ? `recording ${secs} s`
-      : values.quantize ? `${Math.max(1, Math.round(length / bar))} bars` : `${secs} s`;
-    if (state === STOPPED) text += ' · stopped';
-    if (muted) text += ' · muted';
-    if (waiting) text += ' · waiting for the bar';
-    if (state === OVERDUB) text += ' · overdubbing';
-    const full = fill >= 0.99;
-    if (full) text += ' · full: new gestures aren\'t recorded';
-    const key = `${state}|${muted}|${text}`;
-    if (key === ui.last) continue;
-    ui.last = key;
-    ui.text.textContent = text;
-    ui.text.classList.toggle('full', full);
-    ui.row.classList.toggle('recording', state === RECORDING || state === OVERDUB);
-    ui.rec.textContent = state === EMPTY ? 'record' : state === RECORDING ? 'finish' : state === OVERDUB ? 'end overdub' : 'overdub';
-    ui.rec.classList.toggle('rec', state === RECORDING || state === OVERDUB);
-    ui.play.textContent = state === PLAYING || state === OVERDUB ? 'stop' : state === RECORDING ? 'finish' : 'play';
-    ui.play.disabled = state === EMPTY;
-    ui.mute.classList.toggle('on', Boolean(muted));
-    ui.mute.setAttribute('aria-pressed', muted ? 'true' : 'false');
-    ui.mute.disabled = state === EMPTY;
+  const key = `${kind}|${state}|${muted}|${text}`;
+  if (key === ui.last) return;
+  ui.last = key;
+  ui.text.textContent = text;
+  ui.text.classList.toggle('full', full);
+  ui.row.classList.toggle('recording', state === RECORDING || state === OVERDUB);
+  ui.row.dataset.kind = kind || '';
+  const name = kind ? `${touch ? 'touch' : 'sound'} loop ` : '';
+  const label = (b, s, aria) => { b.textContent = s; b.setAttribute('aria-label', `track ${t + 1} ${name}${aria || s}`); };
+  if (!kind) {
+    label(ui.b0, 'record touches'); label(ui.b1, 'record sound');
+    ui.b0.classList.remove('rec'); ui.b0.disabled = ui.b1.disabled = false;
+  } else {
+    label(ui.b0, state === RECORDING ? 'finish' : state === OVERDUB ? 'end overdub' : state === EMPTY ? '…' : 'overdub',
+      state === EMPTY ? 'starting' : undefined);
+    ui.b0.disabled = state === EMPTY;
+    ui.b0.classList.toggle('rec', state === RECORDING || state === OVERDUB);
+    label(ui.b1, state === PLAYING || state === OVERDUB ? 'stop' : state === RECORDING ? 'finish' : 'play');
+    ui.b1.disabled = state === EMPTY;
   }
+  ui.mute.classList.toggle('on', Boolean(muted));
+  ui.mute.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  ui.mute.setAttribute('aria-label', `track ${t + 1} ${name}mute`);
+  ui.clear.setAttribute('aria-label', `track ${t + 1} ${name}clear`);
+  ui.mute.disabled = ui.clear.disabled = !kind || state === EMPTY;
 }
 
 // ---- start ---------------------------------------------------------------------------
@@ -730,7 +716,6 @@ buildKnobs();
 buildVoiceControls();
 buildSavedVoices();
 buildLoopControls();
-buildTapeControls();
 buildStoneControls();
 document.getElementById('labels').addEventListener('change', (e) => { showLabels = e.target.checked; });
 startButton.addEventListener('click', start);
@@ -918,7 +903,7 @@ function draw(now) {
   let frame = visuals.read();
   // The beat (when quantize is on) comes with every frame, still water or not;
   // between frames it's carried forward at the tempo.
-  if (frame) { beatAt = frame[FRAME_BEAT]; beatTime = now; }
+  if (frame) { beatAt = frame[FRAME_BEAT]; beatTime = now; updateTracks(frame); } // tracks change even in still water
   const beating = values.quantize === 1 && beatAt >= 0;
   const beat = beating ? beatAt + ((now - beatTime) / 1000) * (values.bpm / 60) : -1;
   beatNow = beat;
@@ -946,8 +931,6 @@ function draw(now) {
     gridCtx.putImageData(image, 0, 0);
     for (let i = 0; i < stones.count; i++) flashShown[i] = Math.max(flashShown[i], frame[FRAME_FLASH + i]);
     outputLevel = Math.max(frame[1], outputLevel * 0.9);
-    updateLoops(frame);
-    updateTapes(frame);
   }
 
   const dpr = Math.min(2, window.devicePixelRatio || 1); // the water is a 128×97 image; 3× only costs

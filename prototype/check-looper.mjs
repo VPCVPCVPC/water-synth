@@ -322,6 +322,109 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
   }
 }
 
+// ---- 3b. Notes on the grid: quantize also pulls when stones ring ------------------
+console.log('\n3b. Quantize pulls when stones ring toward the grid');
+{
+  // A busy pond; every stone heard is logged at its stream sample, and every
+  // crest the water detects (the physics) at its own.
+  const listen = ({ quantize = 1, strength = 1, block = 128, fs = 48000, seconds = 6 } = {}) => {
+    const inst = new Instrument({ sampleRate: fs, seed: 9 });
+    const { xs, ys } = stonePositions(PENTA.length);
+    inst.setStones(xs, ys, PENTA.map((p) => p.hz), PENTA.length);
+    inst.setParam('waveSpeed', 64); inst.setParam('decay', 8); inst.setParam('splash', 0); inst.setParam('threshold', 0.008);
+    inst.setParam('bpm', 120); inst.setParam('grid', 4); inst.setParam('quantizeStrength', strength);
+    inst.setParam('quantize', quantize);
+    const heard = [], stoneOf = [], detected = [], L = new Float32Array(block), R = new Float32Array(block), audio = [];
+    let base = 0;
+    const strike = inst.bells.strike.bind(inst.bells);
+    inst.bells.strike = (k, hz, v, p, at) => { const ok = strike(k, hz, v, p, at); if (ok) { heard.push(base + at); stoneOf.push(k); } return ok; };
+    for (let k = 0; k < 8; k++) inst.engine.drop((k * 0.37) % 1, (k * 0.59) % 1, 1.5, 0.1 + k * 0.53);
+    const n = Math.round(seconds * fs);
+    for (base = 0; base < n; base += block) {
+      const m = Math.min(block, n - base);
+      inst.process(L, R, m);
+      for (let i = 0; i < m; i++) audio.push(L[i]);
+      for (let i = 0; i < inst.strikes.count; i++) detected.push(inst.strikes.step[i]);
+    }
+    const origin = (inst.looper.transportOrigin * fs) / SIM_RATE, g = (60 * fs) / (120 * 4);
+    return { heard, stoneOf, detected, audio, origin, g, inst };
+  };
+  const snap = listen(), free = listen({ quantize: 0 }), zero = listen({ strength: 0 }), lean = listen({ strength: 0.5 });
+  const offGrid = (r) => r.heard.map((t) => { const d = (t - r.origin) % r.g; return Math.min(d, r.g - d); });
+  const worst = Math.max(...offGrid(snap)), onBeat = Math.round(0.012 * 48000);
+  report(snap.heard.length > 30 && worst <= onBeat, 'at 100% every note is heard on the 1/16 grid',
+    `${snap.heard.length} notes, worst ${(worst / 48).toFixed(1)} ms from a grid point (on-beat window ${onBeat / 48} ms)`);
+  report(free.detected.join() === snap.detected.join() && free.detected.length === snap.detected.length,
+    'the water is untouched: the same crests ring the same stones at the same moments', `${snap.detected.length} crests either way`);
+  // Each note heard is matched to its stone's latest strike in free time at
+  // or before it (several hits on one stone at one grid point ring once).
+  const delays = (r) => r.heard.map((t, i) => {
+    let best = -Infinity;
+    for (let j = 0; j < free.heard.length; j++) if (free.stoneOf[j] === r.stoneOf[i] && free.heard[j] <= t && free.heard[j] > best) best = free.heard[j];
+    return t - best;
+  });
+  const dSnap = delays(snap), dLean = delays(lean);
+  report(dSnap.every((d) => d >= 0 && d < snap.g + 1), 'a note is never heard before the water strikes its stone (and waits less than a grid step)',
+    `${snap.heard.length} notes heard (${free.heard.length} strikes; repeats at one grid point ring once)`);
+  report(zero.heard.join() === free.heard.join(), 'strength 0: notes keep the water\'s own time');
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  const half = mean(dLean) / mean(dSnap);
+  report(Math.abs(half - 0.5) < 0.15, 'strength 50%: notes wait about half as long', `${(mean(dLean) / 48).toFixed(1)} vs ${(mean(dSnap) / 48).toFixed(1)} ms on average`);
+  const ref = snap.audio;
+  const bad = [1, 37, 1000].filter((b) => { const a = listen({ block: b }).audio; return a.some((v, i) => v !== ref[i]); });
+  report(bad.length === 0, 'notes on the grid: audio bit-identical at block sizes 1, 37, 128, 1000', bad.length ? `differs at ${bad.join(', ')}` : '');
+  report(snap.inst.heldOverflow === 0, 'the held-note queue never overflowed', `${snap.inst.heldOverflow}`);
+  {
+    // Busy water, every stone of a chromatic range, at the coarsest grid
+    // (1.5 s at 40 BPM in quarters): repeat hits on a stone at one grid point
+    // ring once, the queue never overflows, and every note is on the grid.
+    const fs = 48000, all = buildPitches({ scale: SCALES.chromatic, root: 36, low: 36, high: 96 });
+    const inst = new Instrument({ sampleRate: fs, seed: 3 });
+    const { xs, ys } = stonePositions(all.length);
+    inst.setStones(xs, ys, all.map((p) => p.hz), all.length);
+    inst.setParam('threshold', 0.005); inst.setParam('splash', 0.6);
+    inst.setParam('bpm', 40); inst.setParam('grid', 1); inst.setParam('quantize', 1);
+    const heard = [];
+    let base = 0;
+    const strike = inst.bells.strike.bind(inst.bells);
+    inst.bells.strike = (k, hz, v, p, at) => { const ok = strike(k, hz, v, p, at); if (ok) heard.push(base + at); return ok; };
+    for (let k = 0; k < 30; k++) inst.engine.drop((k * 0.37) % 1, (k * 0.59) % 1, 2, 0.05 + k * 0.2);
+    const L = new Float32Array(128), R = new Float32Array(128);
+    for (base = 0; base < 8 * fs; base += 128) inst.process(L, R, 128);
+    const origin = (inst.looper.transportOrigin * fs) / SIM_RATE, g = 1.5 * fs;
+    const off = Math.max(...heard.map((t) => { const d = (t - origin) % g; return Math.min(d, g - d); }));
+    report(inst.heldOverflow === 0 && off <= Math.round(0.012 * fs), `busy water at a 1.5 s grid: ${heard.length} notes, all on the grid, queue never full`,
+      `overflows ${inst.heldOverflow}, worst ${(off / 48).toFixed(1)} ms off the grid`);
+    // One note per stone per grid point: no stone heard twice within the
+    // on-beat window.
+    const flams = (bpm, grid) => {
+      const q = new Instrument({ sampleRate: fs, seed: 5 });
+      q.setStones(xs, ys, all.map((p) => p.hz), all.length);
+      q.setParam('threshold', 0.005); q.setParam('splash', 0.6);
+      q.setParam('bpm', bpm); q.setParam('grid', grid); q.setParam('quantize', 1);
+      const last = new Float64Array(128).fill(-1e9);
+      let pos = 0, doubles = 0;
+      const sk = q.bells.strike.bind(q.bells);
+      q.bells.strike = (k, hz, v, p, at) => { const ok = sk(k, hz, v, p, at); if (ok) { if (pos + at - last[k] <= Math.round(0.012 * fs)) doubles++; last[k] = pos + at; } return ok; };
+      for (let k = 0; k < 30; k++) q.engine.drop((k * 0.41) % 1, (k * 0.53) % 1, 2, 0.05 + k * 0.2);
+      for (pos = 0; pos < 8 * fs; pos += 128) q.process(L, R, 128);
+      return doubles;
+    };
+    const d1 = flams(120, 4), d2 = flams(90, 2), d3 = flams(40, 1);
+    report(d1 + d2 + d3 === 0, 'one note per stone per grid point: no stone heard twice within the on-beat window',
+      `double strikes at 120/16ths ${d1}, 90/8ths ${d2}, 40/quarters ${d3}`);
+    // A retune that removes stones silences their waiting notes.
+    for (base = 8 * fs; base < 8.7 * fs; base += 128) inst.process(L, R, 128);
+    const waiting = inst.heldCount;
+    inst.setStones(xs.slice(0, 4), ys.slice(0, 4), all.slice(0, 4).map((p) => p.hz), 4);
+    const rung = [];
+    inst.bells.strike = (k, hz, v, p, at) => { rung.push(k); return strike(k, hz, v, p, at); };
+    for (base = 8.7 * fs; base < 10.5 * fs; base += 128) inst.process(L, R, 128);
+    report(waiting > 4 && rung.every((k) => k < 4), 'a retune that removes stones silences their waiting notes',
+      `${waiting} notes waiting; rang afterwards: stones ${[...new Set(rung)].join(', ') || 'none'}`);
+  }
+}
+
 // ---- 4. Same loop at any sample rate and block size --------------------------------
 console.log('\n4. Sample-rate and block-size independence');
 {

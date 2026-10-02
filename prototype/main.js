@@ -19,6 +19,8 @@ import { REFERENCE_SPEED, SURFACE_W, SURFACE_H, SIM_RATE } from './surface.js';
 import { MAX_STONES } from './stones.js';
 import { PieceRecorder, pieceName, MAX_RECORD_SECONDS } from './record.js';
 import { FEEDBACK_URL } from './config.js';
+import { Animator } from './animate.js';
+import { CameraMotion } from './camera.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
 import {
   LOOP_LAYERS, EMPTY, RECORDING, PLAYING, OVERDUB, STOPPED,
@@ -50,7 +52,9 @@ function wake() {
   if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) return;
+  // The camera is off while the page is hidden (nothing looks while no one plays).
+  if (document.hidden) { camera.stop(); return; }
+  if (animator.mode === 'camera' && !camera.on) setAnimate('camera');
   wake();
   if (recorder && recorder.recording) recorder.drain(); // catch up at once after being hidden
 });
@@ -128,7 +132,10 @@ function retune() {
   const count = tuning.stoneCount || notesInRange;
   stoneNote();
   if (stoneCountKnob) stoneCountKnob.refresh();
-  stones = withPitches({ ...placeStones(count), count });
+  // The stones stay where they are (a retune never moves them — they may be
+  // mid-animation); only a change in count lays out the new set.
+  const kept = stones.count === count && stones.xs ? { xs: stones.xs, ys: stones.ys } : placeStones(count);
+  stones = withPitches({ ...kept, count });
   sendStones();
   refreshVoice(); // a stone the editor was on may be gone
 }
@@ -182,6 +189,7 @@ function sendStones() {
     if (!events.push(EV_STONE, i, stones.xs[i], stones.ys[i], stones.hzs[i])) { stonesUnsent = true; return; }
   }
   stonesUnsent = !events.push(EV_STONES_COMMIT, stones.count);
+  sentXs = Float64Array.from(stones.xs); sentYs = Float64Array.from(stones.ys); // animate has nothing to resend
 }
 
 function setTuningNote(text) {
@@ -253,7 +261,14 @@ function buildStoneControls() {
     get: () => layout.spread, set: (v) => { layout.spread = v; rearrange(); }, def: 1,
     to: (v) => v, from: (f) => f, show: (v) => (v > 0.95 ? 'even' : v < 0.05 ? 'gathered' : `${Math.round(v * 100)}`),
   });
-  document.getElementById('stone-controls').append(count.el, row.el);
+  const motionKnob = knob({
+    label: 'motion', hint: 'how fast animated stones move',
+    get: () => animator.speed, set: (v) => { animator.speed = v; }, def: 0.2,
+    to: (v) => v, from: (f) => f, show: (v) => `${Math.round(v * 100)}`,
+  });
+  document.getElementById('stone-controls').append(count.el, row.el, motionKnob.el);
+  buildAnimateControls();
+  if (restoredAnimate !== 'off') setAnimate(restoredAnimate);
 }
 
 // ---- knobs ---------------------------------------------------------------------------
@@ -450,9 +465,16 @@ const voiceKnobs = [];
 let playingStatus = '';
 let refreshVoice = () => {};
 let lastSelected = -1; // the stone last tapped on the pond (−1: none yet)
+let drawingPointer = -1; // the finger drawing an animate path
+let sentXs = new Float64Array(0), sentYs = new Float64Array(0); // where animate last sent each stone
 const grabs = new Map(); // pointerId → { i, x, y, moved, at } — a press that began on a stone
 let heldStone = -1; // the lifted stone, waiting for a tap to put it down
 let hover = null; // the mouse over the pond while a stone is lifted (a preview of where it goes)
+// Animate's state (see "animate" below), declared here so the controls built
+// at startup can read it.
+const animator = new Animator(crypto.getRandomValues(new Uint32Array(1))[0] || 1);
+const camera = new CameraMotion(document.getElementById('camera'));
+let pathDrawing = false, pathPoints = [], heightsFrame = null, lastAnimSend = 0, restoredAnimate = 'off';
 
 function buildVoiceControls() {
   for (const k of VOICE_KNOBS) {
@@ -891,6 +913,10 @@ function restoreSession() {
     const p = VOICE_PARAMS[k], v = num(o && o[k], p.min, p.max);
     return [k, v === undefined ? p.def : v];
   }));
+  const an = saved.animate || {};
+  if (typeof an.mode === 'string' && ['off', 'drift', 'path', 'water'].includes(an.mode)) restoredAnimate = an.mode; // never the camera unasked
+  const speed = num(an.speed, 0, 1); if (speed !== undefined) animator.speed = speed;
+  if (Array.isArray(an.path)) animator.setPath(an.path.slice(0, 2000).map((p) => ({ x: num(p && p[0], 0, 1), y: num(p && p[1], 0, 1) })));
   if (saved.voices && saved.voices.shared) voiceValues.set(SHARED, voice(saved.voices.shared));
   for (const e of Array.isArray(saved.voices && saved.voices.own) ? saved.voices.own : []) {
     const i = num(e && e[0], 0, MAX_STONES - 1);
@@ -905,6 +931,7 @@ function saveSession() {
   const json = JSON.stringify({
     v: 1, values, tuning, layout, placed: [...placed].map(([i, p]) => [i, p.x, p.y]),
     voices: { shared: voiceValues.get(SHARED), own },
+    animate: { mode: animator.mode === 'camera' ? 'off' : animator.mode, speed: animator.speed, path: animator.path.map((p) => [p.x, p.y]) },
   });
   if (json === lastSaved) return;
   try { localStorage.setItem(SESSION_KEY, json); lastSaved = json; } catch { /* private window: not kept */ }
@@ -1038,6 +1065,71 @@ async function startAudio() {
   status.textContent = playingStatus;
 }
 
+// ---- animate: stones that move on their own --------------------------------------------
+//
+// Drift, a drawn path, carried by the water, or steered by the camera. As a
+// stone moves its note follows where it is (always on the scale). A held or
+// dragged stone is left to the hand.
+
+function setAnimate(mode) {
+  animator.mode = mode;
+  for (const b of document.querySelectorAll('#animate-modes button')) b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false');
+  document.getElementById('path-row').hidden = mode !== 'path';
+  document.getElementById('camera-row').hidden = mode !== 'camera';
+  if (mode !== 'path') setPathDrawing(false);
+  if (mode === 'camera' && !camera.on) {
+    const note = document.getElementById('camera-note');
+    camera.start().then((on) => { if (on && camera.on) note.textContent = 'camera on — move in front of it; the stones follow. The picture stays on this device.'; })
+      .catch((err) => { if (animator.mode === 'camera') note.textContent = `no camera: ${err && err.message ? err.message : err}`; });
+  } else if (mode !== 'camera') camera.stop(); // also cancels a start still asking
+}
+function setPathDrawing(on) {
+  pathDrawing = on;
+  const b = document.getElementById('path-draw');
+  b.classList.toggle('on', on);
+  b.textContent = on ? 'drawing — drag on the pond' : 'draw a path';
+  if (!on) { drawingPointer = -1; pathPoints = []; }
+}
+function buildAnimateControls() {
+  for (const b of document.querySelectorAll('#animate-modes button')) b.addEventListener('click', () => setAnimate(b.dataset.mode));
+  document.getElementById('path-draw').addEventListener('click', () => setPathDrawing(!pathDrawing));
+}
+// The water's height at a pond position, from the latest frame (for "water").
+function waterHeight(x, y) {
+  if (!heightsFrame) return 0;
+  const gx = Math.min(GRID_W - 1.001, Math.max(0, x * (GRID_W - 1))), gy = Math.min(GRID_H - 1.001, Math.max(0, y * (GRID_H - 1)));
+  const x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0, at = (i, j) => heightsFrame[FRAME_HEIGHTS + j * GRID_W + i];
+  return (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) + (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+}
+// One animation step (from the draw loop). Moves are sent ~30 times a second,
+// only for stones that moved since they were last sent (a move resets a
+// stone's crest detection, so still stones are left alone).
+function animateStones(dt, now) {
+  if (animator.mode === 'off' || !events || stones.count === 0) return false;
+  if (sentXs.length !== stones.count) { sentXs = Float64Array.from(stones.xs); sentYs = Float64Array.from(stones.ys); }
+  let motion = null;
+  if (animator.mode === 'camera') {
+    const m = camera.sample(); // screen terms (mirrored) → the pond's
+    const p = fromCanvas(m.x, m.y);
+    motion = { x: p.x, y: p.y, amount: m.amount };
+  }
+  const held = new Set([heldStone, ...[...grabs.values()].map((g) => g.i)]);
+  const moved = animator.step(dt, stones.xs, stones.ys, { still: (i) => held.has(i), heights: waterHeight, motion });
+  let unsent = false;
+  for (let i = 0; i < stones.count && !unsent; i++) unsent = Math.abs(stones.xs[i] - sentXs[i]) > 1e-5 || Math.abs(stones.ys[i] - sentYs[i]) > 1e-5;
+  if (unsent && now - lastAnimSend > 33) {
+    lastAnimSend = now;
+    for (let i = 0; i < stones.count; i++) {
+      if (held.has(i)) { sentXs[i] = stones.xs[i]; sentYs[i] = stones.ys[i]; continue; } // the hand sends its own
+      if (Math.abs(stones.xs[i] - sentXs[i]) <= 1e-5 && Math.abs(stones.ys[i] - sentYs[i]) <= 1e-5) continue;
+      if (!events.push(EV_STONE_MOVE, i, stones.xs[i], stones.ys[i])) { stonesUnsent = true; break; }
+      sentXs[i] = stones.xs[i]; sentYs[i] = stones.ys[i];
+      repitch(i);
+    }
+  }
+  return moved || unsent;
+}
+
 // ---- record piece: what you hear, as a WAV -------------------------------------------------
 
 let recorder = null, pieceUrl = '', pieceTimer = 0, pieceSaved = true, discardArmed = 0;
@@ -1106,6 +1198,7 @@ surface.addEventListener('pointerdown', (e) => {
   // Keep receiving this finger's moves even if it slides off the surface.
   try { surface.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   const p = toSurface(e);
+  if (pathDrawing && drawingPointer < 0) { pathPoints = [p]; drawingPointer = e.pointerId; return; } // this drag draws the path (other fingers play)
   const hit = stoneAt(e);
   if (heldStone >= 0 && hit >= 0 && hit !== heldStone) { // another stone: the lift moves to it
     setLift(-1);
@@ -1133,6 +1226,11 @@ surface.addEventListener('pointerdown', (e) => {
 surface.addEventListener('pointermove', (e) => {
   if (!events) return;
   const p = toSurface(e);
+  if (pathDrawing && e.pointerId === drawingPointer) {
+    const last = pathPoints[pathPoints.length - 1];
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) > 0.01) pathPoints.push(p);
+    return;
+  }
   if (heldStone >= 0 && e.pointerType === 'mouse') hover = p;
   const grab = grabs.get(e.pointerId);
   if (grab) {
@@ -1149,13 +1247,22 @@ surface.addEventListener('pointermove', (e) => {
   drags.set(e.pointerId, { x: p.x, y: p.y, t: e.timeStamp });
 });
 
+// The line is drawn (or the finger was lost): the stones take to it.
+function finishPath() {
+  if (pathPoints.length > 1) animator.setPath(pathPoints);
+  setPathDrawing(false);
+}
 surface.addEventListener('pointerup', (e) => {
+  if (pathDrawing && e.pointerId === drawingPointer) { finishPath(); return; }
   const grab = grabs.get(e.pointerId);
   // Only a quick, still tap lifts (a lingering press just selects).
   if (grab && !grab.moved && e.timeStamp - grab.at < LIFT_TAP_MS) setLift(grab.i);
 });
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-  surface.addEventListener(type, (e) => { drags.delete(e.pointerId); grabs.delete(e.pointerId); });
+  surface.addEventListener(type, (e) => {
+    drags.delete(e.pointerId); grabs.delete(e.pointerId);
+    if (pathDrawing && e.pointerId === drawingPointer) finishPath();
+  });
 }
 surface.addEventListener('pointerleave', () => { hover = null; });
 window.addEventListener('keydown', (e) => { // Escape: put a lifted stone back where it was lifted from
@@ -1262,6 +1369,8 @@ function draw(now) {
   lastFrameTime = now;
 
   let frame = visuals.read();
+  if (frame) heightsFrame = frame;
+  const animating = animateStones(dt, now);
   // The beat (when quantize is on) comes with every frame, still water or not;
   // between frames it's carried forward at the tempo.
   if (frame) { beatAt = frame[FRAME_BEAT]; beatTime = now; updateTracks(frame); } // tracks change even in still water
@@ -1277,7 +1386,8 @@ function draw(now) {
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
   const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceTarget}x${voiceMarks}x${heldStone}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
-  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && heldStone < 0 && size === lastSize) { requestAnimationFrame(draw); return; }
+  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && heldStone < 0 && !animating && drawingPointer < 0 &&
+      size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
   if (frame) {
     const px = image.data;
@@ -1372,6 +1482,18 @@ function draw(now) {
     g.strokeStyle = `rgba(255, 255, 255, ${(0.25 + 0.45 * (1 - left)).toFixed(3)})`;
     g.lineWidth = Math.max(1, dpr);
     g.beginPath(); g.arc(c.u * w, c.v * h, (4 + 14 * left) * dpr, 0, Math.PI * 2); g.stroke();
+  }
+
+  // A drawn path (path mode): a faint dashed line the stones travel.
+  const line = pathDrawing && pathPoints.length ? pathPoints : animator.mode === 'path' ? animator.path : [];
+  if (line.length > 1) {
+    g.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    g.lineWidth = Math.max(1, dpr);
+    g.setLineDash([4 * dpr, 5 * dpr]);
+    g.beginPath();
+    line.forEach((p, k) => { const c = toCanvas(p.x, p.y); if (k) g.lineTo(c.u * w, c.v * h); else g.moveTo(c.u * w, c.v * h); });
+    g.stroke();
+    g.setLineDash([]);
   }
 
   // The beat: the pond's rim pulses on every beat, brighter on each bar's first.

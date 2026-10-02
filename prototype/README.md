@@ -177,7 +177,19 @@ lifts it, the arrows move it, Enter or Escape puts it down. Placed stones
 keep their place when you retune or randomize (their notes follow the new
 scale from where they sit), and a stone dragged through
 moving water rings as crests pass over it. **randomize** rearranges the stones you
-haven't placed. **stones** sets how many (*all* — the default — is as many as there are
+haven't placed.
+
+**Animate** — stones that move on their own; as they move their notes
+change (always on the scale). **rest** · **drift** (each wanders on a slow,
+turning course) · **path** (tap **draw a path**, then drag a line on the
+pond: the stones travel it, back and forth) · **water** (ripples push stones
+away from their crests — the water moving its own stones) · **camera** (your
+movement in front of the camera pulls the stones toward it; the picture stays
+on this device; it stops when you leave this mode or the page, and needs the
+https link). **motion** sets how fast (in every mode). A stone you hold or drag
+is left to your hand; while you draw a path, other fingers still play. Drawing
+a path needs a pointer (there's no keyboard way yet). In *path*, stones going
+there and back pass each other, so pairs briefly share a note. **stones** sets how many (*all* — the default — is as many as there are
 scale notes in the range; scattered stones can double some notes and miss
 others, since their places pick their notes). **spread** goes from gathered in loose clumps
 to spread evenly over the whole pond. **release placed** (tap twice) frees the
@@ -341,6 +353,19 @@ voice editor untouched you hear exactly the Phase 1c bell.
 35. Come back later: are your settings as you left them? Is **start fresh**
     easy to find?
 
+**Pitch by position and Animate:**
+
+36. Where a stone sits sets its note (low left, high right). Does arranging
+    the pond now feel like composing? Should every note start with a stone,
+    or is a scattered, gappy pond better? (**spread** now also narrows the
+    register: gathered stones sit in the middle notes.)
+37. Drag a stone through moving water: it plays a run as it crosses notes.
+    Lovely, or too much like strumming?
+38. Try each animate mode — drift, path, water, camera. Which feel alive and
+    musical? Which would you keep? Is **motion** slow enough at the bottom?
+39. Camera: does steering the stones with your movement work? (It needs the
+    camera allowed; on the hosted link it'll ask.)
+
 ### Decisions for Dash
 
 - **What makes a stone ring.** Phase 1b's hypothesis — a crest whose peak
@@ -402,6 +427,11 @@ cd prototype && npm run check
 
 About four minutes; eight files (the voices CPU budget is a process of its own):
 
+- `check-animate.mjs` — stones held by the hand stay put; drift wanders,
+  stays inside and keeps to the speed limit (repeatably); a drawn path
+  gathers and moves the stones; the water pushes stones off a crest and still
+  water doesn't; the camera's movement pulls them (mirrored), no movement no
+  pull.
 - `check-record.mjs` — record piece: 16-bit conversion with dither, clipping
   and bad samples, the WAV header and data, the file name.
 - `check-tuning.mjs` — references (440, 432, any), scale building, maqam Rast,
@@ -469,6 +499,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
 | `ring.js` | Lock-free queue: page → audio thread. |
 | `visuals.js` | Lock-free frames: audio thread → page. |
 | `main.js`, `index.html` | The page: drawing, gestures, controls. |
+| `animate.js`, `camera.js` | Animate: drift, path, water and camera movement for the stones. |
 | `record.js`, `rec-worklet.js` | Record piece: a tap on the output, written as a WAV. |
 | `config.js` | The feedback form link for the hosted version. |
 | `build.mjs` | Builds `dist/` for hosting, with the headers file. |

@@ -76,7 +76,9 @@ instrument more generative — as they move their pitches change, always within
 the scale. Four kinds, all to be tried with testers: *random drift*; *trace a
 path* (draw a line, stones travel it); *carried by the water* (ripples push
 stones — the water moving its own stones); *steer by camera* (your movement
-directs them).
+directs them). Animate only moves stones; it never rings them — the water
+still decides when. Loops record gestures, not where stones have moved, so a
+replayed loop lands on stones that have since wandered: that is intended.
 
 ### Voices: what a struck stone sounds like
 The default voice is the **water-struck bell**: clear, tuned resonant tones with
@@ -255,6 +257,8 @@ Stir, Wave and Still stays open — so the water, the stones and the loopers
 don't care where a gesture came from. Every
 input source enters through one gesture path, and the gesture looper (when in
 use) records gestures from any source. Motion analysis stays on the device.
+(Animate's *steer by camera*, in testing now, is a second use: the camera
+moves stones and never disturbs the water.)
 
 Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
 

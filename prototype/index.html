@@ -178,6 +178,12 @@
     .toggle { display: grid; grid-template-columns: 1fr 1fr; }
     .toggle button { border-color: var(--muted); }
     .toggle button + button { border-left: 0; }
+    .toggle.five { grid-template-columns: repeat(5, 1fr); }
+    .toggle.five button { padding: 8px 0; letter-spacing: 0.06em; min-width: 0; overflow: hidden; text-overflow: clip; }
+    @media (max-width: 360px) { .toggle.five button { letter-spacing: 0; } }
+    .sub { display: block; margin: 10px 0 4px; font-size: 10px; color: var(--muted); }
+    .camera { width: 96px; aspect-ratio: 4 / 3; object-fit: cover; transform: scaleX(-1); border: 1px solid var(--faint);
+      filter: grayscale(1) contrast(1.1); background: #000; }
     .toggle button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
     .deck-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; }
     .reel { width: min(150px, 30vw); aspect-ratio: 1; justify-self: center; }
@@ -332,6 +338,22 @@
             <button id="release" type="button">release placed</button>
           </div>
           <div id="stone-controls" class="knobs"></div>
+          <span class="sub" id="animate-label">animate</span>
+          <div class="toggle five" id="animate-modes" role="group" aria-labelledby="animate-label">
+            <button type="button" data-mode="off" aria-pressed="true">rest</button>
+            <button type="button" data-mode="drift" aria-pressed="false">drift</button>
+            <button type="button" data-mode="path" aria-pressed="false">path</button>
+            <button type="button" data-mode="water" aria-pressed="false">water</button>
+            <button type="button" data-mode="camera" aria-pressed="false">camera</button>
+          </div>
+          <div class="row" id="path-row" hidden>
+            <button id="path-draw" type="button">draw a path</button>
+            <span class="note" id="path-note">then drag on the pond: the stones travel your line, back and forth</span>
+          </div>
+          <div class="row" id="camera-row" hidden>
+            <video id="camera" class="camera" playsinline muted aria-label="camera preview (stays on this device)"></video>
+            <span class="note" id="camera-note">move in front of the camera; the stones follow. The picture stays on this device.</span>
+          </div>
           <div class="note" id="stone-note">Tap a stone to pick it up, tap the water to put it down (or drag
             it). Placed stones stay put when you retune or randomize; a stone moved through moving water
             rings.</div>

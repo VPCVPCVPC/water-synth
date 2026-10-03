@@ -91,6 +91,17 @@ Voice) forgets them.
   finger is its own drop or drag, so two hands play at once. Apple Pencil
   pressure sets how hard; a mouse click is fixed strength.
 - **Drag** — a trail of small drops along your path; faster is stronger.
+- **Camera** (top bar; a camera icon on a phone) — move in front of the
+  camera and the water feels it: where something starts moving, a drop
+  (harder for bigger, sharper movement); while it keeps moving, a trail of
+  ripples that follows it, like a drag. It's a mirror: move to your left and
+  the ripples are on your left. Up to four moving things at once (two hands,
+  a head…), never more than ten drops a second. It learns your camera's
+  grain and lighting by itself. A small grey preview sits in the pond's
+  corner while it's on; the picture is shrunk to a 32 × 24 thumbnail on this
+  device and never recorded or sent. Quantize holds camera drops for the
+  beat like touches, and the tape hears the result. Needs the https link
+  (it asks for the camera).
 - **Hold** (Still) — press and keep still for about a third of a second: a
   hand rests on the water, a soft pale patch. The water under it flattens
   and ripples reaching it die there (and any note the water was holding
@@ -391,6 +402,11 @@ voice editor untouched you hear exactly the Phase 1c bell.
     size and strength right? Holding on a stone now stills around it
     instead of only selecting it — and you can no longer drag a stone after
     resting on it first (start the drag straight away). OK?
+42. **Camera ripples:** turn on **camera** and move. Does it feel like your
+    movement is touching the water? Too much (the pond always churning) or
+    too little (you have to flail)? Does a sudden gesture drop hard enough
+    — and a slow sweep draw a trail you can follow? Is the mirror the right
+    way round? Try it in dim light and with someone moving behind you.
 
 ### Decisions for Dash
 
@@ -526,6 +542,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
 | `visuals.js` | Lock-free frames: audio thread → page. |
 | `main.js`, `index.html` | The page: drawing, gestures, controls. |
 | `animate.js`, `camera.js` | Animate: drift, path, water and camera movement for the stones. |
+| `motion.js` | Camera movement → drops and drags (camera ripples). |
 | `record.js`, `rec-worklet.js` | Record piece: a tap on the output, written as a WAV. |
 | `config.js` | The feedback form link for the hosted version. |
 | `build.mjs` | Builds `dist/` for hosting, with the headers file. |

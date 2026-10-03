@@ -254,16 +254,22 @@ Build in this order:
 3. **MPE controllers** (Seaboard, LinnStrument, Push) — per-note pressure and
    glide map naturally onto disturbance and microtonal pitch.
 
-**Camera / motion input (planned, not yet scheduled):** a dancer plays the
+**Camera / motion input (first version built Oct 2026, for testing):** a dancer plays the
 instrument with her movement. Camera motion is an input, not Vessel. Motion in
 the camera frame becomes gesture events, like touch — at first drops and drags
-where movement happens, stronger for faster motion; how body motion maps to
+where movement happens, stronger for bigger, quicker movement; how body motion maps to
 Stir, Wave and Still stays open — so the water, the stones and the loopers
 don't care where a gesture came from. Every
 input source enters through one gesture path, and the gesture looper (when in
 use) records gestures from any source. Motion analysis stays on the device.
 (Animate's *steer by camera*, in testing now, is a second use: the camera
-moves stones and never disturbs the water.)
+moves stones and never disturbs the water.) The first version (Dash, Oct
+2026: "motion activation of the ripples"): where movement starts, a drop,
+harder for bigger, sharper movement; while it keeps moving, a drag that
+follows it; up to four moving things at once, at most ten drops a second;
+mirrored; it learns the camera's grain by itself. It goes through the same
+path as touch (quantize holds its drops; the tape hears it). Turned on from
+the top bar; it shares the one camera with Animate.
 
 Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
 
@@ -303,7 +309,8 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    record piece (WAV), a first-run "how to play" guide that stays true to
    "you don't play notes", a feedback form link, and settings kept in the
    browser. Stir, Wave, Still, Phase and MIDI come later in this phase (Still
-   was built first, Oct 2026, after Dash's "keep building").
+   was built first, Oct 2026, after Dash's "keep building"; then camera ripples
+   came in at his request, ahead of Stir and Wave — see Camera / motion input).
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
    including its gestures and the Phase modes).
@@ -360,5 +367,6 @@ Inside `processBlock` and anything it calls:
   at once moves) — Dash to confirm. A hold on open water starts with the
   touch's drop — fine, or should Still never make a sound? Still isn't
   recorded by the gesture looper yet (a gap for its return, or Erosion).
-- How camera / body motion maps to gestures, and when camera input is scheduled.
+- How camera / body motion maps to Stir, Wave and Still (drops and drags for
+  now) — e.g. should a still pose or an open palm ever mean Still?
 - Instrument name.

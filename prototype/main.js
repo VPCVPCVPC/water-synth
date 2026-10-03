@@ -21,6 +21,7 @@ import { PieceRecorder, pieceName, MAX_RECORD_SECONDS } from './record.js';
 import { FEEDBACK_URL } from './config.js';
 import { Animator } from './animate.js';
 import { CameraMotion } from './camera.js';
+import { MotionGestures } from './motion.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
 import {
   LOOP_LAYERS, EMPTY, RECORDING, PLAYING, OVERDUB, STOPPED,
@@ -140,8 +141,8 @@ function wake() {
 }
 document.addEventListener('visibilitychange', () => {
   // The camera is off while the page is hidden (nothing looks while no one plays).
-  if (document.hidden) { camera.stop(); return; }
-  if (animator.mode === 'camera' && !camera.on) setAnimate('camera');
+  if (document.hidden) { camera.stop(); showCamera(); return; }
+  syncCamera(); // back: the camera comes on again if something uses it
   wake();
   if (recorder && recorder.recording) recorder.drain(); // catch up at once after being hidden
 });
@@ -560,6 +561,9 @@ let hover = null; // the mouse over the pond while a stone is lifted (a preview 
 // at startup can read it.
 const animator = new Animator(crypto.getRandomValues(new Uint32Array(1))[0] || 1);
 const camera = new CameraMotion(document.getElementById('camera'));
+let cameraRipples = false; // "camera" in the bar: movement makes ripples (see syncCamera)
+const motionGestures = new MotionGestures();
+const camMarks = []; // where camera gestures landed lately: { x, y, at } (pond terms)
 let pathDrawing = false, pathPoints = [], heightsFrame = null, lastAnimSend = 0, restoredAnimate = 'off';
 
 function buildVoiceControls() {
@@ -1120,6 +1124,7 @@ async function startAudio() {
   recorder = new PieceRecorder(ctx, node, { maxSeconds: pieceMinutes * 60 });
   recorder.onlimit = () => finishPiece(`stopped at the ${pieceMinutes}-minute limit`);
   document.getElementById('piece-rec').disabled = false;
+  document.getElementById('camera-toggle').disabled = false;
   node.onprocessorerror = () => {
     status.textContent = 'The audio engine stopped with an error — see the browser console.';
   };
@@ -1160,11 +1165,79 @@ function setAnimate(mode) {
   document.getElementById('path-row').hidden = mode !== 'path';
   document.getElementById('camera-row').hidden = mode !== 'camera';
   if (mode !== 'path') setPathDrawing(false);
-  if (mode === 'camera' && !camera.on) {
-    const note = document.getElementById('camera-note');
-    camera.start().then((on) => { if (on && camera.on) note.textContent = 'camera on — move in front of it; the stones follow. The picture stays on this device.'; })
-      .catch((err) => { if (animator.mode === 'camera') note.textContent = `no camera: ${err && err.message ? err.message : err}`; });
-  } else if (mode !== 'camera') camera.stop(); // also cancels a start still asking
+  syncCamera();
+}
+
+// ---- the camera: movement makes ripples, and/or steers the stones ------------------------
+//
+// One camera serves both: "camera" in the bar (your movement drops and drags
+// ripples, like touch) and Animate's "camera" (it steers the stones). It's on
+// while either wants it. Everything stays on this device: the picture is
+// shrunk to a 32 × 24 grey thumbnail here and compared with the last one.
+let cameraAsk = 0; // which start is the latest (an older one's answer is ignored)
+let statusBack = 0;
+function syncCamera() {
+  const want = cameraRipples || animator.mode === 'camera';
+  const note = document.getElementById('camera-note');
+  // A word in the status line, then back to what it said (the playing hint).
+  const say = (text) => {
+    if (note) note.textContent = text;
+    const before = statusBack ? status.dataset.before : status.textContent;
+    clearTimeout(statusBack);
+    status.dataset.before = before;
+    status.textContent = text;
+    statusBack = setTimeout(() => { statusBack = 0; if (status.textContent === text) status.textContent = before; }, 5000);
+  };
+  if (want && !camera.on && !document.hidden) {
+    const ask = ++cameraAsk;
+    camera.start().then((on) => {
+      if (ask !== cameraAsk) return;
+      if (on && camera.on) say(cameraRipples ? 'camera on — move in front of it to make ripples. The picture stays on this device.'
+        : 'camera on — move in front of it; the stones follow. The picture stays on this device.');
+      showCamera();
+    }).catch((err) => {
+      if (ask !== cameraAsk || camera.on) return; // a newer start, or it's running after all
+      if (cameraRipples || animator.mode === 'camera') say(`no camera: ${err && err.message ? err.message : err}`);
+      if (cameraRipples) showCameraRipples(false); // the button lets go (without asking again)
+    });
+  } else if (!want) { cameraAsk++; camera.stop(); } // also cancels a start still asking
+  showCamera();
+}
+function showCamera() {
+  document.getElementById('camera').classList.toggle('on', camera.on);
+}
+function showCameraRipples(on) {
+  cameraRipples = on;
+  const b = document.getElementById('camera-toggle');
+  b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  b.classList.toggle('on', on);
+}
+function setCameraRipples(on) {
+  if (on && !cameraRipples) motionGestures.reset(); // nothing followed from before (the camera may have stayed on for Animate)
+  showCameraRipples(on);
+  syncCamera();
+}
+document.getElementById('camera-toggle').addEventListener('click', () => { wake(); setCameraRipples(!cameraRipples); });
+// New camera frames → gestures, sent like a touch's (quantize holds camera
+// drops for the beat just the same; the tape hears the result).
+function cameraGestures(now) {
+  if (!cameraRipples || !events || !camera.fresh) return;
+  for (const g of motionGestures.update(camera.prev, camera.cur, camera.w, camera.h, camera.dt)) {
+    if (g.type === 'drop') {
+      const p = fromCanvas(g.x, g.y);
+      events.push(EV_DROP, p.x, p.y, g.strength);
+      camMarks.push({ x: p.x, y: p.y, at: now });
+      const hold = heldFor(); // with quantize on, it waits for the beat like a touch: show where
+      if (hold > 0.02) pending.push({ x: p.x, y: p.y, from: now, until: now + hold * 1000 });
+    } else {
+      const a = fromCanvas(g.x0, g.y0), b = fromCanvas(g.x1, g.y1);
+      const across = Math.hypot(g.x1 - g.x0, g.y1 - g.y0), took = across / g.speed; // seconds the move took
+      const speed = Math.sqrt((b.x - a.x) ** 2 + ((b.y - a.y) * ASPECT) ** 2) / took; // surface-widths per second, as for a drag
+      if (speed > 0 && Number.isFinite(speed)) events.push(EV_STROKE, a.x, a.y, b.x, b.y, Math.min(16, speed));
+      camMarks.push({ x: b.x, y: b.y, at: now });
+    }
+  }
+  while (camMarks.length > 24) camMarks.shift();
 }
 function setPathDrawing(on) {
   pathDrawing = on;
@@ -1192,7 +1265,7 @@ function animateStones(dt, now) {
   if (sentXs.length !== stones.count) { sentXs = Float64Array.from(stones.xs); sentYs = Float64Array.from(stones.ys); }
   let motion = null;
   if (animator.mode === 'camera') {
-    const m = camera.sample(); // screen terms (mirrored) → the pond's
+    const m = camera.motion; // screen terms (mirrored) → the pond's (sampled once a frame in draw)
     const p = fromCanvas(m.x, m.y);
     motion = { x: p.x, y: p.y, amount: m.amount };
   }
@@ -1224,11 +1297,14 @@ pieceRec.addEventListener('click', () => {
   if (recorder.recording) { finishPiece(); return; }
   // A take that hasn't been saved yet: the first tap only asks.
   if (pieceUrl && !pieceSaved && !discardArmed) {
-    pieceLabel.textContent = 'tap again: discard the last piece';
-    discardArmed = setTimeout(() => { discardArmed = 0; pieceLabel.textContent = 'record piece'; }, 3000);
+    // The question gets the room (the time and "save" step aside for it).
+    pieceLabel.textContent = matchMedia('(max-width: 900px)').matches ? 'discard?' : 'tap again: discard the last piece';
+    pieceRec.parentElement.classList.add('confirming');
+    discardArmed = setTimeout(() => { discardArmed = 0; pieceLabel.textContent = 'record piece'; pieceRec.parentElement.classList.remove('confirming'); }, 3000);
     return;
   }
   clearTimeout(discardArmed); discardArmed = 0;
+  pieceRec.parentElement.classList.remove('confirming');
   if (pieceUrl) { URL.revokeObjectURL(pieceUrl); pieceUrl = ''; }
   pieceSave.hidden = true;
   recorder.start();
@@ -1523,6 +1599,7 @@ function draw(now) {
 
   let frame = visuals.read();
   if (frame) heightsFrame = frame;
+  if (camera.on) { camera.sample(); cameraGestures(now); }
   const animating = animateStones(dt, now);
   // The beat (when quantize is on) comes with every frame, still water or not;
   // between frames it's carried forward at the tempo.
@@ -1539,7 +1616,7 @@ function draw(now) {
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
   const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceTarget}x${voiceMarks}x${heldStone}x${hands.size}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
-  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && hands.size === 0 && heldStone < 0 && !animating && drawingPointer < 0 &&
+  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && hands.size === 0 && !(camMarks.length && now - camMarks[camMarks.length - 1].at < 500) && heldStone < 0 && !animating && drawingPointer < 0 &&
       size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
   if (frame) {
@@ -1635,6 +1712,16 @@ function draw(now) {
     g.strokeStyle = `rgba(255, 255, 255, ${(0.25 + 0.45 * (1 - left)).toFixed(3)})`;
     g.lineWidth = Math.max(1, dpr);
     g.beginPath(); g.arc(c.u * w, c.v * h, (4 + 14 * left) * dpr, 0, Math.PI * 2); g.stroke();
+  }
+
+  // Where the camera's movement touched the water: a small ring that fades.
+  for (const mk of camMarks) {
+    const age = (now - mk.at) / 500;
+    if (age >= 1) continue;
+    const c = toCanvas(mk.x, mk.y);
+    g.strokeStyle = `rgba(255, 255, 255, ${(0.55 * (1 - age)).toFixed(3)})`;
+    g.lineWidth = Math.max(1, dpr);
+    g.beginPath(); g.arc(c.u * w, c.v * h, (3 + 6 * age) * dpr, 0, Math.PI * 2); g.stroke();
   }
 
   // Still: each resting hand, a soft pale patch the size of what it calms.

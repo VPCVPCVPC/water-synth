@@ -1080,18 +1080,26 @@ buildLoopControls();
 buildStoneControls();
 document.getElementById('labels').addEventListener('change', (e) => { showLabels = e.target.checked; });
 startButton.addEventListener('click', start);
+window.waterReady = true; // the page's code loaded (index.html's guard stops worrying)
 
 async function start() {
   startButton.hidden = true;
+  const startError = document.getElementById('start-error');
+  startError.textContent = '';
   if (!crossOriginIsolated) {
-    status.textContent = 'Needs cross-origin isolation: run `node serve.mjs` (or `--https` for a phone or tablet)';
+    // Said on the start screen itself (the status line is below the fold).
+    startButton.hidden = false;
+    startError.textContent = 'This page needs its security headers to run (cross-origin isolation). Locally: run node serve.mjs. Hosted: upload the whole dist folder, including _headers.';
+    status.textContent = startError.textContent;
     return;
   }
   try {
     await startAudio();
   } catch (err) {
-    // No console on a phone: say what went wrong and let it be tried again.
-    status.textContent = `Couldn't start the audio: ${err && err.message ? err.message : err}. Tap to try again.`;
+    // No console on a phone: say what went wrong, on the start screen, and let it be tried again.
+    const why = err && err.message ? err.message : String(err);
+    startError.textContent = `Couldn't start the audio: ${why}. If you just updated the page, reload it (an old copy may be cached). Tap to try again.`;
+    status.textContent = startError.textContent;
     if (ctx) { ctx.close().catch(() => {}); ctx = null; }
     events = null;
     startButton.hidden = false;

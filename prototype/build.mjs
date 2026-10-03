@@ -27,7 +27,12 @@ writeFileSync(join(OUT, '_headers'), `/*
   Cross-Origin-Embedder-Policy: require-corp
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
+  Cache-Control: no-cache
 `);
+// no-cache: browsers may keep files but must check they're current before
+// use. The page is many small modules; after a new upload, a browser mixing
+// cached old ones with new ones fails to start the audio.
+
 
 // Every module the page imports must have made it (a missing one is a blank page).
 const missing = [];

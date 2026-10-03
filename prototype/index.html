@@ -339,6 +339,8 @@
       background: rgba(0, 0, 0, 0.92); color: var(--fg); font: 400 13px var(--font); letter-spacing: 0.4em;
       text-transform: uppercase; border: 0; cursor: pointer; width: 100%; border-radius: 0; z-index: 10; }
     #start .logo { width: min(42vw, 220px); }
+    #start .start-error { max-width: 32em; padding: 0 16px; font-size: 12px; letter-spacing: 0.12em; line-height: 1.8; color: var(--muted); text-transform: none; }
+    #start .start-error:empty { display: none; }
     #start .logo circle { fill: none; stroke: var(--fg); stroke-width: 1.8; transform-origin: 50px 50px;
       animation: breathe 6s ease-in-out infinite; }
     #start .logo circle:nth-child(2) { animation-delay: 0.3s; } #start .logo circle:nth-child(3) { animation-delay: 0.6s; }
@@ -536,7 +538,26 @@
   <button id="start"><svg class="logo" viewBox="0 0 100 100" aria-hidden="true">
       <circle cx="50" cy="50" r="8"/><circle cx="50" cy="50" r="14"/><circle cx="50" cy="50" r="20"/>
       <circle cx="50" cy="50" r="26"/><circle cx="50" cy="50" r="32"/><circle cx="50" cy="50" r="38"/><circle cx="50" cy="50" r="44"/>
-    </svg><span>Touch to wake the water</span></button>
+    </svg><span>Touch to wake the water</span><span id="start-error" class="start-error" aria-live="polite"></span></button>
+  <script>
+    // If the page's own code fails to load (an old copy cached beside a new
+    // one, a network hiccup), the start button would do nothing and say
+    // nothing: say so on the start screen instead.
+    (function () {
+      var say = function (text) {
+        var e = document.getElementById('start-error');
+        if (e && !window.waterReady) e.textContent = text;
+      };
+      window.addEventListener('error', function (ev) {
+        if (ev.target && ev.target.tagName === 'SCRIPT') say("Couldn't load the page. Reload it (an old copy may be cached).");
+        else if (!window.waterReady) say("Couldn't load the page: " + (ev.message || 'an error') + '. Reload it (an old copy may be cached).');
+      }, true);
+      document.getElementById('start').addEventListener('click', function () {
+        var e = document.getElementById('start-error');
+        if (!window.waterReady && e && !e.textContent) say("The page hasn't finished loading. Wait a moment, or reload it (an old copy may be cached).");
+      });
+    })();
+  </script>
   <script type="module" src="main.js"></script>
 </body>
 </html>

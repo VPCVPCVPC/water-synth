@@ -4,8 +4,20 @@
     {
       "name": "prototype",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["prototype/serve.mjs"],
+      "runtimeArgs": [
+        "prototype/serve.mjs"
+      ],
       "port": 8123,
+      "autoPort": true
+    },
+    {
+      "name": "dist",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "prototype/serve.mjs",
+        "--dist"
+      ],
+      "port": 8124,
       "autoPort": true
     }
   ]

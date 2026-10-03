@@ -137,7 +137,10 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   Stopping, muting and clearing fade, never cut. Each track also has a
   **fader** (Dash, Oct 2026), so a track can be faded in and out while you
   record and perform; it sets only what you hear (takes still record the
-  water at full level) and is separate from mute.
+  water at full level) and is separate from mute. **Quick tape** (Dash, Oct
+  2026): a take must start mid-performance without scrolling to the deck —
+  a small transport on the pond (pick a track, rec, play/stop) and keys on a
+  computer (1–4, R, P, M).
 - **Record piece** (Dash, Oct 2026) — saves everything you hear (the water and
   the tape) as a WAV to keep or share. A capture, not a layer: it never plays
   back into the instrument, and tapes still record only the water.

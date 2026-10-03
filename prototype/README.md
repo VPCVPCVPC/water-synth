@@ -140,6 +140,16 @@ the water, never another track, and always plays exactly what it recorded —
 retuning never touches it — so you can lay a bassline, retune, add a melody,
 retune, add harmonies. Each track up to 30 s. (Touch loops, which replayed
 your touches into the water, are set aside for now.)
+- **Quick tape** — so a take can start mid-phrase without scrolling to the
+  deck: over the pond's top-left corner, **TAPE n** (the picked track, with
+  its lamp: lit while playing, blinking while recording, ringed when it holds
+  a take, dimmed when muted) and **● rec**, which works on that track exactly
+  like its own rec key (rec, then finish, then dub). Tap **TAPE n** and the
+  numbers 1–4 open to pick another track; they fold away once you pick (or
+  after a few seconds). On a computer: **1–4** pick a track, **R** records
+  (then finishes, then dubs), **P** plays or stops, **M** mutes — anywhere
+  on the page except while typing in a field. The picked track is
+  underlined on the deck.
 - Each track: **rec** starts a take, **finish** ends it and it plays; **dub**
   adds more on top (heard live once, replayed from the next pass); **mute**
   silences it and keeps its place; **stop** then **play** restarts it from its
@@ -416,6 +426,10 @@ voice editor untouched you hear exactly the Phase 1c bell.
 43. **Tape faders:** fade a track in and out while you play. Does the fader
     feel smooth and in your hands (the travel even to the ear — it's an
     audio taper, halfway ≈ −12 dB)? Big enough to grab on the phone?
+44. **Quick tape:** start and finish a take while you play, from the corner
+    of the pond (or R on a computer). Fast enough to catch a phrase? Is the
+    corner the right place — does it get in the way of the water? Are 1–4,
+    R, P, M the right keys?
 
 ### Decisions for Dash
 

@@ -845,6 +845,10 @@ const trackUi = [];
 // a track can be faded in and out while you play. Its level is the position
 // squared — an audio taper, so the travel feels even (halfway ≈ −12 dB).
 const tapeFaders = new Array(TRACKS).fill(1);
+// Quick tape (Dash, Oct 2026): one track is picked — the quick controls over
+// the pond and the computer keys (1–4, R, P, M) work on it — so a take can
+// start mid-phrase without scrolling to the deck.
+let armedTrack = 0;
 const faderLevel = (p) => p * p;
 const fadersUnsent = new Set(); // a fader move the queue couldn't take: sent again next frame
 function sendFader(t) {
@@ -930,6 +934,7 @@ function buildLoopControls() {
     paintTrack(ui, t);
   }
   confirmButton(document.getElementById('clear-all'), () => sendTape(0, TAPE_CLEAR_ALL));
+  armTrack(armedTrack);
 
   const quantize = document.getElementById('quantize');
   const shown = document.querySelector('.quantized');
@@ -1026,7 +1031,83 @@ function paintTrack(ui, t) {
   ui.mute.setAttribute('aria-pressed', muted ? 'true' : 'false');
   ui.mute.setAttribute('aria-label', `track ${t + 1} mute`);
   ui.mute.disabled = ui.clear.disabled = state === EMPTY;
+  paintQuick(t, state, rl, playing, muted);
 }
+// The quick controls show the picked track's rec and play keys as they are
+// on the deck, and every track's lamp on its number.
+function paintQuick(t, state, recLabel, playing, muted) {
+  const look = state === RECORDING || state === OVERDUB ? 'rec' : state === PLAYING ? 'play' : state === EMPTY ? 'empty' : 'stop';
+  const said = `${state === EMPTY ? ', empty' : look === 'rec' ? ', recording' : playing ? ', playing' : ', stopped'}${muted ? ', muted' : ''}`;
+  const chip = document.querySelector(`.quick-track[data-t="${t}"]`);
+  if (chip) {
+    chip.dataset.state = look; chip.dataset.muted = muted ? '1' : '0';
+    chip.setAttribute('aria-label', `track ${t + 1}${said}`);
+  }
+  if (t !== armedTrack) return;
+  const pick = document.getElementById('quick-pick'), rec = document.getElementById('quick-rec');
+  pick.dataset.state = look; pick.dataset.muted = muted ? '1' : '0';
+  document.getElementById('quick-num').textContent = String(t + 1);
+  pick.setAttribute('aria-label', `tape track ${t + 1}${said} — pick another`);
+  rec.querySelector('.word').textContent = recLabel;
+  rec.classList.toggle('rec', state === RECORDING || state === OVERDUB);
+  rec.setAttribute('aria-label', `tape track ${t + 1} ${recLabel === 'rec' ? 'record' : recLabel === 'dub' ? 'overdub' : recLabel === 'end' ? 'end overdub' : recLabel}`);
+}
+function armTrack(t) {
+  if (!(t >= 0 && t < TRACKS)) return;
+  armedTrack = t;
+  document.querySelectorAll('.quick-track').forEach((b) => b.setAttribute('aria-pressed', Number(b.dataset.t) === t ? 'true' : 'false'));
+  trackUi.forEach((ui, k) => { ui.ch.classList.toggle('armed', k === t); ui.last = ''; paintTrack(ui, k); });
+}
+function quickTape(action) {
+  if (!events) return;
+  wake(); // a laptop that slept, or iOS holding the audio back
+  if (action === 'rec') sendTape(armedTrack, TAPE_RECORD);
+  else if (action === 'play') sendTape(armedTrack, TAPE_PLAY_STOP);
+  else if (action === 'mute') sendTape(armedTrack, TAPE_MUTE);
+}
+// Picking a track: tap TAPE n and the four numbers open; picking one (or 4 s
+// of nothing, or Escape) folds them away again.
+const quick = document.getElementById('quick'), quickPick = document.getElementById('quick-pick');
+let quickFold = 0;
+function openQuick(open) {
+  quick.classList.toggle('open', open);
+  quickPick.setAttribute('aria-expanded', open ? 'true' : 'false');
+  clearTimeout(quickFold);
+  if (open) {
+    quickFold = setTimeout(() => {
+      const hadFocus = quick.contains(document.activeElement);
+      openQuick(false);
+      if (hadFocus) quickPick.focus(); // keyboard focus isn't lost when the numbers fold away
+    }, 4000);
+    const on = quick.querySelector(`.quick-track[data-t="${armedTrack}"]`);
+    if (on && document.activeElement === quickPick) on.focus();
+  }
+}
+quickPick.addEventListener('click', () => openQuick(true));
+document.querySelectorAll('.quick-track').forEach((b) => b.addEventListener('click', () => {
+  armTrack(Number(b.dataset.t));
+  const hadFocus = quick.contains(document.activeElement);
+  openQuick(false);
+  if (hadFocus) quickPick.focus();
+}));
+quick.addEventListener('keydown', (e) => { if (e.key === 'Escape' && quick.classList.contains('open')) { e.stopPropagation(); openQuick(false); quickPick.focus(); } });
+document.getElementById('quick-rec').addEventListener('click', () => quickTape('rec'));
+// The computer's keys: 1–4 pick a track, R records (finish, dub), P plays or
+// stops, M mutes — never while typing in a field, or with a modifier held.
+// Track numbers go by the key's place (Digit1…, Numpad1…), so they work on
+// any keyboard layout.
+document.addEventListener('keydown', (e) => {
+  if (!events || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+  const el = e.target;
+  if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+  if (!document.getElementById('guide').hidden) return;
+  const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code || '');
+  const k = (e.key || '').toLowerCase();
+  if (digit && Number(digit[1]) <= TRACKS) { armTrack(Number(digit[1]) - 1); e.preventDefault(); }
+  else if (k === 'r') { quickTape('rec'); e.preventDefault(); }
+  else if (k === 'p') { quickTape('play'); e.preventDefault(); }
+  else if (k === 'm') { quickTape('mute'); e.preventDefault(); }
+});
 
 // ---- start ---------------------------------------------------------------------------
 
@@ -1220,6 +1301,7 @@ async function startAudio() {
   for (const k of VOICE_KEYS) sendVoice(k);
   for (const i of overridden) sendOverride(i, 1); // stones with their own voice (restored)
   for (let t = 0; t < TRACKS; t++) sendFader(t); // the tape faders where they were left
+  document.getElementById('quick').hidden = false;
   retune();
   requestAnimationFrame(draw); // draw even if iOS holds the resume back
   status.textContent = 'waking the water…';

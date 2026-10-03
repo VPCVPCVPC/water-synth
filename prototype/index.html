@@ -271,6 +271,32 @@
       transform: scaleX(-1); border: 1px solid var(--faint); filter: grayscale(1) contrast(1.1); background: #000;
       opacity: 0.55; pointer-events: none; display: none; }
     .camera.on { display: block; }
+    /* Quick tape: small, over the pond's top-left corner — the picked track
+       and rec; tapping the track opens 1–4 to pick another. */
+    .quick { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; align-items: center; z-index: 1;
+      padding: 3px; background: rgba(0, 0, 0, 0.45); border: 1px solid var(--edge); }
+    .quick button { min-height: 30px; min-width: 30px; padding: 0 7px; font-size: 10px; letter-spacing: 0.1em; border-color: var(--faint);
+      background: transparent; position: relative; }
+    .quick-pick { display: inline-flex; align-items: center; gap: 6px; }
+    .quick-pick .word { font-size: 9px; color: var(--muted); letter-spacing: 0.2em; }
+    .quick-tracks { display: none; gap: 4px; }
+    .quick.open .quick-tracks { display: flex; }
+    .quick.open .quick-pick, .quick.open .quick-rec { display: none; }
+    .quick-track[aria-pressed="true"] { border-color: var(--fg); color: var(--bg); background: var(--fg); }
+    /* each track's lamp: lit while it plays, blinking while it records, ringed when it holds a take */
+    .quick-track::after, .quick-pick::after { content: ''; position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; }
+    [data-state="play"]:is(.quick-track, .quick-pick)::after, [data-state="stop"]:is(.quick-track, .quick-pick)::after { border: 1px solid currentColor; }
+    [data-state="play"]:is(.quick-track, .quick-pick)::after { background: currentColor; }
+    [data-state="rec"]:is(.quick-track, .quick-pick)::after { background: currentColor; animation: blink 0.8s steps(2) infinite; }
+    [data-muted="1"]:is(.quick-track, .quick-pick) { opacity: 0.5; }
+    .quick-rec { display: inline-flex; align-items: center; gap: 6px; }
+    .quick-rec .dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; }
+    .quick-rec.rec { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+    .quick-rec.rec .dot { background: currentColor; animation: blink 0.8s steps(2) infinite; }
+    @media (pointer: coarse) { .quick button { min-height: 40px; min-width: 40px; } }
+    @media (prefers-reduced-motion: reduce) { [data-state="rec"]:is(.quick-track, .quick-pick)::after, .quick-rec.rec .dot { animation: none; } }
+    /* the track the quick controls work on, on the deck */
+    .ch.armed .ch-num { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; }
     .toggle button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
     .deck-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; }
     .reel { width: min(150px, 30vw); aspect-ratio: 1; justify-self: center; }
@@ -391,6 +417,19 @@
       <div class="stage">
         <canvas id="surface" aria-label="Water surface: touch to drop, drag to disturb"></canvas>
         <video id="camera" class="camera" playsinline muted aria-label="camera preview (stays on this device)"></video>
+        <!-- Quick tape: start a take without leaving the water (keys 1–4, R, P, M on a computer).
+             Small by default — the picked track and rec; tap the track to pick another. -->
+        <div class="quick" id="quick" role="group" aria-label="tape, quick" hidden>
+          <button type="button" class="quick-pick" id="quick-pick" aria-expanded="false" aria-controls="quick-tracks"
+            aria-keyshortcuts="1 2 3 4" title="the tape track the quick controls use — tap to pick another (keys 1–4)"><span class="word">tape</span><span id="quick-num">1</span></button>
+          <div class="quick-tracks" id="quick-tracks">
+            <button type="button" class="quick-track" data-t="0" aria-pressed="true" aria-keyshortcuts="1">1</button>
+            <button type="button" class="quick-track" data-t="1" aria-pressed="false" aria-keyshortcuts="2">2</button>
+            <button type="button" class="quick-track" data-t="2" aria-pressed="false" aria-keyshortcuts="3">3</button>
+            <button type="button" class="quick-track" data-t="3" aria-pressed="false" aria-keyshortcuts="4">4</button>
+          </div>
+          <button type="button" class="quick-rec" id="quick-rec" aria-keyshortcuts="R" title="record · finish · dub (key R)"><span class="dot"></span><span class="word">rec</span></button>
+        </div>
         <div class="meter" aria-hidden="true"><div class="track"><div id="output" class="fill"></div></div></div>
       </div>
       <nav class="tabs" role="tablist" aria-label="controls">
@@ -546,7 +585,7 @@
         <li><b>Hold</b> a finger still to rest a hand on the water: it calms there. Slide to calm along the way.</li>
         <li><b>Camera</b> (top bar): move in front of it and your movement makes ripples — the picture stays on this device.</li>
         <li><b>Tap a stone</b> to lift it, then tap the water to set it down. Its sound is under Voice.</li>
-        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out.</li>
+        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out. <b>TAPE</b> at the top of the pond picks a track and <b>● REC</b> starts a take, without leaving the water (on a computer: 1–4, then R).</li>
         <li><b>Record piece</b> saves everything you hear as a WAV.</li>
       </ol>
       <p class="note">Knobs: drag the dial up or down; double-tap to reset. Your settings stay in this browser.

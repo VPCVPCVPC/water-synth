@@ -111,7 +111,8 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   living water, so each pass lands in water that is already moving and
   differs. Several loops of different lengths can layer and drift. Loop
   playback is a natural input for Erosion later, so loops are stored as timed
-  gesture events.
+  gesture events. (Still and Stir, built since, aren't recorded yet: a returning
+  looper must record their streams of hand and stir states, let-go included.)
 - **Quantize** (optional, off by default) moves *when you touch the water*
   toward a beat grid — live touches and recorded ones — with a strength
   control from lean to snap (the default when enabled), plus swing. Touches
@@ -247,7 +248,8 @@ Later, if it earns its place: MTS-ESP support and MPE per-note pitch.
 ## Control and performance
 
 Build in this order:
-1. **XY surface in the plugin UI** — click = Drop, drag = Stir, swipe = Wave,
+1. **XY surface in the plugin UI** — click = Drop, drag = a trail and a drag
+   that keeps circling = Stir (built Oct 2026, to try), swipe = Wave,
    press-and-hold = Still (a quick tap right on a stone lifts it instead — see
    Tuned stones; a hold on a stone is Still, around the stone — provisional,
    see Open questions). No hardware needed; the primary way to play.
@@ -316,7 +318,9 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    "you don't play notes", a feedback form link, and settings kept in the
    browser. Stir, Wave, Still, Phase and MIDI come later in this phase (Still
    was built first, Oct 2026, after Dash's "keep building"; then camera ripples
-   came in at his request, ahead of Stir and Wave — see Camera / motion input).
+   came in at his request, ahead of Stir and Wave — see Camera / motion input;
+   then quick tape, tape faders, and Stir: circling builds turbulence that
+   dies away when you stop).
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
    including its gestures and the Phase modes).

@@ -36,6 +36,27 @@ const RESERVOIR_MAX = 32;
 const TRAIL_SPACING = 3; // cells between drops along a drag
 const TRAIL_GAIN = 0.35; // trail drop strength per (surface-width per second)
 const MAX_TRAIL_DROPS = 8;
+// Stir (CLAUDE.md: "continuous circular motion that builds turbulence"): a
+// finger circling drops small, fine ripples around its circle — mostly just
+// behind a point that circles with it, so the stones around it play in turn,
+// the way you stir. Its turbulence builds the longer and faster you stir and
+// dies away once you stop. Those times are the hand's (real time), and drops
+// are spaced by how far the finger travels, like a drag's trail: a stir puts
+// in the same energy at any flow, and the water answers at its own pace.
+export const MAX_STIRS = 10;
+const STIR_BUILD_SECONDS = 1.5; // to reach most of its turbulence while stirring steadily
+const STIR_FADE_SECONDS = 0.5; // to die away after you stop
+const STIR_GONE = 0.05; // once let go, turbulence below this is over (no long dribble)
+const STIR_SPACING = 3; // cells of finger travel per drop (as a trail's)
+const STIR_MAX_DROPS_PER_SECOND = 60; // one source, however wide and fast
+const STIR_FOLLOW = 0.7; // share of drops near the circling point (the rest scatter in its wake)
+const STIR_SPLASH_SHARE = 0.25; // a stir feeds splash less than a touch (it puts in a lot, steadily)
+const STIR_MIN_STRENGTH = 0.12, STIR_MAX_STRENGTH = 0.5; // small drops: choppy, never a slap
+const STIR_DROP_RADIUS = 0.9; // cells: fine ripples
+const STIR_FULL_SPEED = 2; // turns per second that count as stirring flat out
+const STIR_STALE_SECONDS = 0.25; // a stir not refreshed this long (stream time) is let go — a lost let-go can't stir forever
+const STIR_BUILD = 1 - Math.exp(-1 / (STIR_BUILD_SECONDS * SIM_RATE)); // per step (the hand's time)
+const STIR_FADE = 1 - Math.exp(-1 / (STIR_FADE_SECONDS * SIM_RATE));
 
 export class Engine {
   constructor({ sampleRate = 48000, width = 128, height = 97, seed = 1 } = {}) {
@@ -71,6 +92,20 @@ export class Engine {
     // gestures land.
     this.stepListener = null;
     this.qCount = 0; // scheduled gestures waiting
+
+    // Stir sources: where each circles (pond terms), how fast it's stirred
+    // now (0 when let go), and the turbulence it has built (0..1).
+    this.stirX = new Float64Array(MAX_STIRS);
+    this.stirY = new Float64Array(MAX_STIRS);
+    this.stirR = new Float64Array(MAX_STIRS);
+    this.stirPace = new Float64Array(MAX_STIRS);
+    this.stirEnergy = new Float64Array(MAX_STIRS);
+    this.stirDue = new Float64Array(MAX_STIRS); // drops owed (a fraction carries over)
+    this.stirSeen = new Float64Array(MAX_STIRS); // the step it was last told about
+    this.stirSpin = new Float64Array(MAX_STIRS).fill(1); // +1 / −1: which way it's stirred
+    this.stirAngle = new Float64Array(MAX_STIRS); // where on its circle the stir is now (radians)
+    this.stirsActive = 0;
+    this.stirDrops = 0; // diagnostics
   }
 
   queueFull() {
@@ -131,6 +166,21 @@ export class Engine {
     }
   }
 
+  // Stir: source `id` circles (x, y) with radius `r` (pond widths) at `turns`
+  // per second (0: let go — its turbulence dies away by itself).
+  stir(id, x, y, r, turns) {
+    if (!Number.isInteger(id) || id < 0 || id >= MAX_STIRS) return;
+    if (turns === 0) { this.stirPace[id] = 0; return; } // let go: it dies away where it was
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(r) || !Number.isFinite(turns)) return;
+    this.stirSeen[id] = this.simStep;
+    this.stirX[id] = x < 0 ? 0 : x > 1 ? 1 : x;
+    this.stirY[id] = y < 0 ? 0 : y > 1 ? 1 : y;
+    this.stirR[id] = r < 0.005 ? 0.005 : r > 0.4 ? 0.4 : r;
+    this.stirPace[id] = Math.min(8, Math.abs(turns));
+    this.stirSpin[id] = turns < 0 ? -1 : 1; // which way round
+    this.stirsActive = 1; // (recounted on the next step)
+  }
+
   // Still: hand `id` rests at (x, y) with `pressure` 0..1 (0 lifts it).
   // Takes effect from the next step; never delayed by quantize.
   still(id, x, y, pressure) {
@@ -172,6 +222,7 @@ export class Engine {
     while (this.stepSample(this.simStep + 1) < end) {
       const next = this.simStep + 1;
       if (this.stepListener) this.stepListener.onStep(next, this);
+      if (this.stirsActive) this.stirStep(next);
       this.applyScheduled(next);
       this.surface.step();
       this.simStep = next;
@@ -213,6 +264,53 @@ export class Engine {
   }
 
   // ---- internals ------------------------------------------------------------
+
+  // One step of every stir: turbulence builds toward how hard it's stirred
+  // (and fades once let go); drops owed at its rate land around its circle
+  // at this step. At most one drop per source per step.
+  stirStep(step) {
+    const build = STIR_BUILD, fade = STIR_FADE;
+    const w = this.surface.w, aspect = this.surface.h / w;
+    let active = 0;
+    for (let k = 0; k < MAX_STIRS; k++) {
+      let e = this.stirEnergy[k];
+      if (this.stirPace[k] > 0 && step - this.stirSeen[k] > STIR_STALE_SECONDS * SIM_RATE) this.stirPace[k] = 0; // gone quiet: let go
+      const pace = this.stirPace[k];
+      if (pace <= 0 && e === 0) continue;
+      const target = pace >= STIR_FULL_SPEED ? 1 : pace / STIR_FULL_SPEED;
+      e += (target - e) * (target > e ? build : fade);
+      if (pace <= 0 && e < STIR_GONE) e = 0;
+      this.stirEnergy[k] = e;
+      if (e === 0) { this.stirDue[k] = 0; continue; }
+      active++;
+      // The circling point goes round with the finger (and slows to a stop when let go).
+      const r = this.stirR[k];
+      let ang = this.stirAngle[k] + (this.stirSpin[k] * 2 * Math.PI * Math.max(pace, 0.5 * e)) / SIM_RATE;
+      if (ang > Math.PI) ang -= 2 * Math.PI; else if (ang < -Math.PI) ang += 2 * Math.PI;
+      this.stirAngle[k] = ang;
+      // Drops as the finger travels its circle: one per STIR_SPACING cells.
+      const perSecond = Math.min(STIR_MAX_DROPS_PER_SECOND, (2 * Math.PI * r * w * Math.max(pace, STIR_FULL_SPEED * e)) / STIR_SPACING);
+      let due = this.stirDue[k] + (e * perSecond) / SIM_RATE;
+      if (due >= 1) {
+        due -= 1;
+        if (due > 1) due = 1; // never a backlog
+        // Mostly just behind the circling point, near the rim; the rest anywhere in the stirred ring.
+        const follow = this.rand() < STIR_FOLLOW;
+        const a = follow ? this.stirAngle[k] - this.stirSpin[k] * this.rand() * 0.9 : this.rand() * 2 * Math.PI;
+        const d = r * (follow ? 0.75 + 0.25 * this.rand() : 0.4 + 0.6 * Math.sqrt(this.rand()));
+        const x = this.stirX[k] + Math.cos(a) * d, y = this.stirY[k] + (Math.sin(a) * d) / aspect;
+        const st = (STIR_MIN_STRENGTH + (STIR_MAX_STRENGTH - STIR_MIN_STRENGTH) * e) * (0.7 + 0.6 * this.rand());
+        // Straight into the water (not the gesture queue, which touches use).
+        if (this.surface.drop(x < 0 ? 0 : x > 1 ? 1 : x, y < 0 ? 0 : y > 1 ? 1 : y, st, STIR_DROP_RADIUS)) {
+          this.reservoir = Math.min(RESERVOIR_MAX, this.reservoir + RESERVOIR_PER_STRENGTH * STIR_SPLASH_SHARE * st);
+          this.stirDrops++;
+        }
+      }
+      this.stirDue[k] = due;
+    }
+    this.stirsActive = active;
+  }
+
 
   applyScheduled(step) {
     for (let i = 0; i < MAX_SCHEDULED; i++) {

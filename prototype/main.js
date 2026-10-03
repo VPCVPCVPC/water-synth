@@ -4,7 +4,7 @@
 
 import {
   createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_STONE_MOVE,
-  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE, EV_STONE_TUNE, EV_STILL, EV_TAPE_FADER,
+  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE, EV_STONE_TUNE, EV_STILL, EV_TAPE_FADER, EV_STIR,
 } from './ring.js';
 import {
   createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
@@ -1292,6 +1292,7 @@ async function startAudio() {
   const live = new Float32Array(visualBuffer, 8);
   window.waterDebug = {
     ctx, node, analyser, peak: () => peakOf(analyser), stones: () => stones, placed: () => placed,
+    stirs: () => [...circling.values()].map((c) => c.slot), stirRings: () => stirRings,
     liveEnergy: () => live[0], liveFlash: () => Array.from(live.subarray(FRAME_FLASH, FRAME_FLASH + stones.count)),
     liveLoops: () => Array.from({ length: LOOP_LAYERS }, (_, l) => Array.from(live.subarray(FRAME_LOOPS + l * LOOP_FIELDS, FRAME_LOOPS + (l + 1) * LOOP_FIELDS))),
     liveTapes: () => Array.from({ length: TAPE_TRACKS }, (_, t) => Array.from(live.subarray(FRAME_TAPES + t * TAPE_FIELDS, FRAME_TAPES + (t + 1) * TAPE_FIELDS))),
@@ -1491,11 +1492,87 @@ function finishPiece(note) {
 // ---- gestures: every finger, pen or mouse is its own disturbance ------------------------
 
 const drags = new Map(); // pointerId → last sample { x, y, t }
+// Stir: a drag that keeps circling (about three-quarters of a turn within
+// the last 0.6 s) stirs instead of trailing — the engine builds turbulence
+// around its circle while you keep going, and lets it die away when you stop
+// circling or lift. Straighten out and it's a trail again.
+const STIR_WINDOW_MS = 600, STIR_TURN = 1.5 * Math.PI, UNSTIR_TURN = 0.6 * Math.PI, MAX_STIR_SLOTS = 10;
+const circling = new Map(); // pointerId → { pts: [{ x, y, t }], slot, at }
+const stirRings = []; // { x, y, r, until } — the faint ring shown while stirring, fading after
+// A free slot — preferring one whose last stir has finished fading (so a new
+// stir starts from calm, and never takes over a ring still dying away).
+function stirSlot() {
+  const now = performance.now();
+  let fallback = -1, oldest = Infinity;
+  for (let k = 0; k < MAX_STIR_SLOTS; k++) {
+    let used = false;
+    for (const c of circling.values()) if (c.slot === k) used = true;
+    if (used) continue;
+    const ring = stirRings[k];
+    if (!ring || ring.until <= now) return k;
+    if (ring.until < oldest) { oldest = ring.until; fallback = k; }
+  }
+  return fallback;
+}
+// Follow a drag's recent path; returns the stir it's making ({ x, y, r, turns })
+// or null while it isn't circling. Pond terms, with y scaled to widths.
+function followCircle(id, p, t) {
+  let c = circling.get(id);
+  if (!c) { c = { pts: [], slot: -1, at: 0 }; circling.set(id, c); }
+  c.pts.push({ x: p.x, y: p.y * ASPECT, t });
+  while (c.pts.length > 2 && t - c.pts[0].t > STIR_WINDOW_MS) c.pts.shift();
+  // How far the path has turned: the angle between successive steps, summed
+  // (tiny steps skipped so a trembling finger doesn't count).
+  let turn = 0, len = 0, prev = null, last = c.pts[0];
+  for (let k = 1; k < c.pts.length; k++) {
+    const q = c.pts[k], dx = q.x - last.x, dy = q.y - last.y, d = Math.hypot(dx, dy);
+    if (d < 0.004) continue;
+    const ang = Math.atan2(dy, dx);
+    if (prev !== null) {
+      let da = ang - prev;
+      da -= Math.round(da / (2 * Math.PI)) * 2 * Math.PI;
+      if (Math.abs(da) < 0.75 * Math.PI) turn += da; // a sharp reversal (a wipe back and forth) isn't turning
+    }
+    prev = ang; len += d; last = q;
+  }
+  const span = Math.max(0.05, (t - c.pts[0].t) / 1000), turning = Math.abs(turn);
+  let cx = 0, cy = 0;
+  for (const q of c.pts) { cx += q.x; cy += q.y; }
+  cx /= c.pts.length; cy /= c.pts.length;
+  // …and a circle spreads both ways: the path's narrow spread against its
+  // wide one (a line, however wiggly, is nearly flat).
+  let sxx = 0, syy = 0, sxy = 0;
+  for (const q of c.pts) { const dx = q.x - cx, dy = q.y - cy; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+  const tr = sxx + syy, det = sxx * syy - sxy * sxy, disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
+  const round = tr > 0 ? (tr / 2 - disc) / (tr / 2 + disc) : 0; // 1: a circle, 0: a line (variances: a 3:1 oval ≈ 0.11)
+  const stirring = c.slot >= 0 ? turning > UNSTIR_TURN && round > 0.08 : turning > STIR_TURN && len > 0.08 && round > 0.1; // (up to ~3:1 ovals: quick stirring on glass is rarely round)
+  if (!stirring) return null;
+  let r = 0;
+  for (const q of c.pts) r += Math.hypot(q.x - cx, q.y - cy);
+  r /= c.pts.length;
+  return { x: cx, y: cy / ASPECT, r: Math.max(0.02, r), turns: turn / (2 * Math.PI) / span }; // signed: which way round
+}
+function sendStir(c, st, t) {
+  if (c.slot < 0) c.slot = stirSlot();
+  if (c.slot < 0 || !events) return;
+  if (t - c.at < 30 && st) return; // ~30 a second is plenty (a let-go always goes)
+  c.at = t;
+  if (st) { events.push(EV_STIR, c.slot, st.x, st.y, st.r, st.turns); stirRings[c.slot] = { x: st.x, y: st.y, r: st.r, until: Infinity }; }
+}
+function releaseStir(id) {
+  const c = circling.get(id);
+  circling.delete(id);
+  if (!c || c.slot < 0) return;
+  if (events) events.push(EV_STIR, c.slot, 0.5, 0.5, 0.05, 0);
+  const ring = stirRings[c.slot];
+  if (ring) ring.until = performance.now() + 900; // the turbulence dies away over about this
+}
 // Still: a press held without moving rests a hand on the water (it damps
 // and calms the water under it); sliding it calms along the way; lifting
 // the finger lifts the hand. pointerId → { slot, x, y } (pond terms).
 const hands = new Map();
 const holds = new Map(); // pointerId → { timer, cx, cy } — a press that may yet become Still
+let stirVisible = false; // a stir ring is on the pond (keep redrawing)
 function freeHandSlot() {
   for (let k = 0; k < MAX_HANDS; k++) {
     let used = liftsUnsent.has(k); // still waiting for its lift to go
@@ -1526,6 +1603,7 @@ function restHand(id, p, pressure = 1) {
 function releaseAllHands() {
   for (const id of [...holds.keys()]) cancelHold(id);
   for (const id of [...hands.keys()]) liftHand(id);
+  for (const id of [...circling.keys()]) releaseStir(id);
 }
 window.addEventListener('blur', releaseAllHands);
 document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllHands(); });
@@ -1627,8 +1705,19 @@ surface.addEventListener('pointermove', (e) => {
   if (!drag) return;
   const dt = (e.timeStamp - drag.t) / 1000;
   if (dt < 0.004) return; // let very fast event streams accumulate a little
-  const speed = Math.sqrt((p.x - drag.x) ** 2 + ((p.y - drag.y) * ASPECT) ** 2) / dt; // surface-widths per second
-  if (speed > 0) events.push(EV_STROKE, drag.x, drag.y, p.x, p.y, Math.min(16, speed));
+  const st = followCircle(e.pointerId, p, e.timeStamp);
+  const c = circling.get(e.pointerId);
+  if (st) sendStir(c, st, e.timeStamp); // circling: it stirs (no trail)
+  else {
+    if (c && c.slot >= 0) { // straightened out: back to a trail, the stir let go
+      events.push(EV_STIR, c.slot, 0.5, 0.5, 0.05, 0);
+      const ring = stirRings[c.slot];
+      if (ring) ring.until = performance.now() + 900;
+      c.slot = -1;
+    }
+    const speed = Math.sqrt((p.x - drag.x) ** 2 + ((p.y - drag.y) * ASPECT) ** 2) / dt; // surface-widths per second
+    if (speed > 0) events.push(EV_STROKE, drag.x, drag.y, p.x, p.y, Math.min(16, speed));
+  }
   drags.set(e.pointerId, { x: p.x, y: p.y, t: e.timeStamp });
 });
 
@@ -1646,7 +1735,7 @@ surface.addEventListener('pointerup', (e) => {
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   surface.addEventListener(type, (e) => {
     drags.delete(e.pointerId); grabs.delete(e.pointerId);
-    cancelHold(e.pointerId); liftHand(e.pointerId);
+    cancelHold(e.pointerId); liftHand(e.pointerId); releaseStir(e.pointerId);
     if (pathDrawing && e.pointerId === drawingPointer) finishPath();
   });
 }
@@ -1752,6 +1841,15 @@ function draw(now) {
   for (const key of unsent) sendParam(key);
   if (voiceQueue.size) flushVoice();
   if (liftsUnsent.size) sendLifts();
+  // A stirring finger that has stopped moving has stopped stirring.
+  for (const c of circling.values()) {
+    if (c.slot >= 0 && now - c.at > 250) {
+      if (events) events.push(EV_STIR, c.slot, 0.5, 0.5, 0.05, 0);
+      const ring = stirRings[c.slot];
+      if (ring) ring.until = now + 900;
+      c.slot = -1; c.pts.length = 0; // circling again must be seen afresh
+    }
+  }
   for (const t of fadersUnsent) sendFader(t);
   const dt = lastFrameTime ? Math.min(0.1, (now - lastFrameTime) / 1000) : 0;
   lastFrameTime = now;
@@ -1775,7 +1873,7 @@ function draw(now) {
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
   const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceTarget}x${voiceMarks}x${heldStone}x${hands.size}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
-  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && hands.size === 0 && !(camMarks.length && now - camMarks[camMarks.length - 1].at < 500) && heldStone < 0 && !animating && drawingPointer < 0 &&
+  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && hands.size === 0 && !stirVisible && !(camMarks.length && now - camMarks[camMarks.length - 1].at < 500) && heldStone < 0 && !animating && drawingPointer < 0 &&
       size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
   if (frame) {
@@ -1882,6 +1980,22 @@ function draw(now) {
     g.lineWidth = Math.max(1, dpr);
     g.beginPath(); g.arc(c.u * w, c.v * h, (3 + 6 * age) * dpr, 0, Math.PI * 2); g.stroke();
   }
+
+  // Stir: a faint ring where the water is being stirred, fading as it calms.
+  let stirShown = false;
+  for (const ring of stirRings) {
+    if (!ring) continue;
+    const left = ring.until === Infinity ? 1 : (ring.until - now) / 900;
+    if (left <= 0) continue;
+    stirShown = true;
+    const c = toCanvas(ring.x, ring.y), rr = ring.r * (rotated ? h : w);
+    g.strokeStyle = `rgba(255, 255, 255, ${(0.28 * left).toFixed(3)})`;
+    g.lineWidth = Math.max(1, dpr);
+    g.setLineDash([2 * dpr, 4 * dpr]);
+    g.beginPath(); g.arc(c.u * w, c.v * h, rr, 0, Math.PI * 2); g.stroke();
+    g.setLineDash([]);
+  }
+  stirVisible = stirShown;
 
   // Still: each resting hand, a soft pale patch the size of what it calms.
   for (const hd of hands.values()) {

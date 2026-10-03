@@ -9,7 +9,7 @@ import { MAX_STONES, StrikeBuffer } from './stones.js';
 import { VOICE_PARAMS, VOICE_KEYS, SHARED } from './voice.js';
 import {
   EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE, EV_VOICE, EV_VOICE_OVERRIDE, EV_STILL,
-  EV_TAPE, EV_STONE_TUNE, EV_TAPE_FADER,
+  EV_TAPE, EV_STONE_TUNE, EV_TAPE_FADER, EV_STIR,
 } from './ring.js';
 import { GestureLooper, LOOPER_PARAMS, GESTURE_DROP, GESTURE_TRAIL } from './looper.js';
 import { TapeDeck, TAPE_PARAMS } from './tape.js';
@@ -140,7 +140,9 @@ export class Instrument {
       case EV_LOOP: this.looper.action(d[o + 1], d[o + 2]); break;
       case EV_STONE_MOVE: e.stones.moveStone(e.surface, d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_STONE_TUNE: e.stones.setPitch(e.surface, d[o + 1], d[o + 2]); break;
-      case EV_STILL: e.still(d[o + 1], d[o + 2], d[o + 3], d[o + 4]); break; // not recorded: the tape hears what it does
+      // Still and Stir: never delayed (like a drag); not recorded (the tape hears what they do).
+      case EV_STILL: e.still(d[o + 1], d[o + 2], d[o + 3], d[o + 4]); break;
+      case EV_STIR: e.stir(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]); break;
       case EV_PARAM: this.setParamIndex(d[o + 1], d[o + 2]); break;
       case EV_VOICE: this.bells.voices.set(d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_VOICE_OVERRIDE: this.bells.voices.override(d[o + 1], d[o + 2] === 1); break;

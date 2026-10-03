@@ -20,6 +20,7 @@ export const EV_TAPE = 10; // track, action (tape.js TAPE_*: record, play/stop, 
 export const EV_STONE_TUNE = 11; // index, hz — one stone's pitch, now (a stone moved into another note's place)
 export const EV_STILL = 12; // hand, x, y, pressure — Still: a hand resting on the water (pressure 0 lifts it)
 export const EV_TAPE_FADER = 13; // track, level 0..1 — a tape track's fader
+export const EV_STIR = 14; // source, x, y, radius, turns per second — Stir (0 turns: let go)
 
 const HEADER_BYTES = 8;
 

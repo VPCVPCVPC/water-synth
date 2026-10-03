@@ -4,7 +4,7 @@
 
 import { Surface, SURFACE_PARAMS, SIM_RATE, REFERENCE_SPEED, MAX_HANDS } from './surface.js';
 import { Stones, StrikeBuffer, STONE_PARAMS } from './stones.js';
-import { Engine, ENGINE_PARAMS } from './engine.js';
+import { Engine, ENGINE_PARAMS, MAX_STIRS } from './engine.js';
 import { buildPitches, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
 import { performance } from 'node:perf_hooks';
@@ -517,6 +517,131 @@ console.log('\n12b. Still: a hand resting on the water');
     if (!(r < 0.9) || !Number.isFinite(h.energy())) ok = false;
   }
   report(ok, 'all ten hands down, at the slowest, default and fastest flow: calmer, never unstable', `worst energy left ${(worst * 100).toFixed(0)}%`);
+}
+
+console.log('\n12c. Stir: circling builds turbulence, which dies away once you stop');
+{
+  // Count stir drops per stretch of stream time, and where they land.
+  // (Stir drops go straight into the water; with splash off, every drop the
+  // surface takes here is a stir's.)
+  const watch = (e) => {
+    const landed = [];
+    const drop = e.surface.drop.bind(e.surface);
+    e.surface.drop = (x, y, st, r) => { landed.push({ x, y, st, step: e.simStep }); return drop(x, y, st, r); };
+    return landed;
+  };
+  const run = (e, seconds) => { for (let t = 0; t < seconds * 48000; t += 128) e.process(128); };
+  // Keep stirring (the page re-sends ~30 times a second while a finger circles).
+  const stirFor = (e, seconds, ...args) => { for (let t = 0; t < seconds; t += 1 / 30) { e.stir(...args); run(e, 1 / 30); } };
+  {
+    const e = makeEngine(), landed = watch(e);
+    const per = [];
+    for (let k = 0; k < 8; k++) { const n0 = landed.length; stirFor(e, 0.5, 0, 0.5, 0.5, 0.1, 2); per.push(landed.length - n0); }
+    const builds = per[0] < per[2] && per[2] <= per[7] + 2 && per[7] > 10;
+    const inside = landed.every((d) => Math.hypot(d.x - 0.5, (d.y - 0.5) * (97 / 128)) <= 0.1 + 1e-9);
+    const small = landed.every((d) => d.st <= 0.5 * 1.3 + 1e-9);
+    report(builds && inside && small, 'stirring steadily, the turbulence builds and then holds — small drops, all inside the stirred circle',
+      `drops per half second: ${per.join(' ')}`);
+    e.stir(0, 0.5, 0.5, 0.1, 0); // let go
+    const after = [];
+    for (let k = 0; k < 8; k++) { const n0 = landed.length; run(e, 0.5); after.push(landed.length - n0); }
+    report(after[0] > 0 && after[5] === 0 && after[7] === 0 && e.stirsActive === 0, 'let go, it dies away by itself within about two seconds', `drops per half second after: ${after.join(' ')}`);
+    run(e, 40);
+    report(e.surface.asleep, 'and then the water falls silent');
+  }
+  {
+    // A slow stir stirs less than a fast one.
+    const count = (turns) => { const e = makeEngine(), l = watch(e); stirFor(e, 3, 1, 0.4, 0.4, 0.08, turns); return l.length; };
+    const slow = count(0.5), fast = count(2.5);
+    report(slow > 0 && fast > slow * 2, 'a faster stir churns harder (more drops)', `${slow} drops at half a turn a second, ${fast} at two and a half`);
+  }
+  {
+    // The stir is the hand's: the same stir puts the same drops into the
+    // water at any flow (the water then answers at its own pace) — so it's
+    // never silent at the slowest flow, where it takes time to be heard.
+    const counts = [];
+    for (const speed of [SURFACE_PARAMS.waveSpeed.min, 39, SURFACE_PARAMS.waveSpeed.max]) {
+      const e = makeEngine({ params: { waveSpeed: speed } }), l = watch(e);
+      stirFor(e, 3, 2, 0.5, 0.5, 0.06, 2);
+      counts.push(l.length);
+    }
+    const lo = Math.min(...counts), hi = Math.max(...counts);
+    report(lo > 30 && hi / lo < 1.1, 'a stir puts in the same at any flow — never near-silent at the slowest', `${counts.join(' / ')} drops in 3 s at flow 4 / 39 / 450`);
+    // At the slowest flow it's heard: stones near it ring within a few seconds.
+    const slow = makeEngine({ params: { waveSpeed: SURFACE_PARAMS.waveSpeed.min } });
+    const sx = slow.stones.x[0], sy = slow.stones.y[0];
+    let rang = 0;
+    for (let t = 0; t < 5; t += 1 / 30) { slow.stir(0, sx, sy, 0.05, 2); slow.process(1600); rang += slow.strikes.count; }
+    report(rang > 0, 'at the slowest flow, stirring over a stone rings it within a few seconds', `${rang} strikes in 5 s`);
+  }
+  {
+    // Which way round: drops follow a point circling the way you stir, so the
+    // stones around play in that order.
+    const spin = (turns) => {
+      const e = makeEngine(), l = watch(e);
+      stirFor(e, 2, 0, 0.5, 0.5, 0.1, turns);
+      // Small steps between successive drops (the ones following the
+      // circling point): which way do most of them go?
+      let ahead = 0, back = 0, prev = null;
+      for (const d of l) {
+        const a = Math.atan2((d.y - 0.5) * (97 / 128), d.x - 0.5);
+        if (prev !== null) {
+          let da = a - prev; da -= Math.round(da / (2 * Math.PI)) * 2 * Math.PI;
+          if (Math.abs(da) < 1.2) { if (da > 0) ahead++; else back++; }
+        }
+        prev = a;
+      }
+      return ahead / Math.max(1, ahead + back);
+    };
+    const cw = spin(1.5), ccw = spin(-1.5);
+    report(cw > 0.6 && ccw < 0.4, 'a stir goes round the way you stir it (the other way, the other way round)',
+      `${Math.round(cw * 100)}% of steps go one way stirring one way; ${Math.round((1 - ccw) * 100)}% the other way, the other`);
+  }
+  {
+    // A long stir fills splash less than touches would (a quarter as much per drop).
+    const e = makeEngine({ params: { splash: 0.8 } });
+    stirFor(e, 8, 0, 0.5, 0.5, 0.08, 2);
+    report(e.reservoir < 32, 'a long stir doesn\'t pin splash at its limit', `reservoir ${e.reservoir.toFixed(1)} of 32`);
+  }
+  {
+    // A long, hard stir everywhere never runs away.
+    const e = makeEngine({ params: { splash: 0.8 } });
+    let top = 0, finite = true;
+    for (let t = 0; t < 20 * 48000; t += 128) {
+      if (t % 1536 === 0) for (let k = 0; k < MAX_STIRS; k++) e.stir(k, 0.1 + 0.08 * k, 0.5, 0.15, 8);
+      e.process(128);
+      const en = e.surface.energy();
+      if (!Number.isFinite(en)) finite = false;
+      top = Math.max(top, en);
+    }
+    run(e, 60);
+    // (A strength-1 tap is ~2e4; the runaway guard is 1e12.)
+    report(finite && top < 1e7 && e.surface.resets === 0 && e.surface.asleep, 'ten fingers stirring flat out for 20 s: lively, bounded, never reset — and then silence', `peak energy ${top.toExponential(1)}`);
+  }
+  {
+    const e = makeEngine();
+    for (const args of [[-1, 0.5, 0.5, 0.1, 1], [MAX_STIRS, 0.5, 0.5, 0.1, 1], [0.5, 0.5, 0.5, 0.1, 1], [0, NaN, 0.5, 0.1, 1], [0, 0.5, 0.5, Infinity, 1], [0, 0.5, 0.5, 0.1, NaN]]) e.stir(...args);
+    run(e, 1);
+    report(e.stirDrops === 0 && e.surface.asleep, 'bad stirs are ignored');
+  }
+  {
+    // Let go, its turbulence dies away where it was stirred (whatever place
+    // the let-go names) — and a stir nobody refreshes (a lost let-go) stops.
+    const e = makeEngine(), landed = watch(e);
+    stirFor(e, 2, 3, 0.2, 0.25, 0.08, 2);
+    const n0 = landed.length;
+    e.stir(3, 0.5, 0.5, 0.05, 0);
+    run(e, 2);
+    const after = landed.slice(n0);
+    const where = after.every((d) => Math.hypot(d.x - 0.2, (d.y - 0.25) * (97 / 128)) <= 0.08 + 1e-9);
+    const f = makeEngine(), l2 = watch(f);
+    f.stir(4, 0.5, 0.5, 0.1, 2); // never refreshed, never let go
+    run(f, 3);
+    const n1 = l2.length;
+    run(f, 2);
+    report(after.length > 0 && where && l2.length === n1 && f.stirsActive === 0,
+      'a let-go stir dies away where it was stirred; one never refreshed lets go by itself', `${after.length} drops after letting go, all in the stirred circle; unrefreshed: ${n1} drops, then none`);
+  }
 }
 
 console.log('\n13. CPU per 128-sample block at 48 kHz (budget 2667 µs)');

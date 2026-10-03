@@ -91,6 +91,12 @@ Voice) forgets them.
   finger is its own drop or drag, so two hands play at once. Apple Pencil
   pressure sets how hard; a mouse click is fixed strength.
 - **Drag** — a trail of small drops along your path; faster is stronger.
+- **Stir** — keep circling as you drag (about three-quarters of a turn
+  within about half a second) and the drag stirs instead: small, choppy drops
+  scatter around the circle you're drawing, and the turbulence builds the
+  longer and faster you stir (a faint dashed ring shows it). Stop circling or
+  lift your finger and it dies away within a second or two. Straighten out
+  and it's a trail again. Every finger can stir at once.
 - **Camera** (top bar; a camera icon on a phone) — move in front of the
   camera and the water feels it: where something starts moving, a drop
   (harder for bigger, sharper movement); while it keeps moving, a trail of
@@ -430,9 +436,18 @@ voice editor untouched you hear exactly the Phase 1c bell.
     of the pond (or R on a computer). Fast enough to catch a phrase? Is the
     corner the right place — does it get in the way of the water? Are 1–4,
     R, P, M the right keys?
+45. **Stir:** circle a finger on the water. Does it feel like stirring —
+    turbulence that builds, then settles when you stop? Does it start too
+    easily (catching a curvy drag you meant as a trail) or too late? Is the
+    churn too busy, too gentle, the right size?
 
 ### Decisions for Dash
 
+- **Drag or stir.** The control plan said "drag = Stir"; as built, a straight
+  drag stays a trail (as you liked it in 1b) and a drag that keeps circling
+  stirs. Keep that, or should every drag stir? And should Stir's churn feel
+  like a swirl carrying the water round (port-time work), or is a scatter of
+  choppy drops right?
 - **What makes a stone ring.** Phase 1b's hypothesis — a crest whose peak
   passes a threshold — stands for now. It's isolated in one method
   (`Stones.detect`) so it can be swapped.

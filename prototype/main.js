@@ -4,7 +4,7 @@
 
 import {
   createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_STONE_MOVE,
-  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE, EV_STONE_TUNE, EV_STILL,
+  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE, EV_STONE_TUNE, EV_STILL, EV_TAPE_FADER,
 } from './ring.js';
 import {
   createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
@@ -841,6 +841,68 @@ function shapeName(v) {
 // set aside on the page; the engine stays.) Track t is tape track t.
 const TRACKS = TAPE_TRACKS;
 const trackUi = [];
+// Each track's fader (Dash, Oct 2026): where it sits, 0 (down) to 1 (up), so
+// a track can be faded in and out while you play. Its level is the position
+// squared — an audio taper, so the travel feels even (halfway ≈ −12 dB).
+const tapeFaders = new Array(TRACKS).fill(1);
+const faderLevel = (p) => p * p;
+const fadersUnsent = new Set(); // a fader move the queue couldn't take: sent again next frame
+function sendFader(t) {
+  if (!events) return;
+  if (events.push(EV_TAPE_FADER, t, faderLevel(tapeFaders[t]))) fadersUnsent.delete(t); else fadersUnsent.add(t);
+}
+
+// A vertical fader: drag the cap up or down (it moves by how far you drag, so
+// grabbing it never jumps the level); double-tap for full; arrow keys too.
+function fader({ label, get, set }) {
+  const el = document.createElement('div');
+  el.className = 'fader';
+  el.tabIndex = 0;
+  el.setAttribute('role', 'slider');
+  el.setAttribute('aria-label', label);
+  el.setAttribute('aria-orientation', 'vertical');
+  el.setAttribute('aria-valuemin', '0');
+  el.setAttribute('aria-valuemax', '100');
+  el.innerHTML = '<div class="fader-slot"></div><div class="fader-cap"></div>';
+  const cap = el.querySelector('.fader-cap');
+  const paint = () => {
+    const p = get();
+    cap.style.bottom = `calc(${(p * 100).toFixed(2)}% - ${(p * 12).toFixed(2)}px)`; // the cap stays inside the slot
+    el.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+    el.setAttribute('aria-valuetext', p <= 0.001 ? 'silent' : `${Math.round(20 * Math.log10(faderLevel(p)))} dB`);
+  };
+  const put = (p) => { set(Math.min(1, Math.max(0, p))); paint(); };
+  let drag = null, lastTap = 0;
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    el.focus({ preventScroll: true }); // so the arrow keys move this fader after a click
+    try { el.setPointerCapture(e.pointerId); } catch { /* gone */ }
+    drag = { id: e.pointerId, y: e.clientY, p: get(), moved: false };
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 3) drag.moved = true;
+    put(drag.p - dy / Math.max(40, el.clientHeight - 12));
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved) { // a tap: a second within 350 ms brings it to full
+      if (e.timeStamp - lastTap < 350) { put(1); lastTap = 0; } else lastTap = e.timeStamp;
+    }
+    drag = null;
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('keydown', (e) => {
+    const p = get(), step = { ArrowUp: 0.05, ArrowRight: 0.05, ArrowDown: -0.05, ArrowLeft: -0.05, PageUp: 0.2, PageDown: -0.2 }[e.key];
+    if (step !== undefined) { e.preventDefault(); put(p + step); }
+    else if (e.key === 'Home') { e.preventDefault(); put(0); }
+    else if (e.key === 'End') { e.preventDefault(); put(1); }
+  });
+  paint();
+  return el;
+}
 function buildLoopControls() {
   const host = document.getElementById('layers');
   for (let t = 0; t < TRACKS; t++) {
@@ -849,7 +911,10 @@ function buildLoopControls() {
     ch.setAttribute('role', 'group');
     ch.setAttribute('aria-label', `track ${t + 1}`);
     ch.innerHTML = `<div class="ch-head"><span class="ch-num">${t + 1}</span><span class="lamp"></span></div>
-      <div class="ch-pos"><div></div></div><div class="ch-len">—</div><div class="keys"></div>`;
+      <div class="ch-pos"><div></div></div><div class="ch-len">—</div><div class="ch-body"><div class="keys"></div></div>`;
+    ch.querySelector('.ch-body').append(fader({
+      label: `track ${t + 1} fader`, get: () => tapeFaders[t], set: (v) => { tapeFaders[t] = v; sendFader(t); },
+    }));
     const keys = ch.querySelector('.keys');
     const mk = () => { const b = document.createElement('button'); b.type = 'button'; b.className = 'key'; keys.append(b); return b; };
     const rec = mk(), play = mk(), mute = mk(), clear = mk();
@@ -969,7 +1034,7 @@ function paintTrack(ui, t) {
 //
 // Knobs, tuning, the stone layout and voices come back when a tester returns.
 // Everything read back is checked and clamped; a broken or foreign entry is
-// ignored. (Tapes and recordings are not kept.)
+// ignored. (Tapes and recordings are not kept; the tape faders are.)
 
 const SESSION_KEY = 'water-synth.session';
 const num = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined);
@@ -1004,6 +1069,7 @@ function restoreSession() {
   if (typeof an.mode === 'string' && ['off', 'drift', 'path', 'water'].includes(an.mode)) restoredAnimate = an.mode; // never the camera unasked
   const speed = num(an.speed, 0, 1); if (speed !== undefined) animator.speed = speed;
   if (Array.isArray(an.path)) animator.setPath(an.path.slice(0, 2000).map((p) => ({ x: num(p && p[0], 0, 1), y: num(p && p[1], 0, 1) })));
+  if (Array.isArray(saved.faders)) for (let t = 0; t < TRACKS; t++) { const f = num(saved.faders[t], 0, 1); if (f !== undefined) tapeFaders[t] = f; }
   if (saved.voices && saved.voices.shared) voiceValues.set(SHARED, voice(saved.voices.shared));
   for (const e of Array.isArray(saved.voices && saved.voices.own) ? saved.voices.own : []) {
     const i = num(e && e[0], 0, MAX_STONES - 1);
@@ -1019,6 +1085,7 @@ function saveSession() {
     v: 1, values, tuning, layout, placed: [...placed].map(([i, p]) => [i, p.x, p.y]),
     voices: { shared: voiceValues.get(SHARED), own },
     animate: { mode: animator.mode === 'camera' ? 'off' : animator.mode, speed: animator.speed, path: animator.path.map((p) => [p.x, p.y]) },
+    faders: tapeFaders,
   });
   if (json === lastSaved) return;
   try { localStorage.setItem(SESSION_KEY, json); lastSaved = json; } catch { /* private window: not kept */ }
@@ -1152,6 +1219,7 @@ async function startAudio() {
   for (const k of Object.keys(PARAMS)) sendParam(k);
   for (const k of VOICE_KEYS) sendVoice(k);
   for (const i of overridden) sendOverride(i, 1); // stones with their own voice (restored)
+  for (let t = 0; t < TRACKS; t++) sendFader(t); // the tape faders where they were left
   retune();
   requestAnimationFrame(draw); // draw even if iOS holds the resume back
   status.textContent = 'waking the water…';
@@ -1602,6 +1670,7 @@ function draw(now) {
   for (const key of unsent) sendParam(key);
   if (voiceQueue.size) flushVoice();
   if (liftsUnsent.size) sendLifts();
+  for (const t of fadersUnsent) sendFader(t);
   const dt = lastFrameTime ? Math.min(0.1, (now - lastFrameTime) / 1000) : 0;
   lastFrameTime = now;
 

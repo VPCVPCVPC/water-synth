@@ -9,7 +9,7 @@ import { MAX_STONES, StrikeBuffer } from './stones.js';
 import { VOICE_PARAMS, VOICE_KEYS, SHARED } from './voice.js';
 import {
   EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_LOOP, EV_STONE_MOVE, EV_VOICE, EV_VOICE_OVERRIDE, EV_STILL,
-  EV_TAPE, EV_STONE_TUNE,
+  EV_TAPE, EV_STONE_TUNE, EV_TAPE_FADER,
 } from './ring.js';
 import { GestureLooper, LOOPER_PARAMS, GESTURE_DROP, GESTURE_TRAIL } from './looper.js';
 import { TapeDeck, TAPE_PARAMS } from './tape.js';
@@ -145,6 +145,7 @@ export class Instrument {
       case EV_VOICE: this.bells.voices.set(d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_VOICE_OVERRIDE: this.bells.voices.override(d[o + 1], d[o + 2] === 1); break;
       case EV_TAPE: this.tape.action(d[o + 1], d[o + 2]); break;
+      case EV_TAPE_FADER: this.tape.setFader(d[o + 1], d[o + 2]); break;
       case EV_STONE: {
         const i = d[o + 1];
         if (Number.isInteger(i) && i >= 0 && i < MAX_STONES) {

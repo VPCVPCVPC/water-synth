@@ -134,7 +134,10 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   you can lay a bassline, then a melody, then harmonies in other tunings. With
   quantize on, a take starts on a beat and lasts whole beats: tapes follow the
   beat, but their lengths differ, so the way they line up keeps changing.
-  Stopping, muting and clearing fade, never cut.
+  Stopping, muting and clearing fade, never cut. Each track also has a
+  **fader** (Dash, Oct 2026), so a track can be faded in and out while you
+  record and perform; it sets only what you hear (takes still record the
+  water at full level) and is separate from mute.
 - **Record piece** (Dash, Oct 2026) — saves everything you hear (the water and
   the tape) as a WAV to keep or share. A capture, not a layer: it never plays
   back into the instrument, and tapes still record only the water.

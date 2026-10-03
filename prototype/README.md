@@ -143,7 +143,13 @@ your touches into the water, are set aside for now.)
 - Each track: **rec** starts a take, **finish** ends it and it plays; **dub**
   adds more on top (heard live once, replayed from the next pass); **mute**
   silences it and keeps its place; **stop** then **play** restarts it from its
-  top; **clear** (tap twice) erases it. Stop, mute and clear fade (0.3 s);
+  top; **clear** (tap twice) erases it. Its **fader** (beside the keys) sets
+  how loud it plays — drag the cap up or down (it moves by how far you drag,
+  so grabbing it never jumps), double-tap for full, arrow keys when it's
+  focused — so you can fade a track in and out as you play. Separate from
+  mute (a muted track keeps its fader), and only what you hear: a take still
+  records the water at full level. Faders are kept with your settings.
+  Stop, mute and clear fade (0.3 s);
   the loop wraps without a click; overdubs add up with no decay, so a
   much-overdubbed track gets louder. The lamp is solid while a track plays,
   blinks while it records, and goes dotted when muted; the reels turn while
@@ -407,6 +413,9 @@ voice editor untouched you hear exactly the Phase 1c bell.
     too little (you have to flail)? Does a sudden gesture drop hard enough
     — and a slow sweep draw a trail you can follow? Is the mirror the right
     way round? Try it in dim light and with someone moving behind you.
+43. **Tape faders:** fade a track in and out while you play. Does the fader
+    feel smooth and in your hands (the travel even to the ear — it's an
+    audio taper, halfway ≈ −12 dB)? Big enough to grab on the phone?
 
 ### Decisions for Dash
 

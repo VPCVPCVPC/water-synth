@@ -299,7 +299,26 @@
     .ch-pos { height: 2px; background: var(--key-edge); overflow: hidden; }
     .ch-pos > div { height: 100%; width: 0; background: var(--ink); }
     .ch-len { color: var(--ink-muted); font-size: 10px; min-height: 3.4em; letter-spacing: 0.12em; }
-    .keys { display: flex; flex-direction: column; gap: 6px; }
+    .keys { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    /* Each track: its keys, and a fader beside them (after Rams: a slot and a
+       plain cap with a line across it). */
+    .ch-body { display: grid; grid-template-columns: minmax(0, 1fr) 26px; gap: 8px; }
+    .fader { position: relative; min-height: 120px; cursor: ns-resize; touch-action: none; outline: none;
+      -webkit-user-select: none; user-select: none; }
+    /* A finger-wide touch area, widened into the gap between channels (never over the keys). */
+    .fader::before { content: ''; position: absolute; top: 0; bottom: 0; left: -7px; right: -12px; }
+    .fader-slot { position: absolute; left: 50%; top: 6px; bottom: 6px; width: 3px; margin-left: -1.5px;
+      background: var(--ink); border-radius: 2px; }
+    .fader-cap { position: absolute; left: 1px; right: 1px; height: 12px; bottom: 0; background: var(--key);
+      border: 1px solid var(--key-edge); border-radius: 2px; box-shadow: 0 1px 0 #fff inset, 0 1px 2px rgba(0, 0, 0, 0.25); }
+    .fader-cap::after { content: ''; position: absolute; left: 3px; right: 3px; top: 50%; height: 1px; background: var(--ink); }
+    .fader:focus-visible .fader-cap { outline: 2px solid var(--ink); outline-offset: 2px; }
+    @media (max-width: 520px) { .ch-body { grid-template-columns: minmax(0, 1fr) 22px; gap: 4px; } .fader::before { left: -3px; right: -8px; } }
+    @media (max-width: 360px) {
+      .ch-body { grid-template-columns: minmax(0, 1fr) 18px; gap: 3px; }
+      .fader::before { left: -2px; right: -7px; }
+      .deck .channels .key { padding: 4px 1px; letter-spacing: 0.04em; font-size: 9px; }
+    }
     .key { background: var(--key); color: var(--ink); border: 1px solid var(--key-edge); border-radius: 3px;
       min-height: 40px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 2px; font-size: 10px; letter-spacing: 0.16em; box-shadow: 0 1px 0 #fff inset, 0 1px 0 var(--key-edge); }
@@ -527,7 +546,7 @@
         <li><b>Hold</b> a finger still to rest a hand on the water: it calms there. Slide to calm along the way.</li>
         <li><b>Camera</b> (top bar): move in front of it and your movement makes ripples — the picture stays on this device.</li>
         <li><b>Tap a stone</b> to lift it, then tap the water to set it down. Its sound is under Voice.</li>
-        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks.</li>
+        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out.</li>
         <li><b>Record piece</b> saves everything you hear as a WAV.</li>
       </ol>
       <p class="note">Knobs: drag the dial up or down; double-tap to reset. Your settings stay in this browser.

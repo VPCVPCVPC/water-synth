@@ -41,6 +41,7 @@ const MIN_TAKE_SECONDS = 0.05; // shorter takes are dropped
 const KNEE = 0.9; // the tape mix's soft clip leaves everything below this alone
 const MAX_BLOCK = 4096; // samples of mix scratch; a longer block is processed in parts
 const LEVEL_GLIDE_SECONDS = 0.02; // the tape level knob glides, never steps
+const FADER_GLIDE_SECONDS = 0.03; // each track's fader glides too (a hand on a fader, never a step)
 
 // Track states (the same meanings as the gesture looper's).
 export const EMPTY = 0, RECORDING = 1, PLAYING = 2, OVERDUB = 3, STOPPED = 4;
@@ -82,6 +83,11 @@ export class TapeDeck {
     this.startAt = new Float64Array(TAPE_TRACKS); // a restarted tape waits until this sample
     this.gain = new Float64Array(TAPE_TRACKS); // the track's fade, 0..1
     this.punch = new Float64Array(TAPE_TRACKS); // overdub input gain, 0..1
+    // Each track's fader (Dash, Oct 2026): its playback level, 0..1, set by
+    // hand while you play — fade a track in or out. Separate from mute, and
+    // only what you hear: a take still records the water at full level.
+    this.fader = new Float64Array(TAPE_TRACKS).fill(1);
+    this.faderNow = new Float64Array(TAPE_TRACKS).fill(1); // as it glides
     // A tape restarted while it was still fading out keeps fading from where
     // it was (its tail) while the restart begins: never a jump.
     this.tailOrigin = new Float64Array(TAPE_TRACKS);
@@ -98,6 +104,7 @@ export class TapeDeck {
     this.tapeLevel = TAPE_PARAMS.tapeLevel.def;
     this.level = this.tapeLevel; // the smoothed tape level
     this.levelGlide = 1 - Math.exp(-1 / (LEVEL_GLIDE_SECONDS * fs));
+    this.faderGlide = 1 - Math.exp(-1 / (FADER_GLIDE_SECONDS * fs));
     this.now = 0; // stream sample at the start of the current block
     this.audible = false; // any tape sounding (or fading) in the last block
     // The tapes' sum for one block, kept apart from the live sound so an
@@ -117,6 +124,12 @@ export class TapeDeck {
   usesGrid() {
     for (let t = 0; t < TAPE_TRACKS; t++) if (this.state[t] !== EMPTY && this.onGrid[t]) return true;
     return false;
+  }
+
+  // A track's fader: its playback level, 0..1 (glides there).
+  setFader(track, level) {
+    if (!Number.isInteger(track) || track < 0 || track >= TAPE_TRACKS || !Number.isFinite(level)) return;
+    this.fader[track] = level < 0 ? 0 : level > 1 ? 1 : level;
   }
 
   // An action from the page, applied at the start of the next block.
@@ -170,12 +183,15 @@ export class TapeDeck {
     let audible = false;
     for (let t = 0; t < TAPE_TRACKS; t++) {
       const s = this.state[t];
-      if (s === EMPTY) continue;
+      if (s === EMPTY) { this.faderNow[t] = this.fader[t]; continue; } // nothing to glide over
       const base = t * cap;
       let len = this.length[t];
       let g = this.gain[t], punch = this.punch[t], tg = this.tailGain[t];
+      let f = this.faderNow[t];
+      const fTarget = this.fader[t], fa = this.faderGlide;
       for (let i = 0; i < n; i++) {
         const at = this.now + i;
+        if (f !== fTarget) { f += fa * (fTarget - f); if (f - fTarget < 1e-9 && fTarget - f < 1e-9) f = fTarget; } // exact, never subnormal
         const live = outL[off + i], liveR = outR[off + i];
         if (this.state[t] === RECORDING) {
           // The first take: written straight in from the beat (or the
@@ -197,7 +213,7 @@ export class TapeDeck {
         if (tg > 0) {
           const kt = mod(at - this.tailOrigin[t], len), j = base + kt;
           tg -= this.fadeOutStep; if (tg < 0) tg = 0;
-          if (kt >= gapEnd) { tapeL[i] += this.L[j] * tg; tapeR[i] += this.R[j] * tg; }
+          if (kt >= gapEnd) { tapeL[i] += this.L[j] * tg * f; tapeR[i] += this.R[j] * tg * f; }
           audible = true;
         }
         // Playing (or stopped and still fading out).
@@ -222,11 +238,12 @@ export class TapeDeck {
         if (punch < dub) { punch += this.punchStep; if (punch > 1) punch = 1; } else if (punch > dub) { punch -= this.punchStep; if (punch < 0) punch = 0; }
         if (punch > 0) { this.L[k] = l + punch * live; this.R[k] = r + punch * liveR; }
         if (g > 0) {
-          tapeL[i] += l * g;
-          tapeR[i] += r * g;
+          tapeL[i] += l * g * f;
+          tapeR[i] += r * g * f;
           audible = true;
         }
       }
+      this.faderNow[t] = f; // (kept through an erase: the fader stays where the hand left it)
       if (this.state[t] === EMPTY) continue; // erased: erase() has reset it
       this.gain[t] = g;
       this.punch[t] = punch;

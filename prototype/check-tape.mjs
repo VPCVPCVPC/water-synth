@@ -13,7 +13,7 @@ import { GestureLooper } from './looper.js';
 import { Instrument, PARAMS, PARAM_KEYS } from './instrument.js';
 import { buildPitches, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
-import { EV_DROP, EV_TAPE, EV_LOOP, EV_PARAM } from './ring.js';
+import { EV_DROP, EV_TAPE, EV_LOOP, EV_PARAM, EV_TAPE_FADER } from './ring.js';
 import { LOOP_RECORD, LOOP_CLEAR_ALL } from './looper.js';
 import { FRAME_TAPES } from './visuals.js';
 import { SIM_RATE } from './surface.js';
@@ -376,6 +376,13 @@ console.log('\n11. Through the instrument');
   report(idx >= 0 && PARAMS.tapeLevel !== undefined && inst.tape.tapeLevel === 0.5,
     'the tape level is an instrument knob, and the index reaches the deck', `index ${idx} of ${PARAM_KEYS.length}`);
 
+  // A track's fader travels the event path to the deck (and bad ones don't).
+  send(EV_TAPE_FADER, 2, 0.25);
+  send(EV_TAPE_FADER, 9, 0.5);
+  send(EV_TAPE_FADER, 1, NaN);
+  report(inst.tape.fader[2] === 0.25 && inst.tape.fader[1] === 1, 'a track\'s fader reaches the deck through the event path (bad ones are ignored)');
+  send(EV_TAPE_FADER, 2, 1);
+
   // Record a second of the water's own sound through the event path.
   send(EV_DROP, 0.5, 0.5, 2);
   for (let k = 0; k < 40; k++) inst.process(L, R, 128); // let the drop ring the stones
@@ -564,6 +571,83 @@ console.log('\n14. A tape keeps the tuning it was recorded in');
   report(same && inst.bells.activeVoices() === 0 && e220 > 1e3 * e330 && rms(heard) > 1e-3,
     'retuning never touches a tape: it plays what it recorded',
     `recording unchanged: ${same}; 330 Hz ${(10 * Math.log10(e330 / e220)).toFixed(0)} dB re 220 Hz`);
+}
+
+console.log('\n15. Each track\'s fader');
+{
+  const rate = 48000;
+  const take = (fader) => {
+    const r = rig(), d = r.d;
+    if (fader !== undefined) d.setFader(0, fader);
+    r.run(2, TONE, [{ sample: 0, track: 0, act: TAPE_RECORD }]);
+    r.run(0.001, () => 0, [{ sample: r.pos, track: 0, act: TAPE_RECORD }]);
+    r.run(0.3, () => 0);
+    return { r, d };
+  };
+  // Halfway: half as loud, once it has glided there.
+  {
+    const { r, d } = take();
+    const full = rms(r.run(2, () => 0)); // whole passes of the 2 s loop (its loudness varies along it)
+    d.setFader(0, 0.5);
+    r.run(2, () => 0); // glided there, and back at the same place in the loop
+    const half = rms(r.run(2, () => 0));
+    report(Math.abs(half / full - 0.5) < 0.02, 'a fader at halfway plays the track at half level', `${(half / full).toFixed(3)} of full`);
+  }
+  // Pulled straight down: a glide, not a cut; silent within a fraction of a second.
+  {
+    const { r, d } = take();
+    const own = maxStep(r.run(0.2, () => 0), 1, Math.round(0.2 * rate));
+    d.setFader(0, 0);
+    const x = r.run(0.5, () => 0);
+    const step = maxStep(x, 1, x.length);
+    report(step <= own * 1.5 && peak(x, Math.round(0.25 * rate)) < 1e-4,
+      'a fader pulled down at once glides out (no click) and falls silent', `worst step ${step.toFixed(4)} vs the tape's own ${own.toFixed(4)}`);
+    d.setFader(0, 1);
+    r.run(0.2, () => 0);
+    report(rms(r.run(0.5, () => 0)) > 0.05, 'pushed back up, the track plays again (a fader isn\'t a stop)');
+  }
+  // Recording with the fader down still records the water at full level.
+  {
+    const { r, d } = take(0);
+    d.setFader(0, 1);
+    r.run(1, () => 0); // the fader's glide fully settled
+    const len = d.length[0], origin = d.origin[0], x0 = r.pos;
+    const x = r.run(0.5, () => 0);
+    let worst = 0;
+    for (let i = 0; i < x.length; i++) worst = Math.max(worst, Math.abs(x[i] - TONE(((x0 + i - origin) % len) / rate)));
+    report(worst < 1e-6, 'a take recorded with the fader down still holds the water at full level (the fader is only what you hear)',
+      `max difference ${worst.toExponential(1)}`);
+  }
+  // Tracks are independent; mute and fader are separate.
+  {
+    const r = rig(), d = r.d;
+    for (const t of [0, 1]) {
+      r.run(1, TONE, [{ sample: r.pos, track: t, act: TAPE_RECORD }]);
+      r.run(0.001, () => 0, [{ sample: r.pos, track: t, act: TAPE_RECORD }]);
+    }
+    d.setFader(0, 0);
+    r.run(0.3, () => 0);
+    const one = rms(r.run(1, () => 0));
+    d.action(1, TAPE_MUTE);
+    r.run(0.5, () => 0);
+    const none = peak(r.run(0.5, () => 0));
+    d.action(1, TAPE_MUTE);
+    r.run(0.3, () => 0);
+    const back = rms(r.run(1, () => 0));
+    report(one > 0.05 && none < 1e-4 && Math.abs(back / one - 1) < 0.05 && d.fader[0] === 0,
+      'each track has its own fader; muting and unmuting leave the fader where it was',
+      `track 2 alone ${one.toFixed(3)}, muted ${none.toExponential(1)}, unmuted ${back.toFixed(3)}`);
+  }
+  // Bad input is ignored; a cleared track keeps its fader.
+  {
+    const { r, d } = take();
+    d.setFader(0, 0.3);
+    for (const [t, v] of [[-1, 0.5], [4, 0.5], [0.5, 0.5], [0, NaN], [0, Infinity]]) d.setFader(t, v);
+    d.setFader(1, 7);
+    d.action(0, TAPE_CLEAR);
+    r.run(1, () => 0);
+    report(d.fader[0] === 0.3 && d.fader[1] === 1 && d.state[0] === EMPTY, 'bad fader moves are ignored (or clamped); a cleared track keeps its fader');
+  }
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll tape checks passed.');

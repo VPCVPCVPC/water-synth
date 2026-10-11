@@ -151,8 +151,11 @@ your touches into the water, are set aside for now.)
   its lamp: lit while playing, blinking while recording, ringed when it holds
   a take, dimmed when muted) and **● rec**, which works on that track exactly
   like its own rec key (rec, then finish, then dub). Tap **TAPE n** and the
-  numbers 1–4 open to pick another track; they fold away once you pick (or
-  after a few seconds). On a computer: **1–4** pick a track, **R** records
+  whole tape opens over the pond as one performance space: each track's
+  number (tap to pick it), ● rec, ▶/■ play or stop, ◐ mute, × clear (tap
+  twice) and its fader, plus **× all** (tap twice) to clear every track. It
+  stays open while you play — fold it with **▴** or Escape. Its faders are
+  the deck's: move one and its twin on the deck moves too. On a computer: **1–4** pick a track, **R** records
   (then finishes, then dubs), **P** plays or stops, **M** mutes — anywhere
   on the page except while typing in a field. The picked track is
   underlined on the deck.
@@ -433,9 +436,10 @@ voice editor untouched you hear exactly the Phase 1c bell.
     feel smooth and in your hands (the travel even to the ear — it's an
     audio taper, halfway ≈ −12 dB)? Big enough to grab on the phone?
 44. **Quick tape:** start and finish a take while you play, from the corner
-    of the pond (or R on a computer). Fast enough to catch a phrase? Is the
-    corner the right place — does it get in the way of the water? Are 1–4,
-    R, P, M the right keys?
+    of the pond (or R on a computer). Fast enough to catch a phrase? Open
+    the whole tape (tap TAPE n): can you perform from it — fade, mute,
+    clear — without going to the deck? Does it cover too much water while
+    it's open? Are 1–4, R, P, M the right keys?
 45. **Stir:** circle a finger on the water. Does it feel like stirring —
     turbulence that builds, then settles when you stop? Does it start too
     easily (catching a curvy drag you meant as a trail) or too late? Is the

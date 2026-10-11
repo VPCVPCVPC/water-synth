@@ -855,6 +855,17 @@ const tapeFaders = new Array(TRACKS).fill(1);
 let armedTrack = 0;
 const faderLevel = (p) => p * p;
 const fadersUnsent = new Set(); // a fader move the queue couldn't take: sent again next frame
+// A track's fader can show in two places (the deck, and the tape over the
+// pond); both move together.
+const tapeFaderEls = Array.from({ length: TRACKS }, () => []);
+function trackFader(t) {
+  const el = fader({
+    label: `track ${t + 1} fader`, get: () => tapeFaders[t],
+    set: (v) => { tapeFaders[t] = v; sendFader(t); for (const f of tapeFaderEls[t]) if (f !== el) f.repaint(); },
+  });
+  tapeFaderEls[t].push(el);
+  return el;
+}
 function sendFader(t) {
   if (!events) return;
   if (events.push(EV_TAPE_FADER, t, faderLevel(tapeFaders[t]))) fadersUnsent.delete(t); else fadersUnsent.add(t);
@@ -909,6 +920,7 @@ function fader({ label, get, set }) {
     else if (e.key === 'End') { e.preventDefault(); put(1); }
   });
   paint();
+  el.repaint = paint; // (a twin fader moved: show where it is now)
   return el;
 }
 function buildLoopControls() {
@@ -920,9 +932,7 @@ function buildLoopControls() {
     ch.setAttribute('aria-label', `track ${t + 1}`);
     ch.innerHTML = `<div class="ch-head"><span class="ch-num">${t + 1}</span><span class="lamp"></span></div>
       <div class="ch-pos"><div></div></div><div class="ch-len">—</div><div class="ch-body"><div class="keys"></div></div>`;
-    ch.querySelector('.ch-body').append(fader({
-      label: `track ${t + 1} fader`, get: () => tapeFaders[t], set: (v) => { tapeFaders[t] = v; sendFader(t); },
-    }));
+    ch.querySelector('.ch-body').append(trackFader(t));
     const keys = ch.querySelector('.keys');
     const mk = () => { const b = document.createElement('button'); b.type = 'button'; b.className = 'key'; keys.append(b); return b; };
     const rec = mk(), play = mk(), mute = mk(), clear = mk();
@@ -938,6 +948,7 @@ function buildLoopControls() {
     paintTrack(ui, t);
   }
   confirmButton(document.getElementById('clear-all'), () => sendTape(0, TAPE_CLEAR_ALL));
+  buildQuickDeck();
   armTrack(armedTrack);
 
   const quantize = document.getElementById('quantize');
@@ -1045,7 +1056,23 @@ function paintQuick(t, state, recLabel, playing, muted) {
   const chip = document.querySelector(`.quick-track[data-t="${t}"]`);
   if (chip) {
     chip.dataset.state = look; chip.dataset.muted = muted ? '1' : '0';
-    chip.setAttribute('aria-label', `track ${t + 1}${said}`);
+    chip.setAttribute('aria-label', `pick track ${t + 1}${said}`);
+    chip.title = `pick track ${t + 1} (key ${t + 1})`;
+  }
+  const q = quickUi[t];
+  if (q) {
+    q.rec.textContent = REC;
+    q.rec.classList.toggle('rec', look === 'rec');
+    q.rec.setAttribute('aria-label', `track ${t + 1} ${recLabel === 'rec' ? 'record' : recLabel === 'dub' ? 'overdub' : recLabel === 'end' ? 'end overdub' : recLabel}`);
+    q.play.textContent = playing ? STOP : PLAY;
+    q.play.setAttribute('aria-label', `track ${t + 1} ${playing ? 'stop' : state === RECORDING ? 'finish' : 'play'}`);
+    q.play.disabled = state === EMPTY;
+    q.mute.textContent = MUTE;
+    q.mute.classList.toggle('on', Boolean(muted));
+    q.mute.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    q.mute.disabled = state === EMPTY;
+    if (state === EMPTY && q.clear.disarm) q.clear.disarm();
+    q.clear.disabled = state === EMPTY;
   }
   if (t !== armedTrack) return;
   const pick = document.getElementById('quick-pick'), rec = document.getElementById('quick-rec');
@@ -1069,32 +1096,57 @@ function quickTape(action) {
   else if (action === 'play') sendTape(armedTrack, TAPE_PLAY_STOP);
   else if (action === 'mute') sendTape(armedTrack, TAPE_MUTE);
 }
-// Picking a track: tap TAPE n and the four numbers open; picking one (or 4 s
-// of nothing, or Escape) folds them away again.
+// Tap TAPE n and the whole tape opens over the pond — every track's rec,
+// play/stop, mute, clear and fader, and clear all — one performance space.
+// It stays open while you play (riding a fader shouldn't fold it); fold it
+// with its ▴ or Escape.
 const quick = document.getElementById('quick'), quickPick = document.getElementById('quick-pick');
-let quickFold = 0;
+const quickUi = [];
 function openQuick(open) {
   quick.classList.toggle('open', open);
   quickPick.setAttribute('aria-expanded', open ? 'true' : 'false');
-  clearTimeout(quickFold);
-  if (open) {
-    quickFold = setTimeout(() => {
-      const hadFocus = quick.contains(document.activeElement);
-      openQuick(false);
-      if (hadFocus) quickPick.focus(); // keyboard focus isn't lost when the numbers fold away
-    }, 4000);
-    const on = quick.querySelector(`.quick-track[data-t="${armedTrack}"]`);
-    if (on && document.activeElement === quickPick) on.focus();
+  if (open) { const on = quick.querySelector(`.quick-track[data-t="${armedTrack}"]`); if (on) on.focus({ preventScroll: true }); }
+}
+function buildQuickDeck() {
+  const host = document.getElementById('quick-deck');
+  const head = document.createElement('div');
+  head.className = 'qd-head';
+  head.innerHTML = '<span class="qd-title">tape</span>';
+  const all = document.createElement('button');
+  all.type = 'button'; all.textContent = '× all'; all.setAttribute('aria-label', 'clear all tracks');
+  confirmButton(all, () => sendTape(0, TAPE_CLEAR_ALL));
+  const fold = document.createElement('button');
+  fold.type = 'button'; fold.className = 'qd-fold'; fold.textContent = '▴\uFE0E'; fold.setAttribute('aria-label', 'fold the tape away');
+  fold.addEventListener('click', () => { openQuick(false); quickPick.focus({ preventScroll: true }); });
+  head.append(all, fold);
+  host.append(head);
+  const make = (cls, label) => { const b = document.createElement('button'); b.type = 'button'; if (cls) b.className = cls; b.setAttribute('aria-label', label); return b; };
+  const rows = { num: [], rec: [], play: [], mute: [], clear: [], fader: [] };
+  for (let t = 0; t < TRACKS; t++) {
+    const num = make('quick-track', `track ${t + 1}`);
+    num.dataset.t = String(t); num.textContent = String(t + 1); num.setAttribute('aria-keyshortcuts', String(t + 1));
+    num.setAttribute('aria-pressed', t === armedTrack ? 'true' : 'false');
+    num.addEventListener('click', () => armTrack(t));
+    const rec = make('', `track ${t + 1} record`); rec.addEventListener('click', () => { armTrack(t); quickTape('rec'); });
+    const play = make('', `track ${t + 1} play`); play.addEventListener('click', () => { wake(); sendTape(t, TAPE_PLAY_STOP); });
+    const mute = make('', `track ${t + 1} mute`); mute.addEventListener('click', () => { wake(); sendTape(t, TAPE_MUTE); });
+    const clear = make('', `track ${t + 1} clear`); clear.textContent = '×';
+    confirmButton(clear, () => sendTape(t, TAPE_CLEAR));
+    rows.num.push(num); rows.rec.push(rec); rows.play.push(play); rows.mute.push(mute); rows.clear.push(clear); rows.fader.push(trackFader(t));
+    quickUi.push({ rec, play, mute, clear });
   }
+  // Laid out a row at a time (each column a track), like the deck's strips turned sideways.
+  for (const row of ['num', 'rec', 'play', 'mute', 'clear', 'fader']) host.append(...rows[row]);
 }
 quickPick.addEventListener('click', () => openQuick(true));
-document.querySelectorAll('.quick-track').forEach((b) => b.addEventListener('click', () => {
-  armTrack(Number(b.dataset.t));
-  const hadFocus = quick.contains(document.activeElement);
+// Escape folds it from anywhere (a lifted stone's Escape — put it back — comes first).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !quick.classList.contains('open') || heldStone >= 0) return;
+  if (!document.getElementById('guide').hidden) return;
+  const inside = quick.contains(document.activeElement);
   openQuick(false);
-  if (hadFocus) quickPick.focus();
-}));
-quick.addEventListener('keydown', (e) => { if (e.key === 'Escape' && quick.classList.contains('open')) { e.stopPropagation(); openQuick(false); quickPick.focus(); } });
+  if (inside) quickPick.focus({ preventScroll: true });
+});
 document.getElementById('quick-rec').addEventListener('click', () => quickTape('rec'));
 // The computer's keys: 1–4 pick a track, R records (finish, dub), P plays or
 // stops, M mutes — never while typing in a field, or with a modifier held.

@@ -140,8 +140,11 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   record and perform; it sets only what you hear (takes still record the
   water at full level) and is separate from mute. **Quick tape** (Dash, Oct
   2026): a take must start mid-performance without scrolling to the deck —
-  a small transport on the pond (pick a track, rec, play/stop) and keys on a
-  computer (1–4, R, P, M).
+  a small transport on the pond (the picked track and rec) that taps open
+  into the whole tape — every track's rec, play/stop, mute, clear and fader,
+  and clear all — as one performance space over the pond's corner (a second
+  view of the deck, which itself never folds), and keys on a computer
+  (1–4, R, P, M).
 - **Record piece** (Dash, Oct 2026) — saves everything you hear (the water and
   the tape) as a WAV to keep or share. A capture, not a layer: it never plays
   back into the instrument, and tapes still record only the water.

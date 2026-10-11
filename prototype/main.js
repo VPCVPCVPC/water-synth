@@ -564,6 +564,10 @@ const camera = new CameraMotion(document.getElementById('camera'));
 let cameraRipples = false; // "camera" in the bar: movement makes ripples (see syncCamera)
 const motionGestures = new MotionGestures();
 const camMarks = []; // where camera gestures landed lately: { x, y, at } (pond terms)
+// (Declared here, before the page is built: a restored Animate mode calls
+// syncCamera() during startup.)
+let cameraAsk = 0; // which camera start is the latest (an older one's answer is ignored)
+let statusBack = 0; // the timer that puts the status line back after a camera message
 let pathDrawing = false, pathPoints = [], heightsFrame = null, lastAnimSend = 0, restoredAnimate = 'off';
 
 function buildVoiceControls() {
@@ -1333,8 +1337,6 @@ function setAnimate(mode) {
 // ripples, like touch) and Animate's "camera" (it steers the stones). It's on
 // while either wants it. Everything stays on this device: the picture is
 // shrunk to a 32 × 24 grey thumbnail here and compared with the last one.
-let cameraAsk = 0; // which start is the latest (an older one's answer is ignored)
-let statusBack = 0;
 function syncCamera() {
   const want = cameraRipples || animator.mode === 'camera';
   const note = document.getElementById('camera-note');

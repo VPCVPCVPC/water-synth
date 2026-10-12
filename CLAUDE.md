@@ -219,8 +219,10 @@ futurist (Syncopate), with extra letter spacing for a quiet sci-fi feel. The
 tape section looks like a real 4-track tape machine, after Dieter Rams. The
 water is drawn in greys — light crests, dark troughs — like light on still
 water. Dash's brand mark is a set of white concentric rings on black (a
-ripple); that motif carries through the knobs, the tape reels and the start
-screen. Controls are knobs where a knob reads as part of an instrument.
+ripple); that motif carries through the slider thumbs, the tape reels and the
+start screen. Every control is a slider (Dash, Oct 2026: sliders everywhere,
+simplest on touch screens), with a thumb of concentric rings; the tape's
+tracks keep their faders.
 Controls never fold away, and most sit above the fold (Dash, Oct 2026): water
 and stones form a strip along the bottom of the pond (tabbed: water | stones),
 the beat right under it, the tape below; tuning and voice run down the right side. On a

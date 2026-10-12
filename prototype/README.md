@@ -81,7 +81,7 @@ and a **feedback** link appears under the pond. If the link contains
 Tally hidden field, or a Google Form pre-filled answer).
 
 Testers see a short **how to play** guide the first time (the **how to
-play** button at the top — **?** on a phone — shows it again). Their settings stay in their browser between visits — knobs,
+play** button at the top — **?** on a phone — shows it again). Their settings stay in their browser between visits — sliders,
 tuning, stones and voices, not tapes or recordings; **start fresh** (under
 Voice) forgets them.
 
@@ -202,18 +202,19 @@ played. Grid, strength and swing only appear when it's on.
 
 **Look** — zen garden minimalism (CLAUDE.md, "Look and feel"): black and
 white, Syncopate in wide-tracked capitals, the water in greys — light crests,
-dark troughs — and the logo's concentric rings in the knobs, the reels and the
+dark troughs — and the logo's concentric rings in the slider thumbs, the reels and the
 start screen. Syncopate is bundled in `fonts/` (Apache 2.0), so the page works
 offline.
 
-**Knobs** — most controls are knobs: drag up or down (or sideways) to turn,
-Shift for fine; double-tap to return to the default; arrow keys, Page Up/Down,
-Home and End step them. On a computer, hover one for what it does. The tape's
-level stays a fader.
+**Sliders** — every control is a slider: drag along it (it moves by how far
+you drag, so grabbing never jumps; Shift for fine), tap the track to jump
+there, double-tap to return to the default; arrow keys, Page Up/Down, Home and
+End step it. An up or down swipe that starts on one still scrolls the page. On
+a computer, hover one for what it does. The tape tracks' faders stay faders.
 
 **Water**
 
-| Knob | What it does |
+| Slider | What it does |
 |---|---|
 | flow | how fast ripples travel, from ~32 s to cross the pond (very slow drift) to well under a second; the whole water speeds up or slows down together, so the same gesture plays the same phrase faster or slower |
 | water decay | how long the water keeps moving (shown in seconds at the current flow) |
@@ -257,7 +258,7 @@ stones you placed.
 **Tuning** — scale (major, natural minor, dorian, major/minor pentatonic,
 chromatic, maqam Rast), root, lowest and highest note (C1–C8), and the
 reference pitch (A4 in Hz, 400–480 in this prototype; 440 and 432 one tap
-away — the tuning core itself takes any frequency). The stones knob decides
+away — the tuning core itself takes any frequency). The stones slider decides
 how many stones share the scale notes in the range. Note names are relative
 to A4 at the chosen reference (at 432 Hz, A4 is still labelled "A4"). Changing these retunes the stones; it
 never touches the water. A stone still ringing keeps its old pitch until it's
@@ -272,8 +273,8 @@ the **synth layer** side by side. No presets.
 - *Water-held sustain*: while the water around a stone keeps moving, its note
   decays more slowly; as the water calms it lets go. The water holds the note,
   never you.
-- *Synth layer*: the **synth layer** knob (off until you raise it), then
-  the knobs under it: two oscillators (sine →
+- *Synth layer*: the **synth layer** slider (off until you raise it), then
+  the sliders under it: two oscillators (sine →
   triangle → saw → square), osc 2's pitch and detune, their mix, a low-pass
   that follows the stone's pitch and opens with each strike (cutoff, resonance,
   filter envelope and its decay), attack and decay. No note-off: it fades on
@@ -284,7 +285,7 @@ name **replace**s it). Each saved voice has **use** (puts it on every
 stone) and **delete** (tap twice). They're kept in this browser; nothing ships in the list.
 
 Edits reach stones that are already ringing. **voice back to defaults**
-resets the voice. **Volume** and **water knobs back to
+resets the voice. **Volume** and **water sliders back to
 defaults** are with the water; **show note names** is a dev aid, off by
 default.
 
@@ -295,11 +296,11 @@ The output meter blinks when the limiter is working.
 Listening check 1 passed ("it seems good"). Defaults are unchanged: with the
 voice editor untouched you hear exactly the Phase 1c bell.
 
-1. **Bell knobs:** try decay, tone, clang and tick. Is there a bell you like
+1. **Bell sliders:** try decay, tone, clang and tick. Is there a bell you like
    better than the default? Should any of them have a wider or narrower range?
 2. **Strike:** turn dynamics and strike brightness down. With both at zero
    every strike sounds the same — does the water lose its say in *how hard*?
-   Should those knobs have a floor?
+   Should those sliders have a floor?
 3. **Water-held sustain:** turn it up and play — keep touching, since moving
    water is what holds a note. Do notes bloom and sustain while ripples cross
    their stones, then let go as the water calms? Does long playing with
@@ -328,7 +329,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
     sets the tapes under (or over) the water. (Tapes play 3 dB under the
     water, and a limiter at the end turns the whole mix down rather than
     clipping it.)
-15. Did the voice editor pull you away from playing the water? Which knobs
+15. Did the voice editor pull you away from playing the water? Which sliders
     would you never touch mid-performance?
 16. After shaping a voice, did you want to keep it for next time? (Answered:
     yes — now **save voice**.)
@@ -336,7 +337,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
 
 **Since your check-2 notes (Phase 1d):**
 
-0. **The synth layer** is now in plain view: the **synth layer** knob under
+0. **The synth layer** is now in plain view: the **synth layer** slider under
    water-held sustain. Raise it — does bell + synth work?
 
 18. (Retired — Dash: quantize is for notes only; touches land as played.)
@@ -381,8 +382,9 @@ voice editor untouched you hear exactly the Phase 1c bell.
     or too stark? Is everything still readable on the phone (the small
     hint text especially)? The light tape machine is the brightest thing on
     the page — right?
-30. **Knobs:** do they feel like an instrument? Easy to turn on the iPad
-    (drag up/down; double-tap resets)? Any control that should stay a slider?
+30. (Answered — Dash: sliders everywhere.) **Sliders:** easy to drag on the
+    phone and iPad (drag along, tap to jump, double-tap resets)? Does a tap
+    meant for the water ever land on a slider and jump it?
 31. **Number of stones:** try fewer stones than notes (a sparse pond) and
     more (notes doubled in other places). Useful? Is "all" the right default?
     A hand-placed spot belongs to its slot, so changing the count can move
@@ -417,7 +419,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
 40. **The layout:** on the computer, does the strip along the pond's bottom
     (water | stones) feel like part of the pond? Is everything you reach for
     while playing above the fold? On the phone, are the tabs clear, and does
-    swiping between pages feel natural (and never fight turning a knob)?
+    swiping between pages feel natural (and never fight moving a slider)?
 41. (Retired — Still is off the page; Dash: it distracted from playing.)
 42. **Camera ripples:** turn on **camera** and move. Does it feel like your
     movement is touching the water? Too much (the pond always churning) or
@@ -481,7 +483,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
 - A 128 × 97 surface with free edges (reflections stay crests), stepped 1000
   times a second of water time, with an isotropic grid stencil so ripples are
   the same in every direction.
-- By default one stone per scale note in the range; the stones knob sets any
+- By default one stone per scale note in the range; the stones slider sets any
   count up to 128.
 - Each stone panned by its left–right position (range 0.2–0.8).
 - Loops: 4 layers, up to 60 s each, 4096 gestures per layer.
@@ -489,7 +491,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
   fades, 10 ms seam crossfade and overdub punch.
 - Water-held sustain slows decay to at most 5% speed (it always ends), and
   measures the water at each stone against the ring threshold — so the
-  sensitivity knob also changes how easily the water holds a note.
+  sensitivity slider also changes how easily the water holds a note.
 - Drops vary slightly (position, strength, size); most variation comes from
   the water already moving.
 
@@ -544,7 +546,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   square; 44.1/48/192 kHz; osc 2 transposed) and band-limited at two pitches
   where the folded-back partials cannot hide among the harmonics; envelopes and
   no note-off; click-free re-strikes and retunes; harder strikes louder and
-  brighter (and not, with dynamics and strike brightness at 0); moving a knob
+  brighter (and not, with dynamics and strike brightness at 0); moving a slider
   (synth level, oscillator mix, cutoff, resonance) and the filter's own fastest
   strike sweep never step at a control refresh, by the output's phase-binned
   curvature and by the running value's own trajectory; per-stone overrides (engine only; unused by the page) through the
@@ -573,7 +575,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   a track and the next touch (a drop, drag or stir — or a hand, which the engine still accepts — not a lift or a
   let-go) starts it; retuning never touches a tape; the status frame; bit-identical at
   block sizes 1…8192 and the same loudness over time at 44.1/48/96 kHz; limits
-  and bad input; the whole path through the instrument (the knob, `EV_TAPE`,
+  and bad input; the whole path through the instrument (the tape level, `EV_TAPE`,
   the frame); CPU.
 - `check-looper.mjs` — loops replay every gesture at the same place each pass
   while each pass plays a different phrase; overdub, mute, stop/restart,

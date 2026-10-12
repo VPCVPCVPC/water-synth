@@ -90,14 +90,14 @@ for (const tab of document.querySelectorAll('.tabs [role=tab]')) {
     showPage(tabs[(tabs.indexOf(page) + step + tabs.length) % tabs.length], { focus: true });
   });
 }
-// A sideways swipe on the pages turns the page (a dial, a slider or a field
+// A sideways swipe on the pages turns the page (a slider track or a field
 // keeps its own drag).
 {
   const pagesEl = document.getElementById('pages');
   let swipe = null;
   pagesEl.addEventListener('pointerdown', (e) => {
     if (wideLayout.matches || e.pointerType === 'mouse' || !e.isPrimary) return;
-    if (e.target.closest('.knob svg, input, select, textarea, video')) return;
+    if (e.target.closest('.sl-track, input, select, textarea, video')) return;
     swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, at: e.timeStamp };
   });
   pagesEl.addEventListener('pointerup', (e) => {
@@ -329,7 +329,7 @@ function buildStoneControls() {
   document.getElementById('randomize').addEventListener('click', () => { layout.seed++; rearrange(); });
   confirmButton(document.getElementById('release'), () => { placed.clear(); rearrange(); });
   // Spread: gathered ↔ spread evenly over the whole pond.
-  const count = knob({
+  const count = slide({
     label: 'stones', hint: 'how many stones: all (one per scale note in the range), fewer (spread over the range), or more (notes repeat in other places)',
     // "All" (one per note) is the detent at the number of notes in range, so
     // turning goes …14, 15, all (16), 17…
@@ -340,12 +340,12 @@ function buildStoneControls() {
     show: (v) => (v === notesInRange ? `all · ${v}` : String(v)),
   });
   stoneCountKnob = count;
-  const row = knob({
+  const row = slide({
     label: 'spread', hint: 'gathered in loose clumps ↔ spread evenly over the whole pond',
     get: () => layout.spread, set: (v) => { layout.spread = v; rearrange(); }, def: 1,
     to: (v) => v, from: (f) => f, show: (v) => (v > 0.95 ? 'even' : v < 0.05 ? 'gathered' : `${Math.round(v * 100)}`),
   });
-  const motionKnob = knob({
+  const motionKnob = slide({
     label: 'motion', hint: 'how fast animated stones move',
     get: () => animator.speed, set: (v) => { animator.speed = v; }, def: 0.2,
     to: (v) => v, from: (f) => f, show: (v) => `${Math.round(v * 100)}`,
@@ -417,38 +417,32 @@ function slider({ label, hint, get, set, to, from, show }) {
   return row;
 }
 
-// A knob, after the logo's concentric rings: faint inner rings, the value as
-// an arc on the outer ring, and a pointer. Drag up/down (or sideways) to turn
-// — Shift for fine — double-tap to return to `def`, arrow keys step it. Same
-// interface as slider(): { el, readout, show, get, refresh, setDisabled }.
-const KNOB_SWEEP = 270; // degrees, from 7:30 to 4:30
-const knobArc = (f) => {
-  const a0 = (-KNOB_SWEEP / 2 - 90) * (Math.PI / 180), a1 = a0 + f * KNOB_SWEEP * (Math.PI / 180), R = 18;
-  const p = (a) => `${(20 + R * Math.cos(a)).toFixed(2)} ${(20 + R * Math.sin(a)).toFixed(2)}`;
-  return f <= 0.001 ? '' : `M ${p(a0)} A ${R} ${R} 0 ${f * KNOB_SWEEP > 180 ? 1 : 0} 1 ${p(a1)}`;
-};
-function knob({ label, hint, get, set, to, from, show, def, steps = 0 }) {
+// A slider (Dash, Oct 2026: sliders everywhere, for touch): the label and
+// its value on one line, a track under them, and a thumb after the logo's
+// rings. Drag along it (it moves by how far you drag, so grabbing never
+// jumps; Shift for fine), tap the track to jump there, double-tap to
+// return to `def`; arrow keys step it. On a touch screen an upward or
+// downward swipe that starts on it still scrolls the page.
+// { el, readout, show, get, refresh, setDisabled }.
+const THUMB = 7; // px: half the thumb, the track's margin at each end
+function slide({ label, hint, get, set, to, from, show, def, steps = 0 }) {
   const el = document.createElement('div');
-  el.className = 'knob';
+  el.className = 'slide';
   el.title = hint;
   el.tabIndex = 0;
   el.setAttribute('role', 'slider');
   el.setAttribute('aria-label', label);
   el.setAttribute('aria-description', hint);
   el.setAttribute('aria-valuemin', '0'); el.setAttribute('aria-valuemax', '100');
-  el.innerHTML = `<svg viewBox="0 0 40 40" aria-hidden="true">
-    <circle class="ring" cx="20" cy="20" r="18"/><circle class="ring faint" cx="20" cy="20" r="12.5"/>
-    <circle class="ring faint" cx="20" cy="20" r="7"/><path class="arc"/><line class="pointer" x1="20" y1="20" x2="20" y2="6"/></svg>
-    <span class="knob-label"></span><output class="knob-value"></output>`;
-  el.querySelector('.knob-label').textContent = label;
-  const dial = el.querySelector('svg'); // only the dial turns; the label and value scroll the page
-  const arc = el.querySelector('.arc'), pointer = el.querySelector('.pointer'), readout = el.querySelector('.knob-value');
+  el.innerHTML = `<div class="sl-head"><span class="sl-label"></span><output class="sl-value"></output></div>
+    <div class="sl-track" aria-hidden="true"><div class="sl-line"></div><div class="sl-fill"></div><div class="sl-thumb"></div></div>`;
+  el.querySelector('.sl-label').textContent = label;
+  const track = el.querySelector('.sl-track'), readout = el.querySelector('.sl-value');
   let disabled = false;
   const frac = () => Math.min(1, Math.max(0, to(get())));
   const paint = () => {
     const f = frac();
-    arc.setAttribute('d', knobArc(f));
-    pointer.setAttribute('transform', `rotate(${(-KNOB_SWEEP / 2 + f * KNOB_SWEEP).toFixed(1)} 20 20)`);
+    el.style.setProperty('--f', f.toFixed(4));
     readout.textContent = show(get());
     el.setAttribute('aria-valuenow', String(Math.round(f * 100)));
     el.setAttribute('aria-valuetext', show(get()));
@@ -456,51 +450,59 @@ function knob({ label, hint, get, set, to, from, show, def, steps = 0 }) {
   const setFrac = (f) => {
     if (disabled) return;
     const v = from(Math.min(1, Math.max(0, f)));
-    if (v === get()) return; // nothing changed (e.g. a whole-number knob between steps)
+    if (v === get()) return; // nothing changed (e.g. a whole-number slider between steps)
     set(v);
     refreshReadouts();
     paint();
   };
   const hintHere = () => showHint(el, label, hint);
-  // Turning: vertical and horizontal movement both count (up/right = more).
-  // A tap (moved < 4 px) right after another tap returns it to its default.
+  // A mouse drags at once; a finger only once it moves sideways (moving up
+  // or down first is the page scrolling — the browser takes it).
   let drag = null, lastTap = 0;
-  dial.addEventListener('pointerdown', (e) => {
+  const span = () => Math.max(1, track.clientWidth - 2 * THUMB);
+  track.addEventListener('pointerdown', (e) => {
     if (disabled) return;
     el.focus({ preventScroll: true });
-    hintHere();
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, f: frac(), shift: e.shiftKey, moved: 0, at: performance.now() };
-    try { dial.setPointerCapture(e.pointerId); } catch { /* gone */ }
-    e.preventDefault();
+    if (e.pointerType === 'mouse') hintHere(); // a finger: only once it drags or taps (not every scroll that starts here)
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, f: frac(), shift: e.shiftKey, moved: 0, along: e.pointerType === 'mouse' };
+    try { track.setPointerCapture(e.pointerId); } catch { /* gone */ }
+    if (e.pointerType === 'mouse') e.preventDefault();
   });
-  dial.addEventListener('pointermove', (e) => {
+  track.addEventListener('pointermove', (e) => {
     if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.along) {
+      if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) { drag.along = true; hintHere(); }
+      else return;
+    }
     if (e.shiftKey !== drag.shift) { // fine/coarse changed: carry on from here
-      Object.assign(drag, { x: e.clientX, y: e.clientY, f: frac(), shift: e.shiftKey });
+      Object.assign(drag, { x: e.clientX, f: frac(), shift: e.shiftKey });
       return;
     }
-    const px = (drag.y - e.clientY) + (e.clientX - drag.x);
-    drag.moved = Math.max(drag.moved, Math.abs(px));
-    setFrac(drag.f + px / (e.shiftKey ? 900 : 180));
+    drag.moved = Math.max(drag.moved, Math.abs(dx));
+    setFrac(drag.f + (dx / span()) * (e.shiftKey ? 0.2 : 1));
   });
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
-    const tap = drag.moved < 4 && e.type === 'pointerup';
+    const tap = drag.moved < 4 && e.type === 'pointerup' && Math.abs(e.clientY - drag.y) < 10;
     drag = null;
     if (!tap) { lastTap = 0; return; }
     const now = performance.now();
-    if (now - lastTap < 320 && def !== undefined) { setFrac(to(typeof def === 'function' ? def() : def)); lastTap = 0; }
-    else lastTap = now;
+    if (now - lastTap < 320 && def !== undefined) { setFrac(to(typeof def === 'function' ? def() : def)); lastTap = 0; return; }
+    lastTap = now;
+    hintHere();
+    const r = track.getBoundingClientRect();
+    setFrac((e.clientX - r.left - THUMB) / span()); // a tap jumps there
   };
-  dial.addEventListener('pointerup', end);
-  dial.addEventListener('pointercancel', end);
-  el.addEventListener('focus', hintHere);
+  track.addEventListener('pointerup', end);
+  track.addEventListener('pointercancel', end);
+  el.addEventListener('focus', () => { if (el.matches(':focus-visible')) hintHere(); }); // from the keyboard
   el.addEventListener('keydown', (e) => {
     const unit = steps > 0 ? 1 / steps : 0;
     let step = { ArrowUp: 0.01, ArrowRight: 0.01, ArrowDown: -0.01, ArrowLeft: -0.01, PageUp: 0.1, PageDown: -0.1 }[e.key];
     if (step !== undefined) {
       step *= e.shiftKey ? 0.2 : 1;
-      if (unit && Math.abs(step) < unit) step = Math.sign(step) * unit; // a whole-number knob always moves one
+      if (unit && Math.abs(step) < unit) step = Math.sign(step) * unit; // a whole-number slider always moves one
       setFrac(frac() + step); e.preventDefault();
     }
     else if (e.key === 'Home') { setFrac(0); e.preventDefault(); }
@@ -529,7 +531,7 @@ function showHint(el, label, hint) {
 
 function buildKnobs() {
   for (const k of KNOBS) {
-    const make = k.group === 'tapes' ? slider : knob; // the tape's level stays a fader
+    const make = k.group === 'tapes' ? slider : slide; // the tape's level is the deck's own fader
     const row = make({
       label: k.label, hint: k.hint, get: () => values[k.key], def: PARAMS[k.key].def,
       set: (v) => { values[k.key] = v; sendParam(k.key); }, to: k.map.to, from: k.map.from, show: k.show,
@@ -569,7 +571,7 @@ let pathDrawing = false, pathPoints = [], heightsFrame = null, lastAnimSend = 0,
 
 function buildVoiceControls() {
   for (const k of VOICE_KNOBS) {
-    const row = knob({
+    const row = slide({
       label: k.label, hint: k.hint,
       get: () => voiceValue(k.key), set: (v) => setVoiceValue(k.key, v), def: VOICE_PARAMS[k.key].def,
       to: k.map.to, from: k.map.from, show: k.show,

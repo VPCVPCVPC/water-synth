@@ -136,14 +136,11 @@
       .side .page fieldset > legend { display: block; }
       .side fieldset { padding-top: 0; }
       .page .note.long { display: none; }
-      .page .knobs { grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 12px 4px; }
-      .page .knob svg { width: 40px; height: 40px; }
       /* Water and stones each in one row. */
       #page-water fieldset, #page-stones fieldset { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
       #page-water fieldset > legend, #page-stones fieldset > legend { display: none; } /* the strip's tabs name them */
-      #page-water .knobs, #page-stones .knobs { display: flex; gap: 4px; }
-      #page-water .knob { width: 80px; }
-      #page-stones .knob { width: 62px; }
+      #page-water .knobs { flex: 1 1 420px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 20px; }
+      #page-stones .knobs { flex: 1 1 300px; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 16px; }
       #page-water #defaults { margin-left: auto; max-width: 11em; }
       #page-stones .row:first-of-type { flex-direction: column; align-items: stretch; gap: 6px; }
       .animate { display: flex; flex-direction: column; gap: 4px; flex: 1 1 250px; min-width: 250px; }
@@ -153,8 +150,7 @@
       #page-beat fieldset { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
       #page-beat fieldset > legend { display: block; float: left; }
       #page-beat .quantized:not([hidden]) { display: flex; align-items: center; gap: 10px 22px; flex-wrap: wrap; }
-      #page-beat .quantized .knobs { display: flex; gap: 4px; }
-      #page-beat .quantized .knob { width: 66px; }
+      #page-beat .quantized .knobs { grid-template-columns: repeat(2, 150px); gap: 4px 20px; }
       #page-beat .field { display: flex; gap: 10px; }
       #page-beat #bpm { width: 5em; }
     }
@@ -191,25 +187,30 @@
     button:disabled { opacity: 0.3; cursor: default; }
     b { font-weight: 700; }
 
-    /* Knobs, after the logo's rings. */
-    .knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 18px 6px; }
-    .knob { display: flex; flex-direction: column; align-items: center; gap: 5px;
-      -webkit-user-select: none; user-select: none; outline: none; min-width: 0; }
-    /* Only the dial turns (and holds the touch); the rest of the knob scrolls the page. */
-    .knob svg { width: 46px; height: 46px; display: block; overflow: visible; cursor: ns-resize; touch-action: none; }
+    /* Sliders (Dash: sliders everywhere, for touch), the thumb after the logo's rings. */
+    .knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 22px; }
+    .slide { display: flex; flex-direction: column; min-width: 0; outline: none; -webkit-user-select: none; user-select: none; --f: 0; }
+    /* Label left, value right; when a narrow slider can't fit both, the value drops under the label. */
+    .sl-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 9px; letter-spacing: 0.14em; line-height: 1.4; }
+    .sl-label { min-width: 0; overflow-wrap: anywhere; }
+    .sl-value { margin-left: auto; color: var(--muted); letter-spacing: 0.08em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    /* The track holds the touch sideways; a swipe up or down still scrolls the page. */
+    .sl-track { position: relative; height: 28px; touch-action: pan-y; cursor: ew-resize; }
+    @media (pointer: coarse) { .sl-track { height: 36px; } }
+    .sl-line { position: absolute; left: 7px; right: 7px; top: 50%; height: 1px; background: var(--faint); }
+    .sl-fill { position: absolute; left: 7px; top: 50%; height: 2px; margin-top: -0.5px; background: var(--fg);
+      width: calc((100% - 14px) * var(--f)); }
+    .sl-thumb { position: absolute; top: 50%; left: calc(7px + (100% - 14px) * var(--f)); width: 14px; height: 14px;
+      margin: -7px 0 0 -7px; border-radius: 50%; background: var(--bg); border: 1px solid var(--fg);
+      box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 3px var(--fg); }
+    .slide:focus-visible .sl-thumb { outline: 1px solid var(--fg); outline-offset: 3px; }
+    .slide.off { opacity: 0.35; }
+    .slide.off .sl-track { cursor: default; }
     /* The voice: the stone's bell and the synth layer side by side, both in view at once. */
     .voice-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-items: start; }
     .voice-cols .sub { margin-top: 0; }
-    .voice-cols .knobs { grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 12px 4px; }
+    .voice-cols .knobs { grid-template-columns: minmax(0, 1fr); gap: 6px; }
     .hint-line { color: var(--fg); opacity: 0.75; }
-    .knob .ring { fill: none; stroke: var(--faint); stroke-width: 1.2; }
-    .knob .ring.faint { stroke: var(--edge); }
-    .knob .arc { fill: none; stroke: var(--fg); stroke-width: 2.4; }
-    .knob .pointer { stroke: var(--fg); stroke-width: 1.6; }
-    .knob:focus-visible svg { outline: 1px solid var(--fg); outline-offset: 3px; border-radius: 50%; }
-    .knob-label { font-size: 9px; text-align: center; line-height: 1.35; letter-spacing: 0.14em; }
-    .knob-value { font-size: 9px; color: var(--muted); text-align: center; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
-    .knob.off { opacity: 0.35; cursor: default; }
     fieldset { border: 0; border-top: 1px solid var(--edge); margin: 0; padding: 18px 0 0;
       display: flex; flex-direction: column; gap: 14px; min-width: 0; }
     legend { color: var(--fg); font-weight: 700; padding: 0 12px 0 0; letter-spacing: 0.3em; }
@@ -487,7 +488,7 @@
           <fieldset>
             <legend>Water</legend>
             <div id="water-controls" class="knobs"></div>
-            <button id="defaults" type="button" aria-label="water knobs back to defaults" title="water knobs back to defaults">defaults</button>
+            <button id="defaults" type="button" aria-label="water sliders back to defaults" title="water sliders back to defaults">defaults</button>
           </fieldset>
       </section>
       <section class="page" id="page-stones" data-page="stones" role="tabpanel" aria-labelledby="tab-stones">
@@ -629,7 +630,7 @@
         <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out. <b>● REC</b> at the top of the pond primes the picked track: the take starts with your next touch of the water, and ends on the nearest beat when you press it again, so every tape is whole beats of the tempo. Tap <b>TAPE</b> for every track's keys and faders. Or, without leaving the water, <b>swipe two fingers</b> on the pond: <b>up</b> to rec (again to finish), <b>down</b> to play or stop, <b>left / right</b> to change track (on a computer: 1–4, R, P).</li>
         <li><b>Record piece</b> saves everything you hear as a WAV.</li>
       </ol>
-      <p class="note">Knobs: drag the dial up or down; double-tap to reset. Your settings stay in this browser.
+      <p class="note">Sliders: drag along one, or tap where you want it; double-tap to reset. Your settings stay in this browser.
         The feedback link sends your device type and a few settings along with your answers.
         Open this again any time from <b>how to play</b> at the top (<b>?</b> on a phone).</p>
       <button id="guide-close" type="button">begin</button>

@@ -22,7 +22,7 @@ import { PieceRecorder, PortPieceRecorder, pieceName, MAX_RECORD_SECONDS } from 
 import { FEEDBACK_URL } from './config.js';
 import { Animator } from './animate.js';
 import { CameraMotion } from './camera.js';
-import { MotionGestures } from './motion.js';
+import { MotionGestures, DEFAULT_SENSITIVITY } from './motion.js';
 import { RANGE_LOW, RANGE_HIGH, REF_MIN_HZ, REF_MAX_HZ } from './tuning-limits.js';
 import {
   LOOP_LAYERS, EMPTY, RECORDING, PLAYING, OVERDUB, STOPPED,
@@ -540,6 +540,16 @@ function buildKnobs() {
     knobs.push(row);
     document.getElementById(`${k.group}-controls`).append(row.el);
   }
+  // Camera ripples: how readily movement counts (Dash, Oct 2026: "way too
+  // sensitive" — a room's grain and flicker must never play). Shown while
+  // the camera makes ripples.
+  cameraSenseRow = slide({
+    label: 'camera sense', hint: 'how much movement the camera needs before it makes a ripple — lower for a busy or flickering room',
+    get: () => motionGestures.sensitivity, set: (v) => { motionGestures.sensitivity = v; }, def: DEFAULT_SENSITIVITY,
+    to: (v) => v, from: (f) => f, show: (v) => `${Math.round(v * 100)}%`,
+  });
+  cameraSenseRow.el.hidden = !cameraRipples;
+  document.getElementById('water-controls').append(cameraSenseRow.el);
   document.getElementById('defaults').addEventListener('click', () => {
     for (const k of KNOBS) if (k.group === 'water') { values[k.key] = PARAMS[k.key].def; sendParam(k.key); }
     for (const row of knobs) row.refresh();
@@ -562,6 +572,7 @@ let hover = null; // the mouse over the pond while a stone is lifted (a preview 
 const animator = new Animator(crypto.getRandomValues(new Uint32Array(1))[0] || 1);
 const camera = new CameraMotion(document.getElementById('camera'));
 let cameraRipples = false; // "camera" in the bar: movement makes ripples (see syncCamera)
+let cameraSenseRow = null; // the camera sensitivity slider (shown while camera ripples are on)
 const motionGestures = new MotionGestures();
 const camMarks = []; // where camera gestures landed lately: { x, y, at } (pond terms)
 // (Declared here, before the page is built: a restored Animate mode calls
@@ -1148,6 +1159,7 @@ function restoreSession() {
   if (typeof an.mode === 'string' && ['off', 'drift', 'path', 'water'].includes(an.mode)) restoredAnimate = an.mode; // never the camera unasked
   const speed = num(an.speed, 0, 1); if (speed !== undefined) animator.speed = speed;
   if (Array.isArray(an.path)) animator.setPath(an.path.slice(0, 2000).map((p) => ({ x: num(p && p[0], 0, 1), y: num(p && p[1], 0, 1) })));
+  const sense = num(saved.cameraSensitivity, 0, 1); if (sense !== undefined) motionGestures.sensitivity = sense;
   if (Array.isArray(saved.faders)) for (let t = 0; t < TRACKS; t++) { const f = num(saved.faders[t], 0, 1); if (f !== undefined) tapeFaders[t] = f; }
   // (Stones' own voices from older sessions are left behind: one voice now.)
   if (saved.voices && saved.voices.shared) voiceValues.set(SHARED, voice(saved.voices.shared));
@@ -1159,6 +1171,7 @@ function saveSession() {
     voices: { shared: voiceValues.get(SHARED) },
     animate: { mode: animator.mode === 'camera' ? 'off' : animator.mode, speed: animator.speed, path: animator.path.map((p) => [p.x, p.y]) },
     faders: tapeFaders,
+    cameraSensitivity: motionGestures.sensitivity,
   });
   if (json === lastSaved) return;
   try { localStorage.setItem(SESSION_KEY, json); lastSaved = json; } catch { /* private window: not kept */ }
@@ -1360,6 +1373,7 @@ function showCamera() {
 }
 function showCameraRipples(on) {
   cameraRipples = on;
+  if (cameraSenseRow) cameraSenseRow.el.hidden = !on;
   const b = document.getElementById('camera-toggle');
   b.setAttribute('aria-pressed', on ? 'true' : 'false');
   b.classList.toggle('on', on);

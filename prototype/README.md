@@ -104,7 +104,11 @@ Voice) forgets them.
   ripples that follows it, like a drag. It's a mirror: move to your left and
   the ripples are on your left. Up to four moving things at once (two hands,
   a head…), never more than ten drops a second. It learns your camera's
-  grain and lighting by itself. A small grey preview sits in the pond's
+  grain by itself, ignores the whole picture brightening or dimming
+  (exposure, flickering lights), and a new movement must carry on into a
+  second frame before it drops (Dash: it was "way too sensitive"). While
+  it's on, **camera sense** (with the water's sliders) sets how much
+  movement it needs: lower for a busy or flickering room. A small grey preview sits in the pond's
   corner while it's on; the picture is shrunk to a 32 × 24 thumbnail on this
   device and never recorded or sent. Its touches start a primed tape, and
   the tape hears the result. Needs the https link

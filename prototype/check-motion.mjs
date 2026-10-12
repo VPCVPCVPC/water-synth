@@ -41,9 +41,10 @@ console.log('\n1. Still scene: nothing');
 }
 
 console.log('\n2. Something starts moving: one drop, where it is (mirrored)');
+// (Movement counts once it's seen two frames running — see 9.)
 {
   const g = new MotionGestures();
-  const fs = [...Array.from({ length: 20 }, () => frame()), frame([{ x: 6, y: 12, r: 2 }])];
+  const fs = [...Array.from({ length: 20 }, () => frame()), frame([{ x: 6, y: 12, r: 2 }]), frame([{ x: 7, y: 12, r: 2 }])];
   const out = run(g, fs);
   const d = drops(out);
   report(d.length === 1 && d[0].x > 0.7 && Math.abs(d[0].y - 0.52) < 0.1,
@@ -87,17 +88,17 @@ console.log('\n3b. The same frame twice teaches nothing');
 
 console.log('\n4. Stronger for more movement');
 {
-  const small = drops(run(new MotionGestures(), [...Array.from({ length: 10 }, () => frame()), frame([{ x: 16, y: 12, r: 1, v: 140 }])]));
-  const big = drops(run(new MotionGestures(), [...Array.from({ length: 10 }, () => frame()), frame([{ x: 16, y: 12, r: 4 }])]));
-  report(small.length === 1 && big.length === 1 && big[0].strength > small[0].strength && big[0].strength <= 2,
+  const small = drops(run(new MotionGestures(), [...Array.from({ length: 10 }, () => frame()), frame([{ x: 16, y: 12, r: 1, v: 140 }]), frame([{ x: 17, y: 12, r: 1, v: 140 }])]));
+  const big = drops(run(new MotionGestures(), [...Array.from({ length: 10 }, () => frame()), frame([{ x: 16, y: 12, r: 4 }]), frame([{ x: 17, y: 12, r: 4 }])]));
+  report(small.length === 1 && big.length >= 1 && Math.max(...big.map((e) => e.strength)) > small[0].strength && big.every((e) => e.strength <= 2),
     'a bigger, sharper movement drops harder (never harder than the hardest touch)',
-    `small ${small[0] ? small[0].strength.toFixed(2) : '—'}, big ${big[0] ? big[0].strength.toFixed(2) : '—'}`);
+    `small ${small[0] ? small[0].strength.toFixed(2) : '—'} (${small.length}), big ${big[0] ? big[0].strength.toFixed(2) : '—'} (${big.length})`);
 }
 
 console.log('\n5. Two hands: two drops');
 {
   const g = new MotionGestures();
-  const out = run(g, [...Array.from({ length: 10 }, () => frame()), frame([{ x: 5, y: 8, r: 2 }, { x: 26, y: 16, r: 2 }])]);
+  const out = run(g, [...Array.from({ length: 10 }, () => frame()), frame([{ x: 5, y: 8, r: 2 }, { x: 26, y: 16, r: 2 }]), frame([{ x: 6, y: 8, r: 2 }, { x: 25, y: 16, r: 2 }])]);
   const d = drops(out);
   report(d.length === 2 && Math.abs(d[0].x - d[1].x) > 0.4, 'two hands moving at once drop two ripples, each where it is', d.map((e) => `(${e.x.toFixed(2)}, ${e.y.toFixed(2)})`).join(' '));
 }
@@ -133,6 +134,38 @@ console.log('\n8. Bad input');
   const a = frame(), b = frame([{ x: 10, y: 10, r: 2 }]);
   const outs = [g.update(null, b, W, H, DT), g.update(a, b, W, H, 0), g.update(a, b, W, H, NaN), g.update(a, new Uint8Array(5), W, H, DT)];
   report(outs.every((o) => o.length === 0), 'missing frames, wrong sizes, no time: nothing');
+}
+
+console.log('\n9. A real room: grain, flicker, exposure — still nothing');
+// (Dash, Oct 2026: "way too sensitive, just going off constantly without
+// any movement".) A still scene through a cheap camera in a dim room.
+{
+  const quiet = (name, frames) => {
+    const g = new MotionGestures();
+    const out = run(g, frames);
+    report(out.length === 0, name, `${out.length} gestures; grain learned ${g.noise.toFixed(1)}`);
+  };
+  quiet('heavy grain (a dim room): nothing', Array.from({ length: 150 }, () => frame([], 16)));
+  // Mains flicker / exposure hunting: the whole picture steps up and down.
+  quiet('the whole picture brightening and dimming (flicker, exposure): nothing',
+    Array.from({ length: 150 }, (_, k) => frame([], 6).map((v) => Math.min(255, v + (k % 2 ? 14 : 0) + Math.round(8 * Math.sin(k / 9))))));
+  // Exposure drifting while grainy, with the grain still being learned from the start.
+  quiet('grain and a slow exposure drift together, from the first frame: nothing',
+    Array.from({ length: 150 }, (_, k) => frame([], 10).map((v) => Math.min(255, v + Math.round(k / 4)))));
+  // Sensor sparkle: specks somewhere new every frame (each cell here
+  // averages ~25 camera pixels, so a sparkle arrives this faint).
+  quiet('faint specks of sensor sparkle in a new place every frame: nothing',
+    Array.from({ length: 150 }, () => frame(Array.from({ length: 3 }, () => ({ x: Math.floor(rand() * W), y: Math.floor(rand() * H), r: 0, v: 160 })), 6)));
+}
+
+console.log('\n10. Sensitivity');
+{
+  const scene = () => [...Array.from({ length: 30 }, () => frame([], 8)), frame([{ x: 16, y: 12, r: 1, v: 125 }], 8), frame([{ x: 17, y: 12, r: 1, v: 125 }], 8)];
+  const at = (s) => { const g = new MotionGestures(); g.sensitivity = s; seed = 99; return drops(run(g, scene())).length; };
+  const low = at(0), high = at(1);
+  report(low === 0 && high === 1, 'a small, faint movement: ignored at the lowest sensitivity, caught at the highest', `low ${low}, high ${high}`);
+  const g = new MotionGestures();
+  report(g.sensitivity === 0.5, 'the default sits in the middle');
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll motion checks passed.');

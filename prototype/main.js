@@ -1,5 +1,5 @@
 // main.js — page side: starts audio, draws the water and the stones, turns
-// touches (any number of fingers, a pen, a mouse) into gestures, and sends
+// touches (a finger, a pen, a mouse) into gestures, and sends
 // loops, stones, tuning and knob changes to the audio thread.
 
 import {
@@ -1296,7 +1296,7 @@ async function startAudio() {
   status.textContent = 'waking the water…';
   if (firstRun()) showGuide();
   await resumed;
-  playingStatus = `${ctx.sampleRate} Hz · touch to drop, drag to disturb — any number of fingers`;
+  playingStatus = `${ctx.sampleRate} Hz · touch to drop, drag to disturb — two fingers run the tape`;
   status.textContent = playingStatus;
 }
 
@@ -1473,7 +1473,7 @@ function finishPiece(note) {
   pieceTime.textContent = `${clock(recorder.seconds)} · ${(blob.size / 1048576).toFixed(1)} MB${gap}${note ? ` · ${note}` : ''}`;
 }
 
-// ---- gestures: every finger, pen or mouse is its own disturbance ------------------------
+// ---- gestures: a finger (one at a time), a pen or a mouse disturbs the water ---------------
 
 const drags = new Map(); // pointerId → last sample { x, y, t }
 // Stir: a drag that keeps circling (about three-quarters of a turn within
@@ -1558,6 +1558,7 @@ let stirVisible = false; // a stir ring is on the pond (keep redrawing)
 // The page hidden or left: every stir lets go (nothing keeps churning).
 function releaseAllStirs() {
   for (const id of [...circling.keys()]) releaseStir(id);
+  forgetFingers(); // (defined with the two-finger tape below)
 }
 window.addEventListener('blur', releaseAllStirs);
 document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllStirs(); });
@@ -1603,21 +1604,27 @@ surface.addEventListener('pointerdown', (e) => {
   // Apple Pencil pressure sets strength (with a floor: first-contact pressure
   // is often low); fingers and mice are a fixed-strength drop.
   const strength = e.pointerType === 'pen' && e.pressure > 0 ? 0.6 + 1.4 * e.pressure : 1;
+  if (e.pointerType === 'touch') { fingerDown(e, p); return; } // a finger waits a moment for a partner (below)
   events.push(EV_DROP, p.x, p.y, strength);
   drags.set(e.pointerId, { x: p.x, y: p.y, t: e.timeStamp });
-  if (e.pointerType === 'touch') fingerDown(e);
 });
 
 // ---- the tape by two fingers ------------------------------------------------------------
-// Two fingers on the water swiping together run the tape (Dash, Oct 2026):
-// up records (primes the picked track — again finishes, or dubs), down plays
-// or stops it, left and right pick the track. It must be a flick, judged
-// as the first of the two fingers lifts: both landed together, lift within
-// SWIPE_MS, and moved straight, quickly, the same way and about as far — so
-// a pinch, two fingers stirring (which never lift that soon) or two slow
-// trails side by side never count. The flick's short trails play as it
-// moves; once it's a swipe, the other finger stops disturbing the water.
-// On a computer the keys do the same (1–4, R, P).
+// Two fingers on the water are the tape, never the water (Dash, Oct 2026:
+// "If someone is touching at any two points, only the swipe behavior is
+// possible, no sound"). A finger plays alone: it waits PAIR_WAIT_MS before
+// its drop, and if a second finger lands meanwhile — or later, while it is
+// still down — every finger on the water falls silent until it lifts.
+// Swiping two together runs the tape: up records (primes the picked track —
+// again finishes, or dubs), down plays or stops it, left and right pick the
+// track. It must be a flick, judged as the first of the two fingers lifts:
+// both landed together, lift within SWIPE_MS, and moved straight, quickly,
+// the same way and about as far — so a pinch, two fingers stirring (which
+// never lift that soon) or two slow drags side by side never count (they
+// are silent all the same). On a computer the keys do the same (1–4, R, P);
+// a mouse or a pen plays at once, with no wait, and never counts as a
+// second finger.
+const PAIR_WAIT_MS = 60; // a first touch waits this long to hear if a partner is coming
 const SWIPE_LAND_MS = 200; // the two fingers land within this of each other
 const SWIPE_MIN_PX = 36; // each finger travels at least this far
 const SWIPE_MS = 400; // …and the first finger lifts within this long of landing
@@ -1629,8 +1636,13 @@ const SWIPE_AGREE = Math.cos(Math.PI / 6); // the two directions within 30°
 // picked track as it was then (before this finger's own drop could start a
 // primed take), so a swipe means what you saw when you began it.
 const fingers = new Map();
-const swiped = new Set(); // fingers that made a swipe: no more ripples until they lift
-function fingerDown(e) {
+const swiped = new Set(); // fingers that made a swipe (judged once)
+const silent = new Set(); // fingers that met another on the water: no sound until they lift
+const lone = new Map(); // a lone finger's drop, waiting PAIR_WAIT_MS for a partner: pointerId → { p, at, timer }
+function fingerDown(e, p) {
+  // The first finger of a new touch: anything still listed is a finger whose
+  // lift never arrived — forget it, or it would keep every touch silent.
+  if (e.isPrimary) forgetFingers();
   const o = FRAME_TAPES + armedTrack * TAPE_FIELDS, frame = lastFrameTracks;
   // (A track fading out after a stop is stopped, as far as a swipe goes.)
   const from = { state: frame ? (frame[o + 5] === 1 ? STOPPED : frame[o]) : EMPTY, primed: frame ? frame[o + 4] === 2 : false };
@@ -1638,15 +1650,41 @@ function fingerDown(e) {
   // A third finger: none of the fingers down now can make a swipe (lifts
   // come one at a time, and the last two would otherwise look like a pair).
   if (fingers.size > 2) for (const g of fingers.values()) g.crowded = true;
+  if (fingers.size >= 2) { for (const id of fingers.keys()) silence(id); return; } // two on the water: the tape
+  lone.set(e.pointerId, { p, at: e.timeStamp, timer: setTimeout(() => sound(e.pointerId), PAIR_WAIT_MS) });
 }
-function fingerUp(id) { fingers.delete(id); swiped.delete(id); }
-// Move one finger; true if it belongs to a swipe already made (no ripples).
+// No partner came: the finger's drop plays (from where it landed; its trail
+// follows from there).
+function sound(id) {
+  const w = lone.get(id);
+  if (!w || !events) return;
+  lone.delete(id);
+  clearTimeout(w.timer);
+  events.push(EV_DROP, w.p.x, w.p.y, 1);
+  drags.set(id, { x: w.p.x, y: w.p.y, t: w.at }); // the trail's pace counts from the landing
+}
+function silence(id) {
+  const w = lone.get(id);
+  if (w) { clearTimeout(w.timer); lone.delete(id); }
+  drags.delete(id); releaseStir(id);
+  silent.add(id);
+}
+function forgetFingers() {
+  for (const w of lone.values()) clearTimeout(w.timer);
+  lone.clear(); fingers.clear(); silent.clear(); swiped.clear();
+}
+function fingerUp(id) {
+  const w = lone.get(id);
+  if (w) { clearTimeout(w.timer); lone.delete(id); }
+  fingers.delete(id); swiped.delete(id); silent.delete(id);
+}
+// Move one finger; true if it makes no sound (lone, or one of two).
 function watchSwipe(e) {
   const f = fingers.get(e.pointerId);
   if (!f) return false;
   f.path += Math.hypot(e.clientX - f.x, e.clientY - f.y);
   f.x = e.clientX; f.y = e.clientY;
-  return swiped.has(e.pointerId);
+  return silent.has(e.pointerId) || lone.has(e.pointerId);
 }
 // The first of two fingers lifts: was it a flick?
 function swipeOnLift(e) {
@@ -1669,7 +1707,7 @@ function swipeOnLift(e) {
   if (Math.abs(my) > 1.5 * Math.abs(mx)) dir = my < 0 ? 'up' : 'down';
   else if (Math.abs(mx) > 1.5 * Math.abs(my)) dir = mx < 0 ? 'left' : 'right';
   else return; // diagonal
-  for (const id of fingers.keys()) { swiped.add(id); drags.delete(id); releaseStir(id); }
+  for (const id of fingers.keys()) swiped.add(id);
   tapeSwipe(dir, first.from);
 }
 function tapeSwipe(dir, from) {
@@ -1711,7 +1749,7 @@ surface.addEventListener('pointermove', (e) => {
     return;
   }
   if (heldStone >= 0 && e.pointerType === 'mouse') hover = p;
-  if (watchSwipe(e)) return; // the other finger of a swipe: no ripples
+  if (watchSwipe(e)) return; // a finger waiting for a partner, or one of two: no ripples
   const grab = grabs.get(e.pointerId);
   if (grab) {
     if (!grab.moved && Math.hypot(e.clientX - grab.x, e.clientY - grab.y) > 6) grab.moved = true; // moving the stone
@@ -1751,8 +1789,8 @@ surface.addEventListener('pointerup', (e) => {
 });
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   surface.addEventListener(type, (e) => {
+    if (type === 'pointerup') { if (lone.has(e.pointerId)) sound(e.pointerId); swipeOnLift(e); } // a quick lone tap still plays
     drags.delete(e.pointerId); grabs.delete(e.pointerId);
-    if (type === 'pointerup') swipeOnLift(e);
     releaseStir(e.pointerId); fingerUp(e.pointerId);
     if (pathDrawing && e.pointerId === drawingPointer) finishPath();
   });

@@ -63,6 +63,9 @@
       #feedback { width: 44px; justify-content: center; border-bottom: 0; }
       #feedback .word { display: none; }
       #feedback .icon { display: block; }
+      .bar #help { width: 44px; padding: 0; }
+      .bar #help .word { display: none; }
+      .bar #help .q { display: inline; }
       #piece-rec { padding: 8px 8px; }
       .piece-save { padding: 8px 8px; }
     }
@@ -171,7 +174,8 @@
     .piece-time { color: var(--muted); font: 400 12px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.12em; }
     .piece-save { color: var(--fg); border: 1px solid var(--fg); padding: 8px 12px; text-decoration: none; }
     .piece-save:hover { background: var(--fg); color: var(--bg); }
-    #help { width: 44px; min-height: 44px; padding: 0; }
+    #help { min-height: 44px; }
+    #help .q { display: none; }
     .link { color: var(--fg); text-decoration: none; display: inline-flex; align-items: center; min-height: 44px;
       padding: 0 6px; border-bottom: 1px solid var(--muted); }
     /* First run: how to play. */
@@ -447,7 +451,7 @@
       <span id="piece-time" class="piece-time" aria-live="off"></span>
       <a id="piece-save" class="piece-save" hidden>save<span class="wide-only"> .wav</span></a>
       <span class="spacer"></span>
-      <button id="help" type="button" aria-label="how to play">?</button>
+      <button id="help" type="button" aria-label="how to play"><span class="word">how to play</span><span class="q" aria-hidden="true">?</span></button>
       <a id="feedback" class="link" target="_blank" rel="noopener" aria-label="feedback" hidden
         title="opens the feedback form; sends your device type and a few settings with it"><span class="word">feedback</span><svg class="icon"
           viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-4 3.5V16H4z"/></svg></a>
@@ -619,14 +623,15 @@
       <ol>
         <li><b>Touch the water.</b> Ripples spread; stones ring when they reach them. You don't pick notes — the water does.
           Where you touch changes what plays, and the same touch never plays quite the same twice. Leave it and it falls quiet.</li>
-        <li><b>Drag</b> to draw a trail of ripples; keep <b>circling</b> to stir the water up. Every finger is its own touch.</li>
+        <li><b>Drag</b> to draw a trail of ripples; keep <b>circling</b> to stir the water up. One finger plays at a time: two fingers on the water are for the tape (below).</li>
         <li><b>Camera</b> (top bar): move in front of it and your movement makes ripples — the picture stays on this device.</li>
         <li><b>Tap a stone</b> to lift it, then tap the water to set it down. Its sound is under Voice.</li>
         <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out. <b>● REC</b> at the top of the pond primes the picked track: the take starts with your next touch of the water, and ends on the nearest beat when you press it again, so every tape is whole beats of the tempo. Tap <b>TAPE</b> for every track's keys and faders. Or, without leaving the water, <b>swipe two fingers</b> on the pond: <b>up</b> to rec (again to finish), <b>down</b> to play or stop, <b>left / right</b> to change track (on a computer: 1–4, R, P).</li>
         <li><b>Record piece</b> saves everything you hear as a WAV.</li>
       </ol>
       <p class="note">Knobs: drag the dial up or down; double-tap to reset. Your settings stay in this browser.
-        The feedback link sends your device type and a few settings along with your answers.</p>
+        The feedback link sends your device type and a few settings along with your answers.
+        Open this again any time from <b>how to play</b> at the top (<b>?</b> on a phone).</p>
       <button id="guide-close" type="button">begin</button>
     </div>
   </div>

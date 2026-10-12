@@ -151,9 +151,10 @@ both are in view at once (Dash, Oct 2026).
   view of the deck, which itself never folds), and keys on a computer
   (1–4, R, P, M). **Two-finger swipes** on the pond (Dash, Oct 2026) run
   the tape without leaving the water: up = rec (primes; again finishes),
-  down = play/stop, left/right = track. Two fingers moving together the
-  same way are the tape, not the water (a pinch or two-finger stir never
-  counts); the first-run guide says so.
+  down = play/stop, left/right = track. Two fingers on the water at once
+  never sound — "only the swipe behavior is possible, no sound" (Dash) —
+  and only a quick two-finger flick runs the tape (a pinch or two-finger
+  stir does nothing); the first-run guide says so.
 - **Record piece** (Dash, Oct 2026) — saves everything you hear (the water and
   the tape) as a WAV to keep or share. A capture, not a layer: it never plays
   back into the instrument, and tapes still record only the water.
@@ -266,11 +267,15 @@ Build in this order:
    "it doesn't really add anything and it distracts from playing"; the
    engine keeps it — whether and how it returns is open). A quick tap right on a stone
    lifts it — see Tuned stones. No hardware needed; the primary way to play.
-   **Touch first:** on iPad and iPhone — likely the ideal way to play — every
-   finger is its own disturbance (multi-touch), and Apple Pencil pressure sets
-   strength — except that two fingers swiping together the same way are
-   reserved for the tape (see Audio looper); Wave's gesture must not collide
-   with it.
+   **Touch first:** on iPad and iPhone — likely the ideal way to play — a
+   finger is a disturbance and Apple Pencil pressure sets strength; one
+   finger plays at a time (Dash, Oct 2026): two fingers on the water at once
+   are the tape (see Audio looper) and make no sound, so a lone first touch
+   waits ~60 ms to see whether a second is coming. Only fingers disturbing
+   the water count: a finger moving a stone or drawing a path doesn't, and
+   a mouse or pen plays at once, without the wait. This is the touch
+   surface only — MIDI and MPE notes each still drop energy, chords
+   included. Wave's gesture must not collide with the tape's swipe.
 2. **MIDI keyboard** — a note drops energy at the stone holding that scale
    degree (the water then carries it to the others), velocity sets energy, aftertouch feeds continuous stirring, sustain pedal could engage Still (see Open questions).
    Mod wheel / CCs morph Phase.
@@ -318,7 +323,8 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    (1b passed its listening gate.) 1c: layers and voices, in two halves, each
    ending in a listening gate —
    A: gesture looper with optional quantize, stone controls (move, randomize,
-   spread), multi-touch and phone/iPad layout, played with today's bell;
+   spread), multi-touch (narrowed to one finger at a time in build phase 2,
+   Oct 2026) and phone/iPad layout, played with today's bell;
    B: the voice editor (shared voice with per-stone overrides, water-held
    sustain) and the audio looper. 1d: follow-ups from listening check 2.
 2. **Web prototype for user testing** (Dash, Oct 2026) — a close-to-final
@@ -395,4 +401,6 @@ Inside `processBlock` and anything it calls:
   tape (a fast one-finger sweep, three or more fingers, an edge sweep?).
 - How camera / body motion maps to Stir, Wave and Still (drops and drags for
   now) — e.g. should a still pose or an open palm ever mean Still?
+- Touch is one finger at a time so two fingers can run the tape (Dash,
+  Oct 2026); whether testers miss two-handed play is for testing to say.
 - Instrument name.

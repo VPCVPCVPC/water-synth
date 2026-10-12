@@ -80,23 +80,24 @@ and a **feedback** link appears under the pond. If the link contains
 `{info}`, the tester's device and a few settings are filled in there (for a
 Tally hidden field, or a Google Form pre-filled answer).
 
-Testers see a short **how to play** guide the first time (the **?** button
-shows it again). Their settings stay in their browser between visits — knobs,
+Testers see a short **how to play** guide the first time (the **how to
+play** button at the top — **?** on a phone — shows it again). Their settings stay in their browser between visits — knobs,
 tuning, stones and voices, not tapes or recordings; **start fresh** (under
 Voice) forgets them.
 
 ## Playing
 
-- **Touch** — a drop: a ring of ripples spreads from where you touch. Every
-  finger is its own drop or drag, so two hands play at once. Apple Pencil
-  pressure sets how hard; a mouse click is fixed strength.
+- **Touch** — a drop: a ring of ripples spreads from where you touch. One
+  finger plays at a time: two fingers on the water make no sound and are
+  for the tape (see Tape). Apple Pencil pressure sets how hard; a mouse
+  click is fixed strength.
 - **Drag** — a trail of small drops along your path; faster is stronger.
 - **Stir** — keep circling as you drag (about three-quarters of a turn
   within about half a second) and the drag stirs instead: small, choppy drops
   scatter around the circle you're drawing, and the turbulence builds the
   longer and faster you stir (a faint dashed ring shows it). Stop circling or
   lift your finger and it dies away within a second or two. Straighten out
-  and it's a trail again. Every finger can stir at once.
+  and it's a trail again.
 - **Camera** (top bar; a camera icon on a phone) — move in front of the
   camera and the water feels it: where something starts moving, a drop
   (harder for bigger, sharper movement); while it keeps moving, a trail of
@@ -154,7 +155,10 @@ your touches into the water, are set aside for now.)
   pond says what happened. It's a flick: both fingers land together, move
   straight, quickly, the same way and about as far, and lift within 0.4 s
   (a pinch, a two-finger stir or two slow trails side by side never count).
-  The flick's touch-down drops and short trails still ring. On a computer: **1–4** pick a track, **R** records
+  Two fingers on the water never sound (Dash: "only the swipe behavior is
+  possible, no sound") — even a second finger joining one that's playing
+  silences both until they lift — so one finger plays at a time, and a
+  first touch waits ~60 ms to see whether a second is coming. On a computer: **1–4** pick a track, **R** records
   (then finishes, then dubs), **P** plays or stops, **M** mutes — anywhere
   on the page except while typing in a field. The picked track is
   underlined on the deck.
@@ -438,15 +442,14 @@ voice editor untouched you hear exactly the Phase 1c bell.
     dancer in frame starts a primed take almost at once — fine? Finish lands
     on the nearest beat: does a late finish trimming back feel right?
 47. **Overload:** with four tapes and live playing, is the sound clean now?
-    Do you hear the tapes dip when you strike hard? Three fingers hard with
+    Do you hear the tapes dip when you strike hard? Fast, hard playing with
     no tapes: any grit left?
 48. **Two-finger swipes:** run the tape with two fingers while you play.
-    Do they trigger reliably — and never by accident when you play with two
-    fingers? The two touch-down drops still ring (and land in a take that's
-    finishing — and a left/right swipe away from a primed track starts its
-    take with them): fine, or distracting? Is a quick flick the right
-    feel (a slow two-finger drag stays two trails)? Are up = rec, down =
-    play/stop, left/right = track the right way round?
+    Do they trigger reliably? Two fingers on the water never sound now, so
+    one finger plays at a time, and each first touch waits ~60 ms for a
+    possible partner — does a touch still feel immediate? Do you miss
+    playing with two fingers? Is a quick flick the right feel? Are up =
+    rec, down = play/stop, left/right = track the right way round?
 49. **Bell and synth side by side:** do people find the synth layer right
     away? Does seeing both invite raising it too far, so the synth buries
     the water?

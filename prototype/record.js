@@ -6,6 +6,10 @@
 // 16-bit file; nothing waits on the audio thread. Capped at MAX_RECORD_SECONDS
 // so a phone never runs out of memory (16-bit stereo is ~11.5 MB a minute at
 // 48 kHz).
+//
+// Where shared memory isn't allowed (the app stores' web views; see
+// bridge.js), PortPieceRecorder does the same over the tap's port: the tap
+// sends frames in small chunks from a pool of buffers the page hands back.
 
 export const MAX_RECORD_SECONDS = 600; // a phone gets less (see PieceRecorder's maxSeconds)
 const RING_SECONDS = 2; // the audio thread can run this far ahead of the page
@@ -101,6 +105,85 @@ export class PieceRecorder {
     if (this.pending >= FOLD_BYTES) { this.parts.push(new Blob(this.chunks)); this.chunks = []; this.pending = 0; }
     if (this.recording && this.frames >= limit) {
       Atomics.store(this.idx, 2, 0);
+      if (this.onlimit) this.onlimit();
+    }
+  }
+}
+
+// The same, over the tap's port. The tap fills chunks of PORT_CHUNK frames
+// from a pool and transfers each full one; the page converts it and returns
+// the buffer. If the pool runs dry (the page fell behind) the tap counts the
+// frames it couldn't keep, and they become silence, as above. Stopping keeps
+// what has arrived: the unfinished last chunk (~21 ms), and any still on
+// their way, are left out.
+const PORT_CHUNK = 1024;
+export class PortPieceRecorder {
+  constructor(ctx, source, { maxSeconds = MAX_RECORD_SECONDS } = {}) {
+    this.fs = ctx.sampleRate;
+    this.maxSeconds = maxSeconds;
+    // As much slack as the shared ring: RING_SECONDS of chunks.
+    const pool = Math.ceil((RING_SECONDS * this.fs) / PORT_CHUNK);
+    this.node = new AudioWorkletNode(ctx, 'tap', {
+      numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2, channelCountMode: 'explicit',
+      processorOptions: { buffer: null, chunk: PORT_CHUNK, pool },
+    });
+    source.connect(this.node);
+    this.node.port.onmessage = (e) => this.receive(e.data);
+    this.armed = false;
+    this.take = 0; // each recording's number: a chunk from an earlier one still on its way is left out
+    this.chunks = []; this.parts = []; this.pending = 0;
+    this.frames = 0; this.gapFrames = 0; this.droppedFrames = 0;
+    this.dither = { seed: 0x2545f491 };
+    this.onlimit = null;
+  }
+
+  get recording() { return this.armed; }
+  get seconds() { return this.frames / this.fs; }
+  get dropped() { return this.droppedFrames; }
+  get gapSeconds() { return this.gapFrames / this.fs; }
+
+  start() {
+    this.chunks = []; this.parts = []; this.pending = 0;
+    this.frames = 0; this.gapFrames = 0; this.droppedFrames = 0;
+    this.armed = true;
+    this.node.port.postMessage({ arm: ++this.take });
+  }
+
+  stop() {
+    this.armed = false;
+    this.node.port.postMessage('disarm');
+    if (this.frames === 0) return null;
+    const blob = wavBlob([...this.parts, ...this.chunks], this.frames, this.fs);
+    this.chunks = []; this.parts = []; this.pending = 0;
+    return blob;
+  }
+
+  drain() {} // chunks arrive by themselves
+
+  receive(m) {
+    if (!m || !(m.data instanceof Float32Array)) return;
+    const back = () => this.node.port.postMessage(m.data.buffer, [m.data.buffer]);
+    if (!this.armed || m.take !== this.take) { back(); return; }
+    const limit = Math.floor(this.maxSeconds * this.fs);
+    // Frames lost before this chunk: silence first, to keep the timeline.
+    if (m.dropped > 0) {
+      this.droppedFrames += m.dropped;
+      const gap = Math.min(m.dropped, Math.max(0, limit - this.frames));
+      if (gap > 0) { this.chunks.push(new Int16Array(gap * 2)); this.frames += gap; this.gapFrames += gap; }
+    }
+    const n = Math.min(m.frames, Math.max(0, limit - this.frames));
+    if (n > 0) {
+      const out = new Int16Array(n * 2);
+      toInt16(out, 0, m.data, 0, n * 2, this.dither);
+      this.chunks.push(out);
+      this.pending += out.byteLength;
+      this.frames += n;
+    }
+    back();
+    if (this.pending >= FOLD_BYTES) { this.parts.push(new Blob(this.chunks)); this.chunks = []; this.pending = 0; }
+    if (this.frames >= limit) {
+      this.armed = false;
+      this.node.port.postMessage('disarm');
       if (this.onlimit) this.onlimit();
     }
   }

@@ -24,8 +24,11 @@ export const EV_STIR = 14; // source, x, y, radius, turns per second — Stir (0
 
 const HEADER_BYTES = 8;
 
-export function createRingBuffer(capacity = 256) {
-  return new SharedArrayBuffer(HEADER_BYTES + capacity * EVENT_FLOATS * 4);
+// `shared` false: a plain buffer, for a ring used within one thread (the
+// audio side of bridge.js, when shared memory isn't allowed).
+export function createRingBuffer(capacity = 256, shared = true) {
+  const bytes = HEADER_BYTES + capacity * EVENT_FLOATS * 4;
+  return shared ? new SharedArrayBuffer(bytes) : new ArrayBuffer(bytes);
 }
 
 export class RingWriter {

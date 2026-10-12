@@ -4,6 +4,9 @@
 //                               iPad or iPhone on the same network
 //   node serve.mjs --dist     → serves the hosted build (prototype/dist, after
 //                               node build.mjs), to try it before uploading
+//   … --no-isolation          → leaves the isolation headers off, as an app's
+//                               web view does: the page runs its links over
+//                               the worklet's port instead (bridge.js)
 //
 // Sends the cross-origin isolation headers that SharedArrayBuffer needs (the
 // page ↔ audio-thread queues). Browsers only allow that on a secure page:
@@ -24,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL(process.argv.includes('--dist') ? './dist/' : '.', import.meta.url));
 const HTTPS = process.argv.includes('--https');
+const ISOLATE = !process.argv.includes('--no-isolation');
 const PORT = Number(process.env.PORT) || (HTTPS ? 8443 : 8123);
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -58,8 +62,7 @@ async function handle(req, res) {
     const body = await readFile(file);
     res.writeHead(200, {
       'Content-Type': TYPES[extname(file).toLowerCase()],
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
+      ...(ISOLATE ? { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' } : {}),
       'Cache-Control': 'no-store',
     });
     res.end(body);

@@ -19,6 +19,17 @@
       ],
       "port": 8124,
       "autoPort": true
+    },
+    {
+      "name": "dist-no-isolation",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "prototype/serve.mjs",
+        "--dist",
+        "--no-isolation"
+      ],
+      "port": 8125,
+      "autoPort": true
     }
   ]
 }

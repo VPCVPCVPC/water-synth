@@ -3,12 +3,15 @@
 // through the lock-free event queue (ring.js) and are handled by the
 // Instrument itself; ~60 frames a second of the water go back to the page
 // through the visuals seqlock (visuals.js). Nothing here allocates once
-// constructed.
+// constructed. Where shared memory isn't allowed (the app stores' web views)
+// the page sends no buffers and both links run over this node's port
+// instead (bridge.js).
 
 import { Instrument } from './instrument.js';
 import { RingReader } from './ring.js';
 import { VisualWriter } from './visuals.js';
 import { Limiter } from './limiter.js';
+import { PortEventInbox, PortFramePublisher } from './bridge.js';
 
 const FRAME_RATE = 60;
 
@@ -21,12 +24,24 @@ class WaterProcessor extends AudioWorkletProcessor {
     // Last in the chain: keeps the water and every tape under full scale
     // by turning the mix down, never clipping it (limiter.js).
     this.limiter = new Limiter({ sampleRate });
-    this.events = new RingReader(eventBuffer);
-    this.visuals = new VisualWriter(visualBuffer);
-    // The page sized the shared frame; refuse to write past it (or leave stale
-    // heights) if the two sides ever disagree about the water's size.
-    this.publish = this.visuals.frame.length === this.inst.frameSize();
-    if (!this.publish) throw new Error(`visuals frame is ${this.visuals.frame.length} floats; the water needs ${this.inst.frameSize()}`);
+    if (eventBuffer && visualBuffer) {
+      this.events = new RingReader(eventBuffer);
+      this.visuals = new VisualWriter(visualBuffer);
+      // The page sized the shared frame; refuse to write past it (or leave stale
+      // heights) if the two sides ever disagree about the water's size.
+      this.publish = this.visuals.frame.length === this.inst.frameSize();
+      if (!this.publish) throw new Error(`visuals frame is ${this.visuals.frame.length} floats; the water needs ${this.inst.frameSize()}`);
+    } else {
+      // No shared memory: events and frames over the port.
+      this.events = new PortEventInbox(1024);
+      this.visuals = new PortFramePublisher(this.port, this.inst.frameSize());
+      this.publish = true;
+      this.port.onmessage = (e) => {
+        const d = e.data;
+        if (d instanceof Float32Array) this.events.receive(d); // a batch of events
+        else if (d instanceof ArrayBuffer) this.visuals.receive(d); // a frame buffer back from the page
+      };
+    }
     this.frameSamples = Math.round(sampleRate / FRAME_RATE);
     this.samplesSinceFrame = 0;
     this.scratch = new Float32Array(4096); // stands in for a missing right channel
@@ -50,9 +65,12 @@ class WaterProcessor extends AudioWorkletProcessor {
     if (this.publish && this.samplesSinceFrame >= this.frameSamples) {
       // Exact 60 Hz on average; never accumulates a backlog with large blocks.
       this.samplesSinceFrame %= this.frameSamples;
-      this.inst.prepareFrame();
-      this.inst.writeFrame(this.visuals.begin());
-      this.visuals.end();
+      const frame = this.visuals.begin(); // (null over the port when every buffer is still with the page: skip)
+      if (frame) {
+        this.inst.prepareFrame();
+        this.inst.writeFrame(frame);
+        this.visuals.end();
+      }
     }
     return true;
   }

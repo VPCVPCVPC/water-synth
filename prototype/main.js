@@ -7,8 +7,9 @@ import {
   EV_VOICE, EV_TAPE, EV_STONE_TUNE, EV_TAPE_FADER, EV_STIR,
 } from './ring.js';
 import {
-  createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
+  createVisualBuffer, VisualReader, frameLength, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
 } from './visuals.js';
+import { canShare, PortRingWriter, PortFrameReader } from './bridge.js';
 import { buildPitches, noteLabel, SCALES, pitchAtX, PITCH_MARGIN } from './tuning.js';
 import { stonePositions } from './layout.js';
 import { PARAMS, PARAM_KEYS, VOICE_PARAMS, VOICE_KEYS, SHARED } from './instrument.js';
@@ -17,7 +18,7 @@ import {
 } from './tape.js';
 import { REFERENCE_SPEED, SURFACE_W, SURFACE_H, SIM_RATE } from './surface.js';
 import { MAX_STONES } from './stones.js';
-import { PieceRecorder, pieceName, MAX_RECORD_SECONDS } from './record.js';
+import { PieceRecorder, PortPieceRecorder, pieceName, MAX_RECORD_SECONDS } from './record.js';
 import { FEEDBACK_URL } from './config.js';
 import { Animator } from './animate.js';
 import { CameraMotion } from './camera.js';
@@ -1225,13 +1226,6 @@ async function start() {
   startButton.hidden = true;
   const startError = document.getElementById('start-error');
   startError.textContent = '';
-  if (!crossOriginIsolated) {
-    // Said on the start screen itself (the status line is below the fold).
-    startButton.hidden = false;
-    startError.textContent = 'This page needs its security headers to run (cross-origin isolation). Locally: run node serve.mjs. Hosted: upload the whole dist folder, including _headers.';
-    status.textContent = startError.textContent;
-    return;
-  }
   try {
     await startAudio();
   } catch (err) {
@@ -1253,10 +1247,12 @@ async function startAudio() {
   await ctx.audioWorklet.addModule('water-worklet.js');
   await ctx.audioWorklet.addModule('rec-worklet.js');
 
-  const eventBuffer = createRingBuffer(1024);
-  const visualBuffer = createVisualBuffer(GRID_W * GRID_H);
-  events = new RingWriter(eventBuffer);
-  visuals = new VisualReader(visualBuffer);
+  // Shared memory where the page is cross-origin isolated (the website);
+  // otherwise — the app stores' web views — the same links over the
+  // worklet's port (bridge.js).
+  const shared = canShare();
+  const eventBuffer = shared ? createRingBuffer(1024) : null;
+  const visualBuffer = shared ? createVisualBuffer(GRID_W * GRID_H) : null;
   const seed = crypto.getRandomValues(new Uint32Array(1))[0] || 1; // fresh every session
   const node = new AudioWorkletNode(ctx, 'water', {
     numberOfInputs: 0,
@@ -1264,11 +1260,19 @@ async function startAudio() {
     outputChannelCount: [2],
     processorOptions: { eventBuffer, visualBuffer, seed },
   });
+  if (shared) {
+    events = new RingWriter(eventBuffer);
+    visuals = new VisualReader(visualBuffer);
+  } else {
+    events = new PortRingWriter(node.port, 1024);
+    visuals = new PortFrameReader(node.port, frameLength(GRID_W * GRID_H));
+    node.port.onmessage = (e) => { if (e.data instanceof Float32Array) visuals.receive(e.data); };
+  }
   node.connect(ctx.destination);
   // A phone gets a shorter cap: a long piece's samples, and the file built
   // from them, have to fit in its memory at once.
   const pieceMinutes = matchMedia('(pointer: coarse)').matches ? 6 : MAX_RECORD_SECONDS / 60;
-  recorder = new PieceRecorder(ctx, node, { maxSeconds: pieceMinutes * 60 });
+  recorder = new (shared ? PieceRecorder : PortPieceRecorder)(ctx, node, { maxSeconds: pieceMinutes * 60 });
   recorder.onlimit = () => finishPiece(`stopped at the ${pieceMinutes}-minute limit`);
   document.getElementById('piece-rec').disabled = false;
   document.getElementById('camera-toggle').disabled = false;
@@ -1280,13 +1284,14 @@ async function startAudio() {
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 2048;
   node.connect(analyser);
-  const live = new Float32Array(visualBuffer, 8);
+  const liveFrame = shared ? new Float32Array(visualBuffer, 8) : null;
+  const live = () => liveFrame || visuals.copy; // the newest frame, either way
   window.waterDebug = {
     ctx, node, analyser, peak: () => peakOf(analyser), stones: () => stones, placed: () => placed,
     stirs: () => [...circling.values()].map((c) => c.slot), stirRings: () => stirRings,
-    liveEnergy: () => live[0], liveFlash: () => Array.from(live.subarray(FRAME_FLASH, FRAME_FLASH + stones.count)),
-    liveLoops: () => Array.from({ length: LOOP_LAYERS }, (_, l) => Array.from(live.subarray(FRAME_LOOPS + l * LOOP_FIELDS, FRAME_LOOPS + (l + 1) * LOOP_FIELDS))),
-    liveTapes: () => Array.from({ length: TAPE_TRACKS }, (_, t) => Array.from(live.subarray(FRAME_TAPES + t * TAPE_FIELDS, FRAME_TAPES + (t + 1) * TAPE_FIELDS))),
+    liveEnergy: () => live()[0], liveFlash: () => Array.from(live().subarray(FRAME_FLASH, FRAME_FLASH + stones.count)),
+    liveLoops: () => Array.from({ length: LOOP_LAYERS }, (_, l) => Array.from(live().subarray(FRAME_LOOPS + l * LOOP_FIELDS, FRAME_LOOPS + (l + 1) * LOOP_FIELDS))),
+    liveTapes: () => Array.from({ length: TAPE_TRACKS }, (_, t) => Array.from(live().subarray(FRAME_TAPES + t * TAPE_FIELDS, FRAME_TAPES + (t + 1) * TAPE_FIELDS))),
   };
 
   for (const k of Object.keys(PARAMS)) sendParam(k);

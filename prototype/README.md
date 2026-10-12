@@ -557,6 +557,9 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   over 30 s of looped drops in water that never calms; bit-identical at any
   block size; extremes; bad input; a faded bell, a silent synth layer and a
   guarded block segment; CPU.
+- `check-bridge.mjs` — the links without shared memory: a burst of events
+  arrives whole and in order; frames come back with their buffers reused, and
+  a page that falls behind gets frames skipped, never a growing queue.
 - `check-limiter.mjs` — the output limiter: nothing passes the ceiling at
   any sample rate, quiet sound goes through untouched (only 2.5 ms late), the
   gain ramps and comes back, the same at any block size, bad input silenced,
@@ -601,6 +604,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
 | `water-worklet.js` | Runs the instrument on the browser's audio thread. |
 | `ring.js` | Lock-free queue: page → audio thread. |
 | `visuals.js` | Lock-free frames: audio thread → page. |
+| `bridge.js` | The same links (events, frames) over the worklet's port, where shared memory isn't allowed — the app stores' web views; the piece recorder has a port mode too (`record.js`). Try it with `node serve.mjs --dist --no-isolation`. |
 | `main.js`, `index.html` | The page: drawing, gestures, controls. |
 | `animate.js`, `camera.js` | Animate: drift, path, water and camera movement for the stones. |
 | `motion.js` | Camera movement → drops and drags (camera ripples). |

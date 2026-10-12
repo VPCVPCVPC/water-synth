@@ -119,7 +119,7 @@ console.log('\n5. Four layered tapes and live playing');
       t += B;
     }
   };
-  for (let k = 0; k < 4; k++) { send(EV_TAPE, k, TAPE_RECORD); play(4); send(EV_TAPE, k, TAPE_RECORD); play(0.2); }
+  for (let k = 0; k < 4; k++) { send(EV_TAPE, k, TAPE_RECORD); send(EV_DROP, rnd(), rnd(), 1); play(4); send(EV_TAPE, k, TAPE_RECORD); play(0.2); }
   pre = post = 0; low = 1;
   play(10);
   report(pre > 1 && post <= LIMITER_CEILING + 1e-6,

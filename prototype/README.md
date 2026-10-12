@@ -105,17 +105,15 @@ Voice) forgets them.
   a head…), never more than ten drops a second. It learns your camera's
   grain and lighting by itself. A small grey preview sits in the pond's
   corner while it's on; the picture is shrunk to a 32 × 24 thumbnail on this
-  device and never recorded or sent. Quantize holds camera drops for the
-  beat like touches, and the tape hears the result. Needs the https link
+  device and never recorded or sent. Its touches start a primed tape, and
+  the tape hears the result. Needs the https link
   (it asks for the camera).
 - **Hold** (Still) — press and keep still for about a third of a second: a
   hand rests on the water, a soft pale patch. The water under it flattens
   and ripples reaching it die there (and any note the water was holding
   there lets go). Slide it to calm along the way; lift your finger to lift
   the hand. Several fingers can rest at once. Only a press that hasn't moved
-  becomes a hand: a drag that pauses stays a drag. With quantize on, the
-  hand waits for its touch's drop to land on the beat first, so at a slow
-  tempo a hold can take a little longer. A hold starts with the touch's
+  becomes a hand: a drag that pauses stays a drag. A hold starts with the touch's
   drop (the hand comes down after it); held on a stone, there's no drop —
   the stone is selected and the hand calms around it.
 - Stones ring when a crest reaches them, harder for higher crests, and glow
@@ -150,7 +148,7 @@ your touches into the water, are set aside for now.)
   deck: over the pond's top-left corner, **TAPE n** (the picked track, with
   its lamp: lit while playing, blinking while recording, ringed when it holds
   a take, dimmed when muted) and **● rec**, which works on that track exactly
-  like its own rec key (rec, then finish, then dub). Tap **TAPE n** and the
+  like its own rec key (rec primes, then finish, then dub). Tap **TAPE n** and the
   whole tape opens over the pond as one performance space: each track's
   number (tap to pick it), ● rec, ▶/■ play or stop, ◐ mute, × clear (tap
   twice) and its fader, plus **× all** (tap twice) to clear every track. It
@@ -159,8 +157,12 @@ your touches into the water, are set aside for now.)
   (then finishes, then dubs), **P** plays or stops, **M** mutes — anywhere
   on the page except while typing in a field. The picked track is
   underlined on the deck.
-- Each track: **rec** starts a take, **finish** ends it and it plays; **dub**
-  adds more on top (heard live once, replayed from the next pass); **mute**
+- Each track: **rec** primes it — the key blinks *primed*, and the take
+  starts on your next touch of the water (a tap, a drag, a hold, a stir, or
+  the camera), so there's no dead air while your hand comes back to the
+  pond; rec again lets it go. **finish** ends it on the nearest beat and it
+  plays; **dub** primes an overdub the same way, which adds more on top
+  (heard live once, replayed from the next pass); **mute**
   silences it and keeps its place; **stop** then **play** restarts it from its
   top; **clear** (tap twice) erases it. Its **fader** (beside the keys) sets
   how loud it plays — drag the cap up or down (it moves by how far you drag,
@@ -177,21 +179,21 @@ your touches into the water, are set aside for now.)
   twice) erases every track. Clearing never touches the water.
 - Tracks have their own lengths, so they drift against each other.
 
-**Beat** — **quantize** (off by default) pulls toward a beat grid — strength
-from lean to snap (snap by default), swing, BPM and grid size:
-- *the notes*: a struck stone can wait for the next grid point (never sound
-  early). At full strength every note lands on the grid, like a sequencer —
-  the water still picks which stones ring and how hard; lower, the water
-  keeps more of its own time. The water itself is never delayed.
-- *your touches*: a touch just before a grid point waits for it (a faint ring
-  at your finger closes in until it lands); one just after lands at once.
-  Drags flow: never delayed.
-- *the tape*: a take starts on a beat and **finish** waits for the next beat,
-  so each track is a whole number of beats of its own (3, 5, 7…) and they
-  line up differently each time.
+**Beat** — one tempo (**BPM**, always shown) that the tape always keeps: a
+take starts on a beat — the first take sets the downbeat if no beat is
+running — and **finish** ends it on the nearest beat (a little late, and it
+trims back to the beat just gone, so the reach to the key isn't heard each
+pass), so each track is a whole number of beats of its own (3, 5, 7…) and
+they line up differently each time. While a beat runs, the pond's rim pulses
+on it (brighter on each bar's first beat).
 
-While quantize is on, the beat runs and the pond's rim pulses on it (brighter
-on each bar's first beat). BPM and grid only appear when it's on.
+**quantize notes** (off by default) pulls *when stones ring* toward the beat
+grid — strength from lean to snap (snap by default), swing and grid size: a
+struck stone can wait for the next grid point (never sound early). At full
+strength every note lands on the grid, like a sequencer — the water still
+picks which stones ring and how hard; lower, the water keeps more of its own
+time. The water and your touches are never delayed: every touch lands as
+played. Grid, strength and swing only appear when it's on.
 
 **Look** — zen garden minimalism (CLAUDE.md, "Look and feel"): black and
 white, Syncopate in wide-tracked capitals, the water in greys — light crests,
@@ -322,12 +324,13 @@ voice editor untouched you hear exactly the Phase 1c bell.
     bounced together). Right, or should a tape be able to capture the whole mix?
 12. Stop, mute and clear all fade over 0.3 s. Right length? Overdubs add up
     with no decay — should older layers fade a little each overdub pass?
-13. With quantize on, tapes follow the loops' bar grid: a take starts on it
-    and **finish** waits for the next bar line. Should tapes follow the grid
-    at all — and if so, is the wait clear?
+13. Tapes follow the beat: a take starts on it and **finish** waits for the
+    next bar line. (Answered: tapes always keep the tempo; finish now lands
+    on the nearest beat.)
 14. Tapes, loops and the water together: does it get too loud? **tape level**
-    sets the tapes under (or over) the water. (The tape mix has a soft clip
-    above 0.9; the blinking meter shows it.)
+    sets the tapes under (or over) the water. (Tapes play 3 dB under the
+    water, and a limiter at the end turns the whole mix down rather than
+    clipping it.)
 15. Did the voice editor pull you away from playing the water? Which knobs
     would you never touch mid-performance?
 16. After shaping a voice, did you want to keep it for next time? (Answered:
@@ -339,17 +342,18 @@ voice editor untouched you hear exactly the Phase 1c bell.
 0. **The synth layer** is now in plain view: the **synth layer** knob under
    water-held sustain. Raise it — does bell + synth work?
 
-18. **Quantize, now felt:** turn it on (it snaps by default) and play to the
+18. (Retired — Dash: quantize is for notes only; touches land as played.)
+    **Quantize, now felt:** turn it on (it snaps by default) and play to the
     pulsing rim. Do touches that wait for the beat feel like the water waiting,
     or like lag? Is the closing ring at your finger enough? At slow BPM on a
     1/4 grid a touch can wait up to 1.5 s — too long?
-19. Touch and drag at once with quantize on: the drag starts moving the water
+19. (Retired, as 18.) Touch and drag at once with quantize on: the drag starts moving the water
     while the touch waits for the beat, so the ripple lands behind your
     finger. Fine, or should the drag wait too?
 20. Drags never snap, live or looped (a snapped drag became stutters on the
     grid). Right?
-21. **Tapes on the beat:** with quantize on, record tapes of different numbers
-    of beats (say 3 and 4). Do they line up in interesting new ways?
+21. **Tapes on the beat:** record tapes of different numbers of beats (say 3
+    and 4). Do they line up in interesting new ways?
 22. **Very slow flow** (down to ~32 s to cross): at the slowest, water decay
     stretches with it (time-lapse), so the pond can take many minutes to fall
     silent. Is that the drift you wanted, or should decay not stretch so far?
@@ -367,9 +371,8 @@ voice editor untouched you hear exactly the Phase 1c bell.
     aside). Does it feel like an instrument you'd reach for? Anything a
     tape machine should have that it doesn't? With several tracks running,
     does the pond still feel like the instrument?
-26. Turning quantize on now snaps notes as well as touches straight away
-    (snap is the default). Should notes and touches share one strength and
-    one default, or should notes start at lean?
+26. (Answered — Dash: quantize is for notes only.) Turning quantize on now
+    snaps notes as well as touches straight away (snap is the default).
 27. At full strength, several crests on one stone within a grid step now
     ring as **one** note on the grid point, as hard as the hardest (one note
     per stone per step, like a sequencer). Right, or should each hit ring
@@ -444,6 +447,14 @@ voice editor untouched you hear exactly the Phase 1c bell.
     turbulence that builds, then settles when you stop? Does it start too
     easily (catching a curvy drag you meant as a trail) or too late? Is the
     churn too busy, too gentle, the right size?
+46. **Primed record:** press rec, then play — the take starts on your first
+    touch. Does that feel right? Did you ever want to catch the water's tail,
+    or Animate's drift, without touching it again? With the camera on, a
+    dancer in frame starts a primed take almost at once — fine? Finish lands
+    on the nearest beat: does a late finish trimming back feel right?
+47. **Overload:** with four tapes and live playing, is the sound clean now?
+    Do you hear the tapes dip when you strike hard? Three fingers hard with
+    no tapes: any grit left?
 
 ### Decisions for Dash
 
@@ -544,6 +555,10 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   over 30 s of looped drops in water that never calms; bit-identical at any
   block size; extremes; bad input; a faded bell, a silent synth layer and a
   guarded block segment; CPU.
+- `check-limiter.mjs` — the output limiter: nothing passes the ceiling at
+  any sample rate, quiet sound goes through untouched (only 2.5 ms late), the
+  gain ramps and comes back, the same at any block size, bad input silenced,
+  and four layered tapes plus live playing come out under full scale; CPU.
 - `check-voices-cpu.mjs` — the voice engine's CPU budget, in its own process (a
   workload that costs 510 µs per block cold costs ~40% more once this suite has
   rendered its earlier sections, and that is not the engine's doing). Run by
@@ -553,15 +568,17 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   water as it sounds now); tapes never record another tape's playback; overdub is
   heard live once and replays from the next pass; mute, stop and clear fade
   rather than cut (restarts and clears mid-fade included); the loop seam is
-  crossfaded; with quantize on, takes start on a beat and last whole beats of
-  their own lengths; retuning never touches a tape; the status frame; bit-identical at
+  crossfaded; takes always start on a beat (the first sets the downbeat) and
+  finish on the nearest one, whole beats of their own lengths; record primes
+  a track and the next touch (a drop, drag, hand or stir — not a lift or a
+  let-go) starts it; retuning never touches a tape; the status frame; bit-identical at
   block sizes 1…8192 and the same loudness over time at 44.1/48/96 kHz; limits
   and bad input; the whole path through the instrument (the knob, `EV_TAPE`,
   the frame); CPU.
 - `check-looper.mjs` — loops replay every gesture at the same place each pass
   while each pass plays a different phrase; overdub, mute, stop/restart,
   clear and clear all; quantize snap/lean/swing and whole bars on a shared
-  grid; a live touch waits for the next grid point (never sent into the past) and its copy replays where it was heard; identical at any sample rate and block
+  grid; a live touch lands as played, its recorded copy on the grid; identical at any sample rate and block
   size; limits; bad input; CPU.
 
 ## Files

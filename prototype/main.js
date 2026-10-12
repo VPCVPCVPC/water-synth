@@ -391,7 +391,7 @@ const KNOBS = [
   { group: 'tapes', key: 'tapeLevel', label: 'level', map: linMap('tapeLevel'),
     show: (v) => `${v.toFixed(2)}×`, hint: 'the tape under (or over) the live water' },
   { group: 'quantize', key: 'quantizeStrength', label: 'strength', map: linMap('quantizeStrength'),
-    show: (v) => (v >= 0.995 ? 'snap' : v <= 0.005 ? 'as played' : `lean ${Math.round(v * 100)}%`), hint: 'how far touches and notes move toward the beat' },
+    show: (v) => (v >= 0.995 ? 'snap' : v <= 0.005 ? 'as played' : `lean ${Math.round(v * 100)}%`), hint: 'how far notes move toward the beat' },
   { group: 'quantize', key: 'swing', label: 'swing', map: linMap('swing'),
     show: (v) => `${Math.round(v * 200)}%`, hint: 'every second grid point lands late' },
 ];
@@ -952,7 +952,7 @@ function buildLoopControls() {
   armTrack(armedTrack);
 
   const quantize = document.getElementById('quantize');
-  const shown = document.querySelector('.quantized');
+  const shown = document.querySelector('.quantized'); // the notes' grid, strength and swing
   quantize.checked = values.quantize === 1; // a restored session
   shown.hidden = !quantize.checked;
   quantize.addEventListener('change', () => {
@@ -1019,23 +1019,27 @@ function paintTrack(ui, t) {
   let text;
   if (state === EMPTY) text = 'empty';
   else if (state === RECORDING) text = `rec ${length.toFixed(1)} s`;
-  else text = values.quantize && whole ? `${Math.round(beats)} beats` : `${length.toFixed(1)} s`;
+  else text = whole ? `${Math.round(beats)} beats` : `${length.toFixed(1)} s`;
   if (state === STOPPED) text += ' · stop';
   if (muted) text += ' · mute';
-  if (waiting) text += ' · on the beat…';
+  if (waiting === 2) text += state === EMPTY ? ' · primed: touch the water' : ' · primed to dub';
+  else if (waiting) text += ' · on the beat…';
   if (state === OVERDUB) text += ' · dub';
   if (fading === 1) text += ' · stopping';
   if (fading === 2) text += ' · clearing';
+  const primed = waiting === 2;
   const key = `${state}|${muted}|${text}`;
   if (key === ui.last) return;
   ui.last = key;
   ui.len.textContent = text;
   ui.ch.dataset.state = state === RECORDING || state === OVERDUB ? 'rec' : state === PLAYING ? 'play' : state === EMPTY ? 'empty' : 'stop';
   ui.ch.dataset.muted = muted ? '1' : '0';
-  const [rg, rl] = state === EMPTY ? [REC, 'rec'] : state === RECORDING ? [REC, 'finish'] : state === OVERDUB ? [REC, 'end'] : [REC, 'dub'];
+  // Primed: rec again lets it go (nothing starts).
+  const [rg, rl] = primed ? [REC, 'primed'] : state === EMPTY ? [REC, 'rec'] : state === RECORDING ? [REC, 'finish'] : state === OVERDUB ? [REC, 'end'] : [REC, 'dub'];
   setKey(ui.rec, rg, rl);
   ui.rec.classList.toggle('rec', state === RECORDING || state === OVERDUB);
-  ui.rec.setAttribute('aria-label', `track ${t + 1} ${rl === 'rec' ? 'record' : rl === 'dub' ? 'overdub' : rl === 'end' ? 'end overdub' : rl}`);
+  ui.rec.classList.toggle('primed', primed);
+  ui.rec.setAttribute('aria-label', `track ${t + 1} ${recWords(rl)}`);
   const playing = state === PLAYING || state === OVERDUB;
   setKey(ui.play, playing ? STOP : PLAY, playing ? 'stop' : state === RECORDING ? 'finish' : 'play');
   ui.play.setAttribute('aria-label', `track ${t + 1} ${playing ? 'stop' : state === RECORDING ? 'finish' : 'play'}`);
@@ -1046,13 +1050,17 @@ function paintTrack(ui, t) {
   ui.mute.setAttribute('aria-pressed', muted ? 'true' : 'false');
   ui.mute.setAttribute('aria-label', `track ${t + 1} mute`);
   ui.mute.disabled = ui.clear.disabled = state === EMPTY;
-  paintQuick(t, state, rl, playing, muted);
+  paintQuick(t, state, rl, playing, muted, primed);
+}
+function recWords(label) {
+  return label === 'rec' ? 'record' : label === 'dub' ? 'overdub' : label === 'end' ? 'end overdub'
+    : label === 'primed' ? 'primed: recording starts on your next touch — press to cancel' : label;
 }
 // The quick controls show the picked track's rec and play keys as they are
 // on the deck, and every track's lamp on its number.
-function paintQuick(t, state, recLabel, playing, muted) {
-  const look = state === RECORDING || state === OVERDUB ? 'rec' : state === PLAYING ? 'play' : state === EMPTY ? 'empty' : 'stop';
-  const said = `${state === EMPTY ? ', empty' : look === 'rec' ? ', recording' : playing ? ', playing' : ', stopped'}${muted ? ', muted' : ''}`;
+function paintQuick(t, state, recLabel, playing, muted, primed) {
+  const look = state === RECORDING || state === OVERDUB ? 'rec' : primed ? 'primed' : state === PLAYING ? 'play' : state === EMPTY ? 'empty' : 'stop';
+  const said = `${state === EMPTY ? (primed ? ', primed' : ', empty') : look === 'rec' ? ', recording' : playing ? ', playing' : ', stopped'}${primed && state !== EMPTY ? ', primed to dub' : ''}${muted ? ', muted' : ''}`;
   const chip = document.querySelector(`.quick-track[data-t="${t}"]`);
   if (chip) {
     chip.dataset.state = look; chip.dataset.muted = muted ? '1' : '0';
@@ -1063,7 +1071,8 @@ function paintQuick(t, state, recLabel, playing, muted) {
   if (q) {
     q.rec.textContent = REC;
     q.rec.classList.toggle('rec', look === 'rec');
-    q.rec.setAttribute('aria-label', `track ${t + 1} ${recLabel === 'rec' ? 'record' : recLabel === 'dub' ? 'overdub' : recLabel === 'end' ? 'end overdub' : recLabel}`);
+    q.rec.classList.toggle('primed', primed);
+    q.rec.setAttribute('aria-label', `track ${t + 1} ${recWords(recLabel)}`);
     q.play.textContent = playing ? STOP : PLAY;
     q.play.setAttribute('aria-label', `track ${t + 1} ${playing ? 'stop' : state === RECORDING ? 'finish' : 'play'}`);
     q.play.disabled = state === EMPTY;
@@ -1081,7 +1090,8 @@ function paintQuick(t, state, recLabel, playing, muted) {
   pick.setAttribute('aria-label', `tape track ${t + 1}${said} — pick another`);
   rec.querySelector('.word').textContent = recLabel;
   rec.classList.toggle('rec', state === RECORDING || state === OVERDUB);
-  rec.setAttribute('aria-label', `tape track ${t + 1} ${recLabel === 'rec' ? 'record' : recLabel === 'dub' ? 'overdub' : recLabel === 'end' ? 'end overdub' : recLabel}`);
+  rec.classList.toggle('primed', primed);
+  rec.setAttribute('aria-label', `tape track ${t + 1} ${recWords(recLabel)}`);
 }
 function armTrack(t) {
   if (!(t >= 0 && t < TRACKS)) return;
@@ -1431,8 +1441,8 @@ function setCameraRipples(on) {
   syncCamera();
 }
 document.getElementById('camera-toggle').addEventListener('click', () => { wake(); setCameraRipples(!cameraRipples); });
-// New camera frames → gestures, sent like a touch's (quantize holds camera
-// drops for the beat just the same; the tape hears the result).
+// New camera frames → gestures, sent like a touch's (the tape hears the
+// result, and a primed tape starts on them).
 function cameraGestures(now) {
   if (!cameraRipples || !events || !camera.fresh) return;
   for (const g of motionGestures.update(camera.prev, camera.cur, camera.w, camera.h, camera.dt)) {
@@ -1440,8 +1450,6 @@ function cameraGestures(now) {
       const p = fromCanvas(g.x, g.y);
       events.push(EV_DROP, p.x, p.y, g.strength);
       camMarks.push({ x: p.x, y: p.y, at: now });
-      const hold = heldFor(); // with quantize on, it waits for the beat like a touch: show where
-      if (hold > 0.02) pending.push({ x: p.x, y: p.y, from: now, until: now + hold * 1000 });
     } else {
       const a = fromCanvas(g.x0, g.y0), b = fromCanvas(g.x1, g.y1);
       const across = Math.hypot(g.x1 - g.x0, g.y1 - g.y0), took = across / g.speed; // seconds the move took
@@ -1722,13 +1730,8 @@ surface.addEventListener('pointerdown', (e) => {
   // is often low); fingers and mice are a fixed-strength drop.
   const strength = e.pointerType === 'pen' && e.pressure > 0 ? 0.6 + 1.4 * e.pressure : 1;
   events.push(EV_DROP, p.x, p.y, strength);
-  // With quantize on, a touch just before a grid point waits for it (the
-  // audio thread decides; this mirrors it): show where it will land.
-  const hold = heldFor();
-  if (hold > 0.02) pending.push({ x: p.x, y: p.y, from: performance.now(), until: performance.now() + hold * 1000 });
   drags.set(e.pointerId, { x: p.x, y: p.y, t: e.timeStamp });
-  // The hand always comes down after this touch's drop (which quantize may hold for the beat).
-  watchHold(e, p, Math.max(HOLD_MS, hold * 1000 + 60));
+  watchHold(e, p);
 });
 
 surface.addEventListener('pointermove', (e) => {
@@ -1875,19 +1878,6 @@ const image = gridCtx.createImageData(GRID_W, GRID_H);
 const flashShown = new Float32Array(MAX_STONES);
 let showLabels = false;
 let beatAt = -1, beatTime = 0; // beats since the grid began, at the latest frame (and when it came)
-let beatNow = -1; // the beat as last drawn
-const pending = []; // touches waiting for the grid: { x, y, from, until } (ms)
-
-// How long (s) a touch made now waits for the grid — the page's mirror of the
-// looper's liveStep (nearest grid point, swing on every second; only a point
-// ahead holds it, by the quantize strength).
-function heldFor() {
-  if (!values.quantize || beatNow < 0 || values.quantizeStrength <= 0) return 0;
-  const t = beatNow * values.grid, k = Math.round(t);
-  const target = k + (((k % 2) + 2) % 2 === 1 ? values.swing : 0);
-  if (!(target > t)) return 0;
-  return (values.quantizeStrength * (target - t) * 60) / (values.bpm * values.grid);
-}
 let outputLevel = 0, lastFrameTime = 0, lastOutputWidth = '', lastSize = '', lastFrameEnergy = -1;
 
 function draw(now) {
@@ -1915,10 +1905,10 @@ function draw(now) {
   // The beat (when quantize is on) comes with every frame, still water or not;
   // between frames it's carried forward at the tempo.
   if (frame) { beatAt = frame[FRAME_BEAT]; beatTime = now; updateTracks(frame); } // tracks change even in still water
-  const beating = values.quantize === 1 && beatAt >= 0;
+  // The beat runs while quantize is on or a tape is on it (tapes always
+  // follow the tempo): the rim pulses whenever there's a beat to play to.
+  const beating = beatAt >= 0;
   const beat = beating ? beatAt + ((now - beatTime) / 1000) * (values.bpm / 60) : -1;
-  beatNow = beat;
-  for (let i = pending.length - 1; i >= 0; i--) if (pending[i].until <= now) pending.splice(i, 1);
   // A frame of perfectly still water after another one changes nothing on screen.
   if (frame && frame[0] === 0 && lastFrameEnergy === 0 && frame[1] === 0) frame = null;
   if (frame) lastFrameEnergy = frame[0];
@@ -1927,7 +1917,7 @@ function draw(now) {
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
   const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceTarget}x${voiceMarks}x${heldStone}x${hands.size}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
-  if (!frame && !glowing && !beating && !pending.length && grabs.size === 0 && hands.size === 0 && !stirVisible && !(camMarks.length && now - camMarks[camMarks.length - 1].at < 500) && heldStone < 0 && !animating && drawingPointer < 0 &&
+  if (!frame && !glowing && !beating && grabs.size === 0 && hands.size === 0 && !stirVisible && !(camMarks.length && now - camMarks[camMarks.length - 1].at < 500) && heldStone < 0 && !animating && drawingPointer < 0 &&
       size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
   if (frame) {
@@ -2014,15 +2004,6 @@ function draw(now) {
       g.fillStyle = 'rgba(236, 236, 232, 0.7)';
       g.fillText(stones.labels[i], x + r * 2, y - r * 1.5);
     }
-  }
-
-  // A touch waiting for the beat: a faint ring at the touch point that closes
-  // in as its moment comes (then the ripple itself takes over).
-  for (const m of pending) {
-    const c = toCanvas(m.x, m.y), left = Math.max(0, (m.until - now) / (m.until - m.from));
-    g.strokeStyle = `rgba(255, 255, 255, ${(0.25 + 0.45 * (1 - left)).toFixed(3)})`;
-    g.lineWidth = Math.max(1, dpr);
-    g.beginPath(); g.arc(c.u * w, c.v * h, (4 + 14 * left) * dpr, 0, Math.PI * 2); g.stroke();
   }
 
   // Where the camera's movement touched the water: a small ring that fades.

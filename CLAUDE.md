@@ -113,28 +113,32 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   playback is a natural input for Erosion later, so loops are stored as timed
   gesture events. (Still and Stir, built since, aren't recorded yet: a returning
   looper must record their streams of hand and stir states, let-go included.)
-- **Quantize** (optional, off by default) moves *when you touch the water*
-  toward a beat grid — live touches and recorded ones — with a strength
-  control from lean to snap (the default when enabled), plus swing. Touches
-  lean; drags flow (never delayed — and, when the gesture looper is in use,
-  a looped drag keeps its own timing).
-  While it's on, the beat is visible on the pond. The same strength also pulls
-  *when stones ring* toward the grid (a struck stone can wait for the next
-  grid point, never sound early): at 0% the water keeps its own time, at 100%
-  every note lands on the grid like a sequencer — a way to find serendipitous
-  sequences and build songs that aren't only ambient. Quantize never chooses
-  notes: which stones ring, and how hard, is still the water's. Note quantize
-  never delays the water — only when struck stones are heard. (Dash,
-  Oct 2026: quantizing only touches was too subtle to hear.)
+- **The beat** (Dash, Oct 2026): one tempo, its BPM always shown, that the
+  tape always keeps. It starts with the first take (or when quantize notes is
+  turned on), and while it runs the pond's rim pulses on it. **Quantize
+  notes** (optional, off by default) pulls *when stones ring* toward the beat
+  grid, with a strength control from lean to snap (the default when enabled),
+  plus swing: a struck stone can wait for the next grid point, never sound
+  early. At 0% the water keeps its own time, at 100% every note lands on the
+  grid like a sequencer — a way to find serendipitous sequences and build
+  songs that aren't only ambient. Quantize never chooses notes: which stones
+  ring, and how hard, is still the water's. It never delays the water or your
+  touches: every touch lands as played (Dash, Oct 2026: notes only). When the
+  gesture looper returns, its recorded touches can still lean toward the
+  grid; drags keep their own timing.
 - **Audio looper** (the *Tape* on the page) — "a tape beside the pond":
   records the instrument's output and layers fixed audio, like a loop pedal.
   The one feature that isn't the water; mainly for the standalone app. Several
   tape tracks of their own lengths, each with record, overdub, mute and clear
   (Dash, Oct 2026); they record the water's sound, not other tapes. A tape
   always plays back exactly what was recorded — retuning never touches it — so
-  you can lay a bassline, then a melody, then harmonies in other tunings. With
-  quantize on, a take starts on a beat and lasts whole beats: tapes follow the
-  beat, but their lengths differ, so the way they line up keeps changing.
+  you can lay a bassline, then a melody, then harmonies in other tunings.
+  Tapes always keep the tempo (Dash, Oct 2026): a take starts on a beat (the
+  first take sets the downbeat if no beat is running) and finishes on the
+  beat nearest where you end it, so it lasts whole beats; their lengths
+  differ, so the way they line up keeps changing. **Record primes** (Dash,
+  Oct 2026): rec arms the track, and the take — or an overdub — starts on
+  your next touch of the water, from any source; rec again lets it go.
   Stopping, muting and clearing fade, never cut. Each track also has a
   **fader** (Dash, Oct 2026), so a track can be faded in and out while you
   record and perform; it sets only what you hear (takes still record the
@@ -279,7 +283,7 @@ moves stones and never disturbs the water.) The first version (Dash, Oct
 harder for bigger, sharper movement; while it keeps moving, a drag that
 follows it; up to four moving things at once, at most ten drops a second;
 mirrored; it learns the camera's grain by itself. It goes through the same
-path as touch (quantize holds its drops; the tape hears it). Turned on from
+path as touch (its touches start a primed tape; the tape hears it). Turned on from
 the top bar; it shares the one camera with Animate.
 
 Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
@@ -323,7 +327,8 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    was built first, Oct 2026, after Dash's "keep building"; then camera ripples
    came in at his request, ahead of Stir and Wave — see Camera / motion input;
    then quick tape, tape faders, and Stir: circling builds turbulence that
-   dies away when you stop).
+   dies away when you stop; then an output limiter, and record that primes
+   on your next touch with tapes always on the beat).
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
    including its gestures and the Phase modes).

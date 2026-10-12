@@ -11,14 +11,13 @@
 // identical at any sample rate and block size. Several layers can run at
 // once; loops of different lengths drift against each other.
 //
-// Quantize (optional, off by default) moves *when a touch (a drop) lands* toward a
-// beat grid; drags flow, live and looped — strength from lean to snap (default when on), plus swing — and
-// rounds a new loop's length to whole bars. It never places notes: when
-// stones ring is still the water's business. A live touch can only be held
-// back, never sent into the past: one in the second half of a grid step
-// leans toward the next grid point (liveStep); one just after a grid point
-// lands at once, and its recorded copy is pulled back onto that point. While
-// quantize is on the grid runs, so its beat can be shown and played to.
+// Quantize (optional, off by default) moves a recorded touch's copy (a drop)
+// toward a beat grid; drags flow — strength from lean to snap (default when
+// on), plus swing — and rounds a new loop's length to whole bars. It never
+// places notes. Live touches land as played (Dash, Oct 2026: on the page,
+// quantize is for notes only — the instrument pulls when stones ring); how
+// a returning looper should treat its copies is for that return to settle.
+// While quantize is on the grid runs, so its beat can be shown and played to.
 //
 // Fixed capacity, allocated up front. onStep() and record() allocate nothing.
 
@@ -98,24 +97,6 @@ export class GestureLooper {
     }
   }
 
-  // Where a live touch arriving for `step` should land: where quantize would
-  // put its recorded copy, if that's later — never earlier than `step`. So a
-  // touch heading for the next grid point is held back toward it (exactly as
-  // its copy will replay), and one just past a grid point lands at once.
-  liveStep(step) {
-    if (!this.quantize || this.quantizeStrength <= 0 || this.transportOrigin < 0 || !Number.isFinite(step)) return step;
-    const q = this.transportOrigin + this.quantizeTime(step - this.transportOrigin);
-    return q > step ? q : step;
-  }
-
-  // The longest a live touch may be held now: shorter than any loop that is
-  // overdubbing, so its copy can't come round before the touch lands.
-  holdLimit() {
-    let m = Infinity;
-    for (let l = 0; l < LOOP_LAYERS; l++) if (this.state[l] === OVERDUB && this.length[l] < m) m = this.length[l];
-    return m;
-  }
-
   // Beats since the grid began (−1 when there's no grid), for the page.
   beatPosition() {
     return this.transportOrigin < 0 ? -1 : ((this.step - this.transportOrigin) * this.bpm) / (60 * SIM_RATE);
@@ -168,15 +149,15 @@ export class GestureLooper {
     for (let l = 0; l < LOOP_LAYERS; l++) {
       const s = this.state[l];
       if (s !== RECORDING && s !== OVERDUB) continue;
-      // A touch (drop) leans toward the shared grid, landing where its live
-      // twin did (liveStep); a drag's trail is kept as played, so a stroke
-      // keeps its shape in the loop instead of bunching onto grid points.
+      // A touch's copy (a drop) leans toward the shared grid; a drag's trail
+      // is kept as played, so a stroke keeps its shape in the loop instead
+      // of bunching onto grid points.
       const q = kind === GESTURE_DROP && !asPlayed && this.transportOrigin >= 0
         ? this.transportOrigin + this.quantizeTime(step - this.transportOrigin) : step;
       let t = q - this.origin[l];
-      // An overdubbed gesture whose moment hasn't come yet is about to be heard
-      // live (perhaps held for the grid, perhaps past the loop's wrap): its
-      // copy first plays on the pass after, never alongside it.
+      // An overdubbed gesture whose copy lands ahead of now (leaning to a
+      // grid point past the loop's wrap) was just heard live: its copy first
+      // plays on the pass after, never alongside it.
       const skip = s === OVERDUB && q > this.step ? 1 : 0;
       if (s === OVERDUB) t = mod(t, this.length[l]);
       this.insert(l, t, kind, x0, y0, x1, y1, strength, skip);

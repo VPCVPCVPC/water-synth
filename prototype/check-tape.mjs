@@ -13,7 +13,7 @@ import { GestureLooper } from './looper.js';
 import { Instrument, PARAMS, PARAM_KEYS } from './instrument.js';
 import { buildPitches, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
-import { EV_DROP, EV_TAPE, EV_LOOP, EV_PARAM, EV_TAPE_FADER } from './ring.js';
+import { EV_DROP, EV_TAPE, EV_LOOP, EV_PARAM, EV_TAPE_FADER, EV_STROKE, EV_STILL, EV_STIR } from './ring.js';
 import { LOOP_RECORD, LOOP_CLEAR_ALL } from './looper.js';
 import { FRAME_TAPES } from './visuals.js';
 import { SIM_RATE } from './surface.js';
@@ -62,7 +62,15 @@ function rig({ rate = 48000, grid = null, block = 128 } = {}) {
       const out = new Float64Array(end - start);
       let q = 0;
       while (pos < end) {
-        while (q < actions.length && actions[q].sample <= pos) { d.action(actions[q].track, actions[q].act); q++; }
+        // Record primes a track until the next touch of the water; these
+        // checks touch at the same moment (unless an action says touch:
+        // false — §16 checks priming itself).
+        while (q < actions.length && actions[q].sample <= pos) {
+          const a = actions[q++];
+          d.now = pos;
+          d.action(a.track, a.act);
+          if (a.act === TAPE_RECORD && a.touch !== false) d.touched();
+        }
         let m = Math.min(block, end - pos);
         if (q < actions.length && actions[q].sample < pos + m) m = actions[q].sample - pos; // stop exactly on the action
         for (let i = 0; i < m; i++) { const v = live((pos + i) / rate); L[i] = v; R[i] = v; }
@@ -217,35 +225,40 @@ console.log('\n5. The loop wraps without a click');
     `step across the wrap ${around.toFixed(4)} vs ${elsewhere.toFixed(4)} mid-loop`);
 }
 
-// ---- 6. Quantize: takes sit on the beats of the gesture looper's grid -----------------
-console.log('\n6. Quantize: tapes follow the beat, in whole beats of their own lengths');
+// ---- 6. Tapes sit on the beats of the gesture looper's grid --------------------------
+// Always — quantize is for notes only (Dash, Oct 2026); it stays off here.
+console.log('\n6. Tapes follow the beat, in whole beats of their own lengths');
 {
   const rate = 48000, grid = new GestureLooper();
-  grid.setParam('quantize', 1); grid.setParam('bpm', 120); // a beat is 0.5 s
+  grid.setParam('bpm', 120); // a beat is 0.5 s
   grid.transportOrigin = 1000; // 1 s of stream time
   const r = rig({ grid }), d = r.d;
   const beat = (60 * rate) / grid.bpm, origin = (grid.transportOrigin * rate) / SIM_RATE;
-  // Asked for at 1.3 s: the take starts on the beat at 1 s; finish asked for at
-  // 2.7 s waits for the beat at 3 s — 4 beats, the first 0.3 s silence.
+  // Started at 1.3 s: the take starts on the beat at 1 s; finish at 2.7 s —
+  // a little late — ends on the nearest beat, the one just gone at 2.5 s:
+  // 3 beats, the first 0.3 s silence.
   const at = Math.round(1.3 * rate);
   r.run(1.4, TONE, [{ sample: at, track: 0, act: TAPE_RECORD }]);
   r.run(1.61, TONE, [{ sample: at + Math.round(1.4 * rate), track: 0, act: TAPE_RECORD }]);
   const len = d.length[0], gap = at - origin;
-  report(d.onGrid[0] === 1 && d.origin[0] === origin && Math.abs(len - 4 * beat) < 1,
-    'a take starts on a beat and finishes on the next beat after finish',
+  report(d.onGrid[0] === 1 && d.origin[0] === origin && Math.abs(len - 3 * beat) < 1,
+    'a take starts on a beat; finished a little late, it ends on the beat just gone (the reach to the key isn\'t kept)',
     `origin ${d.origin[0]} (a beat), length ${(len / rate).toFixed(3)} s = ${(len / beat).toFixed(2)} beats`);
-  report(d.state[0] === PLAYING && d.usesGrid(), 'the tape keeps the shared grid');
+  report(d.state[0] === PLAYING && d.usesGrid() && grid.quantize === 0, 'the tape keeps the shared grid (with quantize off)');
+  // From the loop's next top: the silence, then the take.
+  const top = origin + Math.ceil((r.pos - origin) / len) * len;
+  r.run((top - r.pos) / rate, () => 0);
   const play = r.run(0.6, () => 0);
   const inGap = rms(play, 0, Math.round(gap * 0.8));
   const after = rms(play, Math.round(gap + 0.03 * rate), Math.round(gap + 0.3 * rate));
   report(inGap < 1e-7 && after > 0.02, 'the silence before the take is part of the loop',
     `gap rms ${inGap.toExponential(1)}, then ${after.toFixed(4)}`);
   // A second tape, 3 beats long: a different length, still on the beat.
-  const t1 = Math.round(origin + 6.4 * beat);
+  const t1 = Math.round(origin + 9.4 * beat); // finish at 11.6 beats: a little early, it records on to the beat
   r.run((t1 - r.pos) / rate + 0.01, TONE, [{ sample: t1, track: 1, act: TAPE_RECORD }]);
-  r.run(1.6, TONE, [{ sample: Math.round(origin + 8.6 * beat), track: 1, act: TAPE_RECORD }]);
+  r.run(1.6, TONE, [{ sample: Math.round(origin + 11.6 * beat), track: 1, act: TAPE_RECORD }]);
   const len1 = d.length[1];
-  report(Math.abs(len1 - 3 * beat) < 1 && Math.abs((d.origin[1] - origin) / beat - 6) < 1e-6,
+  report(Math.abs(len1 - 3 * beat) < 1 && Math.abs((d.origin[1] - origin) / beat - 9) < 1e-6,
     'tapes can be different whole numbers of beats (4 and 3), so they line up differently each time',
     `track 2: ${(len1 / beat).toFixed(2)} beats from beat ${((d.origin[1] - origin) / beat).toFixed(0)}`);
 }
@@ -324,7 +337,7 @@ console.log('\n9. The status frame the page reads');
   const r = rig(), d = r.d;
   r.run(0.4, TONE, [{ sample: 0, track: 0, act: TAPE_RECORD }]);
   r.run(0.001, () => 0, [{ sample: rate * 0.4, track: 0, act: TAPE_RECORD }]);
-  d.action(1, TAPE_RECORD);
+  d.action(1, TAPE_RECORD); d.touched();
   r.run(0.1, () => 0);
   const frame = new Float32Array(TAPE_TRACKS * TAPE_FIELDS);
   d.writeStatus(frame, 0);
@@ -387,13 +400,19 @@ console.log('\n11. Through the instrument');
   send(EV_DROP, 0.5, 0.5, 2);
   for (let k = 0; k < 40; k++) inst.process(L, R, 128); // let the drop ring the stones
   send(EV_TAPE, 0, TAPE_RECORD);
+  send(EV_DROP, 0.3, 0.6, 1); // the next touch starts the primed take
   const origin = inst.tape.origin[0], captured = [];
   for (let k = 0; k < Math.round(rate / 128); k++) {
     inst.process(L, R, 128);
     for (let i = 0; i < 128; i++) captured.push(L[i]);
   }
   send(EV_TAPE, 0, TAPE_RECORD); // finish the take
-  for (let k = 0; k < 4; k++) inst.process(L, R, 128); // the take ends on the next block
+  // It ends on the nearest beat (≤ half a beat on); what's heard until then is kept too.
+  for (let k = 0; k < Math.round((0.5 * rate) / 128); k++) {
+    const recording = inst.tape.state[0] === RECORDING;
+    inst.process(L, R, 128);
+    if (recording) for (let i = 0; i < 128; i++) captured.push(L[i]);
+  }
   const len = inst.tape.length[0];
   report(inst.tape.state[0] === PLAYING && len > 0,
     'a take recorded through EV_TAPE and finished plays', `state ${inst.tape.state[0]}, ${(len / rate).toFixed(2)} s`);
@@ -401,7 +420,10 @@ console.log('\n11. Through the instrument');
   // The tape holds exactly what the instrument output, sample for sample
   // (except the seam, which blends in the sound from before the take).
   let worst = 0;
-  for (let k = 0; k < len - 480; k++) worst = Math.max(worst, Math.abs(inst.tape.L[k] - captured[k]));
+  // (The take starts on the grid's step at or just before the touch: up to
+  // a millisecond of silence leads the tape.)
+  const lead = Math.round(inst.tape.takeStart[0] - inst.tape.origin[0]);
+  for (let k = lead; k < len - 480; k++) worst = Math.max(worst, Math.abs(inst.tape.L[k] - captured[k - lead]));
   report(worst < 1e-7, "a tape records the instrument's own output, sample for sample",
     `worst difference ${worst.toExponential(1)} over ${(len / rate).toFixed(2)} s`);
 
@@ -525,7 +547,7 @@ console.log('\n12. Loops and tapes share one grid');
   // A quantized loop starts the grid; a quantized tape joins it.
   send(EV_LOOP, 0, LOOP_RECORD); run(0.3); send(EV_DROP, 0.5, 0.5, 1); run(1.5); send(EV_LOOP, 0, LOOP_RECORD); run(0.1);
   const grid = inst.looper.transportOrigin;
-  send(EV_TAPE, 0, TAPE_RECORD); run(1); send(EV_TAPE, 0, TAPE_RECORD); run(3);
+  send(EV_TAPE, 0, TAPE_RECORD); send(EV_DROP, 0.5, 0.5, 1); run(1); send(EV_TAPE, 0, TAPE_RECORD); run(3);
   report(grid >= 0 && inst.tape.state[0] === PLAYING && inst.tape.onGrid[0] === 1, 'a quantized tape joins the grid a loop started');
   // Clearing every loop keeps the grid while the tape is on it ...
   send(EV_LOOP, 0, LOOP_CLEAR_ALL); run(0.1);
@@ -648,6 +670,109 @@ console.log('\n15. Each track\'s fader');
     r.run(1, () => 0);
     report(d.fader[0] === 0.3 && d.fader[1] === 1 && d.state[0] === EMPTY, 'bad fader moves are ignored (or clamped); a cleared track keeps its fader');
   }
+}
+
+// ---- 16. Primed: record waits for your next touch -----------------------------------------
+console.log('\n16. Record primes; the next touch of the water starts the take');
+{
+  const rate = 48000, grid = new GestureLooper();
+  grid.setParam('bpm', 120);
+  const r = rig({ grid }), d = r.d;
+  const status = () => { const f = new Float32Array(TAPE_FIELDS * TAPE_TRACKS); d.writeStatus(f, 0); return f; };
+  r.run(0.5, TONE, [{ sample: 0, track: 0, act: TAPE_RECORD, touch: false }]);
+  report(d.state[0] === EMPTY && d.primed[0] === 1 && status()[4] === 2,
+    'record on an empty track primes it: nothing recorded yet, and the page is told (waiting = 2)');
+  d.now = r.pos; d.touched(); const touchAt = r.pos;
+  r.run(0.1, TONE);
+  report(d.state[0] === RECORDING && d.primed[0] === 0 && d.takeStart[0] === touchAt,
+    'the next touch starts the take right then', `take starts at ${d.takeStart[0]}, touched at ${touchAt}`);
+  report(grid.transportOrigin >= 0 && Math.abs(d.origin[0] - (grid.transportOrigin * rate) / SIM_RATE) < 1e-6 && touchAt - d.origin[0] < rate / SIM_RATE,
+    'with no beat yet, the first take starts it: the touch is the downbeat', `origin ${d.origin[0]}, touch ${touchAt}`);
+  r.run(1.9, TONE, [{ sample: r.pos + 1, track: 0, act: TAPE_RECORD }]);
+  report(d.state[0] === PLAYING, 'and record finishes it as before');
+
+  // Record again while primed lets it go: a later touch starts nothing.
+  r.run(0.1, TONE, [{ sample: r.pos, track: 1, act: TAPE_RECORD, touch: false }, { sample: r.pos + 10, track: 1, act: TAPE_RECORD, touch: false }]);
+  d.now = r.pos; d.touched(); r.run(0.1, TONE);
+  report(d.state[1] === EMPTY && d.primed[1] === 0, 'record again while primed cancels it');
+  // Mute leaves it primed; play/stop and clear let it go.
+  r.run(0.05, TONE, [{ sample: r.pos, track: 1, act: TAPE_RECORD, touch: false }, { sample: r.pos + 5, track: 1, act: TAPE_MUTE }]);
+  const keptByMute = d.primed[1] === 1;
+  r.run(0.05, TONE, [{ sample: r.pos, track: 1, act: TAPE_PLAY_STOP }]);
+  const goneByStop = d.primed[1] === 0;
+  r.run(0.05, TONE, [{ sample: r.pos, track: 1, act: TAPE_RECORD, touch: false }, { sample: r.pos + 5, track: 2, act: TAPE_RECORD, touch: false }]);
+  r.run(0.05, TONE, [{ sample: r.pos, track: 0, act: TAPE_CLEAR_ALL }]);
+  report(keptByMute && goneByStop && d.primed[1] === 0 && d.primed[2] === 0, 'mute keeps a track primed; stop and clear all let it go');
+  r.run(0.5, () => 0);
+}
+{
+  // Overdub primes the same way.
+  const rate = 48000, grid = new GestureLooper();
+  const r = rig({ grid }), d = r.d;
+  r.run(1, TONE, [{ sample: 0, track: 0, act: TAPE_RECORD }]);
+  r.run(1, () => 0, [{ sample: r.pos, track: 0, act: TAPE_RECORD }]);
+  r.run(0.5, () => 0, [{ sample: r.pos, track: 0, act: TAPE_RECORD, touch: false }]);
+  const waited = d.state[0] === PLAYING && d.primed[0] === 1;
+  d.now = r.pos; d.touched(); r.run(0.05, () => 0);
+  report(waited && d.state[0] === OVERDUB, 'record on a playing tape primes an overdub; the touch starts it', `state ${d.state[0]}`);
+}
+{
+  // A finish rounded back to the beat just gone starts the loop mid-way: the
+  // silence before the take must still be silence — even on a track that
+  // held a louder take before (its old sound is still in memory).
+  const rate = 48000, grid = new GestureLooper();
+  grid.setParam('bpm', 120); grid.transportOrigin = 0; // a beat is 0.5 s, from 0
+  const r = rig({ grid }), d = r.d, beat = 0.5 * rate;
+  grid.gridUser = d; // as in the instrument: a tape on the grid keeps it
+  const LOUD = (t) => 0.5 * Math.sin(2 * Math.PI * 440 * t);
+  // Track 2 holds the beat throughout (muted), so the re-recorded take has a gap.
+  r.run(1, () => 0, [{ sample: 0, track: 1, act: TAPE_RECORD }]);
+  r.run(0.01, () => 0, [{ sample: r.pos, track: 1, act: TAPE_RECORD }, { sample: r.pos, track: 1, act: TAPE_MUTE }]);
+  r.run(2, LOUD, [{ sample: r.pos, track: 0, act: TAPE_RECORD }]);
+  r.run(0.5, () => 0, [{ sample: r.pos, track: 0, act: TAPE_RECORD }]);
+  r.run(1, () => 0, [{ sample: r.pos, track: 0, act: TAPE_CLEAR }]);
+  // Silent take: touched 0.15 beat after a beat, finished 2.3 beats later (→ 2 beats).
+  const b0 = Math.ceil(r.pos / beat) * beat;
+  r.run((b0 - r.pos) / rate, () => 0);
+  r.run(2.3 * 0.5, () => 0, [{ sample: b0 + Math.round(0.15 * beat), track: 0, act: TAPE_RECORD }]);
+  r.run(0.01, () => 0, [{ sample: r.pos, track: 0, act: TAPE_RECORD }]);
+  const out = r.run(3, () => 0);
+  report(d.state[0] === PLAYING && Math.abs(d.length[0] - 2 * beat) < 1 && peak(out) < 1e-6,
+    'a late finish rounded back to the beat: the gap before the take stays silent (no old take in it)',
+    `length ${(d.length[0] / beat).toFixed(2)} beats, peak ${peak(out).toExponential(1)}`);
+
+  // Begun just before a beat and finished just after the next: rounding back
+  // would leave almost nothing — it records on to the following beat instead.
+  const r2 = rig({ grid: new GestureLooper() }), d2 = r2.d;
+  r2.d.grid.setParam('bpm', 120); r2.d.grid.transportOrigin = 0;
+  r2.run(0.5, TONE, [{ sample: Math.round(0.98 * beat), track: 0, act: TAPE_RECORD }]);
+  r2.run(0.6, TONE, [{ sample: Math.round(1.2 * beat), track: 0, act: TAPE_RECORD }]);
+  report(d2.state[0] === PLAYING && Math.abs(d2.length[0] - 2 * beat) < 1,
+    'a take begun just before a beat is never rounded down to nothing', `state ${d2.state[0]}, ${(d2.length[0] / beat).toFixed(2)} beats`);
+}
+{
+  // Through the instrument: which gestures are a touch.
+  const rate = 48000, inst = new Instrument({ sampleRate: rate, seed: 6 });
+  inst.setStones([0.5], [0.5], [220], 1);
+  const send = (...v) => { const e = new Float32Array(8); v.forEach((x, i) => { e[i] = x; }); inst.handleEvent(e, 0); };
+  const L = new Float32Array(128), R = new Float32Array(128);
+  const tryWith = (gesture) => {
+    inst.tape.action(0, TAPE_CLEAR_ALL);
+    for (let k = 0; k < 200; k++) inst.process(L, R, 128); // cleared and quiet
+    send(EV_TAPE, 0, TAPE_RECORD);
+    gesture();
+    inst.process(L, R, 128);
+    return inst.tape.state[0] === RECORDING;
+  };
+  const drop = tryWith(() => send(EV_DROP, 0.3, 0.3, 1));
+  const drag = tryWith(() => send(EV_STROKE, 0.2, 0.2, 0.3, 0.3, 1));
+  const hand = tryWith(() => send(EV_STILL, 0, 0.4, 0.4, 1));
+  const lift = tryWith(() => send(EV_STILL, 0, 0.4, 0.4, 0));
+  const stir = tryWith(() => send(EV_STIR, 0, 0.5, 0.5, 0.1, 1.5));
+  const letGo = tryWith(() => send(EV_STIR, 0, 0.5, 0.5, 0.1, 0));
+  report(drop && drag && hand && stir && !lift && !letGo,
+    'a touch, a drag, a hand coming down and stirring start a primed take; a lift or a let-go doesn\'t',
+    `drop ${drop}, drag ${drag}, hand ${hand}, lift ${lift}, stir ${stir}, let go ${letGo}`);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll tape checks passed.');

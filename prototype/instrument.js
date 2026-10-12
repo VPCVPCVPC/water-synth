@@ -118,31 +118,34 @@ export class Instrument {
   handleEvent(d, o) {
     const e = this.engine;
     switch (d[o]) {
-      // Live gestures — from any source — land at the next step and are
-      // recorded by any looper layer that's listening.
-      // With quantize on, a touch (a drop) can be held back toward the next
-      // grid point; a drag's trail is never delayed, so stirring stays fluid.
+      // Live gestures — from any source — land at the next step, as played
+      // (quantize moves only when stones are heard — Dash, Oct 2026), and
+      // are recorded by any looper layer that's listening. Each one is also
+      // a touch of the water: a primed tape starts recording on it.
       case EV_DROP: {
-        const now = e.simStep + 1, at = this.looper.liveStep(now);
-        // Held only while the gesture queue has room to spare; otherwise it
-        // lands now, and its copy keeps the time it was heard.
-        const held = at > now && e.canHold() && at - now < this.looper.holdLimit();
-        const landed = held ? e.drop(d[o + 1], d[o + 2], d[o + 3], at / SIM_RATE) : e.drop(d[o + 1], d[o + 2], d[o + 3]);
-        // Recorded as sent — quantize moves the copy to the same place `at`
-        // is — and only if it went into the water at all.
-        if (landed) this.looper.record(GESTURE_DROP, d[o + 1], d[o + 2], 0, 0, d[o + 3], now, at > now && !held);
+        const now = e.simStep + 1;
+        // Recorded only if it went into the water at all.
+        if (e.drop(d[o + 1], d[o + 2], d[o + 3])) this.looper.record(GESTURE_DROP, d[o + 1], d[o + 2], 0, 0, d[o + 3], now, false);
+        this.tape.touched();
         break;
       }
       case EV_STROKE:
         e.trail(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]);
         this.looper.record(GESTURE_TRAIL, d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5], e.simStep + 1);
+        this.tape.touched();
         break;
       case EV_LOOP: this.looper.action(d[o + 1], d[o + 2]); break;
       case EV_STONE_MOVE: e.stones.moveStone(e.surface, d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_STONE_TUNE: e.stones.setPitch(e.surface, d[o + 1], d[o + 2]); break;
       // Still and Stir: never delayed (like a drag); not recorded (the tape hears what they do).
-      case EV_STILL: e.still(d[o + 1], d[o + 2], d[o + 3], d[o + 4]); break;
-      case EV_STIR: e.stir(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]); break;
+      case EV_STILL:
+        e.still(d[o + 1], d[o + 2], d[o + 3], d[o + 4]);
+        if (d[o + 4] > 0) this.tape.touched(); // a hand coming down (not a lift)
+        break;
+      case EV_STIR:
+        e.stir(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]);
+        if (d[o + 5] !== 0) this.tape.touched(); // stirring (not a let-go)
+        break;
       case EV_PARAM: this.setParamIndex(d[o + 1], d[o + 2]); break;
       case EV_VOICE: this.bells.voices.set(d[o + 1], d[o + 2], d[o + 3]); break;
       case EV_VOICE_OVERRIDE: this.bells.voices.override(d[o + 1], d[o + 2] === 1); break;

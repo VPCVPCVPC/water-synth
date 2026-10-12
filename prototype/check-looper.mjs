@@ -208,8 +208,8 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
 }
 {
   // Quantize is off by default, and snaps by default once on. A live touch
-  // heading for the next grid point waits for it; one just past a grid point
-  // lands at once; with quantize off or at strength 0, nothing waits.
+  // always lands as played, quantize on or off (Dash, Oct 2026: quantize is
+  // for notes only — 3b checks it pulls when stones ring).
   const fresh = rig();
   report(fresh.inst.looper.quantize === 0 && fresh.inst.looper.quantizeStrength === 1, 'quantize is off by default, and snaps when turned on');
   const landing = (quantize, strength, at) => {
@@ -225,24 +225,22 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
     return { delay: landed - sent, onGrid: (landed - origin) % 250 === 0 };
   };
   const late = landing(1, 1, 0.2), early = landing(1, 1, 0.3), off = landing(0, 1, 0.2), none = landing(1, 0, 0.2), half = landing(1, 0.5, 0.2);
-  report(late.onGrid && late.delay > 0 && late.delay <= 125, 'snap: a touch before a grid point waits for it', `held ${late.delay} ms, lands on the grid`);
-  report(early.delay === 0, 'a touch just past a grid point lands at once (never sent into the past)', `held ${early.delay} ms`);
-  report(Math.abs(half.delay - late.delay / 2) <= 1, 'lean 50%: it waits half as long', `held ${half.delay} ms`);
-  report(off.delay === 0 && none.delay === 0, 'quantize off, or strength 0: never delayed', `held ${off.delay} / ${none.delay} ms`);
-  // Its recorded copy replays exactly where it was heard.
+  report([late, early, half, off, none].every((x) => x.delay === 0), 'a live touch lands as played: never held for the grid, quantize on or off',
+    `held ${[late, early, half, off, none].map((x) => x.delay).join(' / ')} ms`);
+  // Its recorded copy replays on the grid point it leans to.
   {
     const r = rig();
     r.param('bpm', 120); r.param('grid', 2); r.param('quantize', 1);
     r.runTo(3.2, [[0.05, () => r.loop(0, LOOP_RECORD)], [0.2, () => r.drop(0.5, 0.5)], [2.2, () => r.loop(0, LOOP_RECORD)]]);
-    const lp = r.inst.looper, heard = lp.transportOrigin + 250; // the grid point the touch waited for
+    const lp = r.inst.looper, point = lp.transportOrigin + 250; // the grid point after the touch
     const replay = r.replays.find((x) => x.kind === 'drop');
-    report(replay && (replay.step - heard) % lp.length[0] === 0, 'a held touch\'s recorded copy replays exactly where it was heard',
-      replay ? `replayed at ${replay.step}, heard at ${heard}, loop ${lp.length[0]}` : 'no replay');
+    report(replay && (replay.step - point) % lp.length[0] === 0, 'with quantize on, a touch\'s recorded copy replays on the grid point',
+      replay ? `replayed at ${replay.step}, grid point ${point}, loop ${lp.length[0]}` : 'no replay');
   }
   {
-    // A touch held for the grid across the loop's wrap plays once there (live),
-    // and its copy from the next pass on — never both at once. Overdubbing,
-    // and a first take finished while the touch is still held.
+    // A touch just before the loop's wrap is heard as played; its copy leans
+    // onto the downbeat and plays from the next pass on — never twice in a
+    // pass. Overdubbing, and a first take finished just after the touch.
     const count = (r, x, step) => r.replays.filter((e) => e.kind === 'drop' && Math.abs(e.x - x) < 1e-6 && e.step === step).length;
     const r = rig();
     r.param('bpm', 120); r.param('grid', 2); r.param('quantize', 1);
@@ -251,7 +249,7 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
       [2.5, () => r.loop(0, LOOP_RECORD)]]); // overdub
     r.runTo(8.5, [[(o + 3901) / SIM_RATE, () => r.drop(0.7, 0.7)]]);
     const atWrap = count(r, 0.7, o + 4000), next = count(r, 0.7, o + 6000);
-    report(atWrap === 1 && next === 1, 'overdub: a touch held onto the downbeat plays once there, then once a pass',
+    report(atWrap === 0 && next === 1, 'overdub: a touch just before the downbeat, heard as played; its copy on the downbeat from the next pass',
       `at the wrap ${atWrap}, a pass later ${next}`);
     const f = rig();
     f.param('bpm', 120); f.param('grid', 2); f.param('quantize', 1);
@@ -259,36 +257,8 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
     f.runTo(6.5, [[0.05, () => f.loop(0, LOOP_RECORD)], [(fo + 1900) / SIM_RATE, () => f.drop(0.6, 0.6)],
       [(fo + 1950) / SIM_RATE, () => f.loop(0, LOOP_RECORD)]]);
     const fw = count(f, 0.6, fo + 2000), fn = count(f, 0.6, fo + 4000);
-    report(f.inst.looper.length[0] === 2000 && fw === 1 && fn === 1, 'a take finished while a touch is held: once at the wrap, then once a pass',
+    report(f.inst.looper.length[0] === 2000 && fw <= 1 && fn === 1, 'a take finished just after a touch: its copy once a pass, on the downbeat',
       `at the wrap ${fw}, a pass later ${fn}`);
-  }
-  {
-    // Overdubbing a short loop recorded free, with a slow grid: a touch is
-    // never held longer than the loop, so it can't meet its own copy.
-    const r = rig();
-    r.runTo(1.0, [[0.1, () => r.loop(0, LOOP_RECORD)], [0.2, () => r.drop(0.2, 0.2)], [0.5, () => r.loop(0, LOOP_RECORD)]]);
-    r.param('bpm', 40); r.param('grid', 1); r.param('quantize', 1);
-    const lp = r.inst.looper;
-    r.loop(0, LOOP_RECORD); // overdub a 400 ms loop; the grid step is 1500 ms
-    let sent = 0;
-    r.runTo(4, [[1.3, () => { sent = r.step() + 1; r.drop(0.8, 0.8); }]]);
-    const hits = r.replays.filter((x) => x.kind === 'drop' && Math.abs(x.x - 0.8) < 1e-6).map((x) => x.step);
-    const twice = hits.some((v, i) => hits.indexOf(v) !== i);
-    report(lp.length[0] === 400 && !twice, 'a touch is never held longer than an overdubbing loop (no double hit)',
-      `loop ${lp.length[0]} ms; copies at ${hits.slice(0, 5).join(', ')}`);
-  }
-  {
-    // A burst of held touches never takes more than half of the water's
-    // gesture queue: the rest land at once, and stirring still gets through.
-    const r = rig();
-    r.param('bpm', 40); r.param('grid', 1); r.param('quantize', 1); // 1.5 s grid: long holds
-    const e = r.inst.engine;
-    let queued = 0;
-    // 60 touches over half a second, all heading for the same grid point.
-    const taps = Array.from({ length: 60 }, (_, k) => [1.0 + k * 0.008, () => r.drop(0.1 + 0.013 * k, 0.5)]);
-    r.runTo(1.55, [...taps, [1.5, () => { queued = e.qCount; r.stroke(0.2, 0.2, 0.4, 0.4, 2); }]]);
-    report(queued <= 32 && e.gesturesDropped === 0, '60 touches waiting for one grid point: at most half the queue waits, nothing is lost',
-      `waiting ${queued}, dropped ${e.gesturesDropped}`);
   }
   {
     // A drag keeps its shape in the loop: snap doesn't bunch its trail onto
@@ -304,8 +274,7 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
   }
   {
     // A loop recorded free, then overdubbed with quantize on: the new touch's
-    // copy replays where it was heard (on the shared grid), not on a grid of
-    // its own.
+    // copy replays on the shared grid, not on a grid of its own.
     const r = rig();
     r.param('bpm', 120); r.param('grid', 2);
     r.runTo(2.5, [[0.137, () => r.loop(0, LOOP_RECORD)], [0.5, () => r.drop(0.3, 0.3)], [2.137, () => r.loop(0, LOOP_RECORD)]]);
@@ -313,12 +282,12 @@ console.log('\n3. Quantize: lean or snap toward the grid; loops are whole bars')
     const lp = r.inst.looper;
     let sent = 0;
     r.runTo(2.7, [[2.6, () => { r.loop(0, LOOP_RECORD); }], [2.65, () => { sent = r.step() + 1; r.drop(0.6, 0.6); }]]);
-    const heard = r.inst.looper.liveStep(sent);
+    const heard = lp.transportOrigin + lp.quantizeTime(sent - lp.transportOrigin); // where its copy leans
     r.runTo(7);
     const replay = r.replays.filter((x) => x.kind === 'drop' && Math.abs(x.x - 0.6) < 1e-6);
     report(replay.length > 0 && replay.every((x) => (x.step - heard) % lp.length[0] === 0),
-      'overdub with quantize on, on a loop recorded free: the copy replays where it was heard',
-      replay.length ? `heard at ${heard}, replayed at ${replay.map((x) => x.step).join(', ')}` : 'no replay');
+      'overdub with quantize on, on a loop recorded free: the copy replays on the shared grid',
+      replay.length ? `grid point ${heard}, replayed at ${replay.map((x) => x.step).join(', ')}` : 'no replay');
   }
 }
 

@@ -112,12 +112,6 @@ export class Engine {
     return this.qCount >= MAX_SCHEDULED;
   }
 
-  // Room to hold a live touch back for the grid: at most half the queue, so
-  // a burst of held touches never crowds out stirring or loop playback.
-  canHold() {
-    return this.qCount < MAX_SCHEDULED / 2;
-  }
-
   setParam(name, value) {
     if (!Number.isFinite(value)) return;
     if (Object.prototype.hasOwnProperty.call(SURFACE_PARAMS, name)) {

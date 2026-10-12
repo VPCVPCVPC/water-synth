@@ -148,7 +148,13 @@ your touches into the water, are set aside for now.)
   number (tap to pick it), ● rec, ▶/■ play or stop, ◐ mute, × clear (tap
   twice) and its fader, plus **× all** (tap twice) to clear every track. It
   stays open while you play — fold it with **▴** or Escape. Its faders are
-  the deck's: move one and its twin on the deck moves too. On a computer: **1–4** pick a track, **R** records
+  the deck's: move one and its twin on the deck moves too. **Two fingers** swiping together on the pond do the same without leaving
+  the water: **up** = rec (primes; again finishes, or dubs), **down** =
+  play or stop, **left / right** = the previous or next track; a word on the
+  pond says what happened. It's a flick: both fingers land together, move
+  straight, quickly, the same way and about as far, and lift within 0.4 s
+  (a pinch, a two-finger stir or two slow trails side by side never count).
+  The flick's touch-down drops and short trails still ring. On a computer: **1–4** pick a track, **R** records
   (then finishes, then dubs), **P** plays or stops, **M** mutes — anywhere
   on the page except while typing in a field. The picked track is
   underlined on the deck.
@@ -444,6 +450,13 @@ voice editor untouched you hear exactly the Phase 1c bell.
 47. **Overload:** with four tapes and live playing, is the sound clean now?
     Do you hear the tapes dip when you strike hard? Three fingers hard with
     no tapes: any grit left?
+48. **Two-finger swipes:** run the tape with two fingers while you play.
+    Do they trigger reliably — and never by accident when you play with two
+    fingers? The two touch-down drops still ring (and land in a take that's
+    finishing — and a left/right swipe away from a primed track starts its
+    take with them): fine, or distracting? Is a quick flick the right
+    feel (a slow two-finger drag stays two trails)? Are up = rec, down =
+    play/stop, left/right = track the right way round?
 
 ### Decisions for Dash
 

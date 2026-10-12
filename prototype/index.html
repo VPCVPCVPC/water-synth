@@ -271,6 +271,13 @@
       transform: scaleX(-1); border: 1px solid var(--faint); filter: grayscale(1) contrast(1.1); background: #000;
       opacity: 0.55; pointer-events: none; display: none; }
     .camera.on { display: block; }
+    /* What a two-finger swipe just did to the tape: a word over the pond, fading. */
+    .swipe-note { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); pointer-events: none;
+      padding: 8px 14px; background: rgba(0, 0, 0, 0.6); border: 1px solid var(--edge); font-size: 11px;
+      letter-spacing: 0.18em; text-transform: uppercase; text-align: center; width: max-content; max-width: 90%;
+      opacity: 0; transition: opacity 0.4s; z-index: 1; }
+    .swipe-note.on { opacity: 1; transition: opacity 0.08s; }
+    @media (prefers-reduced-motion: reduce) { .swipe-note, .swipe-note.on { transition: none; } }
     /* Quick tape: small, over the pond's top-left corner — the picked track
        and rec; tapping the track opens the whole tape (see .quick-deck). */
     .quick { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; align-items: center; z-index: 1;
@@ -458,6 +465,7 @@
           <div class="quick-deck" id="quick-deck" role="group" aria-label="tape: all four tracks"></div>
           <button type="button" class="quick-rec" id="quick-rec" aria-keyshortcuts="R" title="record · finish · dub (key R)"><span class="dot"></span><span class="word">rec</span></button>
         </div>
+        <div class="swipe-note" id="swipe-note" role="status" aria-live="polite"></div>
         <div class="meter" aria-hidden="true"><div class="track"><div id="output" class="fill"></div></div></div>
       </div>
       <nav class="tabs" role="tablist" aria-label="controls">
@@ -612,7 +620,7 @@
         <li><b>Drag</b> to draw a trail of ripples; keep <b>circling</b> to stir the water up. Every finger is its own touch.</li>
         <li><b>Camera</b> (top bar): move in front of it and your movement makes ripples — the picture stays on this device.</li>
         <li><b>Tap a stone</b> to lift it, then tap the water to set it down. Its sound is under Voice.</li>
-        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out. <b>● REC</b> at the top of the pond primes the picked track: the take starts with your next touch of the water, and ends on the nearest beat when you press it again, so every tape is whole beats of the tempo. Tap <b>TAPE</b> for every track's keys and faders (on a computer: 1–4, then R).</li>
+        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out. <b>● REC</b> at the top of the pond primes the picked track: the take starts with your next touch of the water, and ends on the nearest beat when you press it again, so every tape is whole beats of the tempo. Tap <b>TAPE</b> for every track's keys and faders. Or, without leaving the water, <b>swipe two fingers</b> on the pond: <b>up</b> to rec (again to finish), <b>down</b> to play or stop, <b>left / right</b> to change track (on a computer: 1–4, R, P).</li>
         <li><b>Record piece</b> saves everything you hear as a WAV.</li>
       </ol>
       <p class="note">Knobs: drag the dial up or down; double-tap to reset. Your settings stay in this browser.

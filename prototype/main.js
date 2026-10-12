@@ -1038,7 +1038,7 @@ function paintTrack(ui, t) {
   ui.rec.classList.toggle('rec', state === RECORDING || state === OVERDUB);
   ui.rec.classList.toggle('primed', primed);
   ui.rec.setAttribute('aria-label', `track ${t + 1} ${recWords(rl)}`);
-  const playing = state === PLAYING || state === OVERDUB;
+  const playing = (state === PLAYING || state === OVERDUB) && fading !== 1; // stopping (fading out): its key already says play
   setKey(ui.play, playing ? STOP : PLAY, playing ? 'stop' : state === RECORDING ? 'finish' : 'play');
   ui.play.setAttribute('aria-label', `track ${t + 1} ${playing ? 'stop' : state === RECORDING ? 'finish' : 'play'}`);
   ui.play.disabled = state === EMPTY;
@@ -1681,7 +1681,102 @@ surface.addEventListener('pointerdown', (e) => {
   const strength = e.pointerType === 'pen' && e.pressure > 0 ? 0.6 + 1.4 * e.pressure : 1;
   events.push(EV_DROP, p.x, p.y, strength);
   drags.set(e.pointerId, { x: p.x, y: p.y, t: e.timeStamp });
+  if (e.pointerType === 'touch') fingerDown(e);
 });
+
+// ---- the tape by two fingers ------------------------------------------------------------
+// Two fingers on the water swiping together run the tape (Dash, Oct 2026):
+// up records (primes the picked track — again finishes, or dubs), down plays
+// or stops it, left and right pick the track. It must be a flick, judged
+// as the first of the two fingers lifts: both landed together, lift within
+// SWIPE_MS, and moved straight, quickly, the same way and about as far — so
+// a pinch, two fingers stirring (which never lift that soon) or two slow
+// trails side by side never count. The flick's short trails play as it
+// moves; once it's a swipe, the other finger stops disturbing the water.
+// On a computer the keys do the same (1–4, R, P).
+const SWIPE_LAND_MS = 200; // the two fingers land within this of each other
+const SWIPE_MIN_PX = 36; // each finger travels at least this far
+const SWIPE_MS = 400; // …and the first finger lifts within this long of landing
+const SWIPE_SPEED = 250; // px per second at least, on average (a flick, not a trail)
+const SWIPE_STRAIGHT = 0.8; // how far it got ÷ how far it went (a circle is far below)
+const SWIPE_AGREE = Math.cos(Math.PI / 6); // the two directions within 30°
+// touch pointerId on the water → { x0, y0, x, y, path, at, from } — where it
+// landed, where it is, how far it has travelled, when it landed, and the
+// picked track as it was then (before this finger's own drop could start a
+// primed take), so a swipe means what you saw when you began it.
+const fingers = new Map();
+const swiped = new Set(); // fingers that made a swipe: no more ripples until they lift
+function fingerDown(e) {
+  const o = FRAME_TAPES + armedTrack * TAPE_FIELDS, frame = lastFrameTracks;
+  // (A track fading out after a stop is stopped, as far as a swipe goes.)
+  const from = { state: frame ? (frame[o + 5] === 1 ? STOPPED : frame[o]) : EMPTY, primed: frame ? frame[o + 4] === 2 : false };
+  fingers.set(e.pointerId, { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, path: 0, at: e.timeStamp, from, crowded: false });
+  // A third finger: none of the fingers down now can make a swipe (lifts
+  // come one at a time, and the last two would otherwise look like a pair).
+  if (fingers.size > 2) for (const g of fingers.values()) g.crowded = true;
+}
+function fingerUp(id) { fingers.delete(id); swiped.delete(id); }
+// Move one finger; true if it belongs to a swipe already made (no ripples).
+function watchSwipe(e) {
+  const f = fingers.get(e.pointerId);
+  if (!f) return false;
+  f.path += Math.hypot(e.clientX - f.x, e.clientY - f.y);
+  f.x = e.clientX; f.y = e.clientY;
+  return swiped.has(e.pointerId);
+}
+// The first of two fingers lifts: was it a flick?
+function swipeOnLift(e) {
+  const f = fingers.get(e.pointerId);
+  if (!f || swiped.has(e.pointerId) || fingers.size !== 2) return;
+  f.path += Math.hypot(e.clientX - f.x, e.clientY - f.y);
+  f.x = e.clientX; f.y = e.clientY;
+  const [a, b] = [...fingers.values()];
+  if (a.crowded || b.crowded) return;
+  const first = a.at <= b.at ? a : b;
+  if (Math.abs(a.at - b.at) > SWIPE_LAND_MS || e.timeStamp - first.at > SWIPE_MS) return;
+  const ax = a.x - a.x0, ay = a.y - a.y0, bx = b.x - b.x0, by = b.y - b.y0;
+  const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+  if (la < SWIPE_MIN_PX || lb < SWIPE_MIN_PX) return;
+  if (la < SWIPE_STRAIGHT * a.path || lb < SWIPE_STRAIGHT * b.path) return; // curving: not a flick
+  if (Math.min(la, lb) / Math.max((e.timeStamp - first.at) / 1000, 1e-3) < SWIPE_SPEED) return;
+  if ((ax * bx + ay * by) / (la * lb) < SWIPE_AGREE || Math.min(la, lb) < 0.5 * Math.max(la, lb)) return;
+  const mx = ax + bx, my = ay + by;
+  let dir;
+  if (Math.abs(my) > 1.5 * Math.abs(mx)) dir = my < 0 ? 'up' : 'down';
+  else if (Math.abs(mx) > 1.5 * Math.abs(my)) dir = mx < 0 ? 'left' : 'right';
+  else return; // diagonal
+  for (const id of fingers.keys()) { swiped.add(id); drags.delete(id); releaseStir(id); }
+  tapeSwipe(dir, first.from);
+}
+function tapeSwipe(dir, from) {
+  const t = armedTrack, { state, primed } = from;
+  let note;
+  if (dir === 'left' || dir === 'right') {
+    armTrack((t + (dir === 'right' ? 1 : TRACKS - 1)) % TRACKS);
+    note = `tape ${armedTrack + 1}`;
+  } else if (dir === 'up') {
+    note = primed ? `tape ${t + 1} · rec off` : state === EMPTY ? `tape ${t + 1} · primed`
+      : state === RECORDING ? `tape ${t + 1} · finish` : state === OVERDUB ? `tape ${t + 1} · dub off` : `tape ${t + 1} · dub primed`;
+    // Primed, the swipe lets it go — but its own fingers' drops may already
+    // have started the take: clear unprimes a track still waiting, and
+    // erases a take only just begun. (A primed dub: rec unprimes it, or
+    // ends the dub those drops began.)
+    if (primed && state === EMPTY) { wake(); sendTape(t, TAPE_CLEAR); } else quickTape('rec');
+  } else {
+    note = state === EMPTY ? `tape ${t + 1} · ${primed ? 'rec off' : 'empty'}` : state === PLAYING || state === OVERDUB ? `tape ${t + 1} · stop` : `tape ${t + 1} · play`;
+    if (state !== EMPTY) quickTape('play');
+    else if (primed) { wake(); sendTape(t, TAPE_CLEAR); } // its own drops may have started the primed take
+  }
+  showSwipeNote(note);
+}
+let swipeNoteTimer = 0;
+function showSwipeNote(text) {
+  const el = document.getElementById('swipe-note');
+  el.textContent = text;
+  el.classList.add('on');
+  clearTimeout(swipeNoteTimer);
+  swipeNoteTimer = setTimeout(() => el.classList.remove('on'), 1200);
+}
 
 surface.addEventListener('pointermove', (e) => {
   if (!events) return;
@@ -1692,6 +1787,7 @@ surface.addEventListener('pointermove', (e) => {
     return;
   }
   if (heldStone >= 0 && e.pointerType === 'mouse') hover = p;
+  if (watchSwipe(e)) return; // the other finger of a swipe: no ripples
   const grab = grabs.get(e.pointerId);
   if (grab) {
     if (!grab.moved && Math.hypot(e.clientX - grab.x, e.clientY - grab.y) > 6) grab.moved = true; // moving the stone
@@ -1732,7 +1828,8 @@ surface.addEventListener('pointerup', (e) => {
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   surface.addEventListener(type, (e) => {
     drags.delete(e.pointerId); grabs.delete(e.pointerId);
-    releaseStir(e.pointerId);
+    if (type === 'pointerup') swipeOnLift(e);
+    releaseStir(e.pointerId); fingerUp(e.pointerId);
     if (pathDrawing && e.pointerId === drawingPointer) finishPath();
   });
 }

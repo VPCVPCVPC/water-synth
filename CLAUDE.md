@@ -149,7 +149,11 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   into the whole tape — every track's rec, play/stop, mute, clear and fader,
   and clear all — as one performance space over the pond's corner (a second
   view of the deck, which itself never folds), and keys on a computer
-  (1–4, R, P, M).
+  (1–4, R, P, M). **Two-finger swipes** on the pond (Dash, Oct 2026) run
+  the tape without leaving the water: up = rec (primes; again finishes),
+  down = play/stop, left/right = track. Two fingers moving together the
+  same way are the tape, not the water (a pinch or two-finger stir never
+  counts); the first-run guide says so.
 - **Record piece** (Dash, Oct 2026) — saves everything you hear (the water and
   the tape) as a WAV to keep or share. A capture, not a layer: it never plays
   back into the instrument, and tapes still record only the water.
@@ -264,7 +268,9 @@ Build in this order:
    lifts it — see Tuned stones. No hardware needed; the primary way to play.
    **Touch first:** on iPad and iPhone — likely the ideal way to play — every
    finger is its own disturbance (multi-touch), and Apple Pencil pressure sets
-   strength.
+   strength — except that two fingers swiping together the same way are
+   reserved for the tape (see Audio looper); Wave's gesture must not collide
+   with it.
 2. **MIDI keyboard** — a note drops energy at the stone holding that scale
    degree (the water then carries it to the others), velocity sets energy, aftertouch feeds continuous stirring, sustain pedal could engage Still (see Open questions).
    Mod wheel / CCs morph Phase.
@@ -385,6 +391,8 @@ Inside `processBlock` and anything it calls:
   (Dash: it distracted from playing). Whether it returns, and through what
   (a sustain pedal, the camera, a dedicated control), is open; the engine
   keeps it.
+- What Wave's swipe is, now that a two-finger same-direction swipe runs the
+  tape (a fast one-finger sweep, three or more fingers, an edge sweep?).
 - How camera / body motion maps to Stir, Wave and Still (drops and drags for
   now) — e.g. should a still pose or an open palm ever mean Still?
 - Instrument name.

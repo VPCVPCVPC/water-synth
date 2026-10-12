@@ -222,11 +222,12 @@ pond runs low to high through the scale notes in your range (on an upright
 phone, bottom to top), always snapped to the scale. Move a stone sideways and
 it walks up or down the scale, taking its new note from its next strike.
 A quick tap on a stone picks it up (it glows inside a pulsing
-ring; the voice editor turns to it), then tap the water to put it down there —
+ring), then tap the water to put it down there —
 or tap the stone to put it back (Escape too). Left alone for 5 s it goes back
 down by itself; tapping another stone moves the lift to that one. Or press a
 stone and drag it. A crowded pond gives each stone a smaller handle, so most
-taps still play. On a keyboard: focus the pond, ←/→ select a stone, Enter
+taps still play. On a keyboard: focus the pond, ←/→ select a stone (a dashed
+ring marks it, and its number and note are announced), Enter
 lifts it, the arrows move it, Enter or Escape puts it down. Placed stones
 keep their place when you retune or randomize (their notes follow the new
 scale from where they sit), and a stone dragged through
@@ -258,34 +259,28 @@ to A4 at the chosen reference (at 432 Hz, A4 is still labelled "A4"). Changing t
 never touches the water. A stone still ringing keeps its old pitch until it's
 next struck, then its old ring crossfades out over 100 ms.
 
-**Voice** — what a struck stone sounds like. Every stone shares one voice;
-the toggle at the top chooses **all stones** or the **selected stone** (the
-one you last tapped on the pond). For the selected stone, **give it its own
-voice** (a copy of the shared one; the stone turns hollow on the pond, and the
-one you're editing has a dashed ring); **back to the shared voice** undoes
-it. The synth layer's knob comes first. No presets. A stone's own voice belongs to its slot (stone 1 is the
-lowest note): if a retune leaves fewer stones it's kept, hidden, and comes back
-when the stones do — possibly on a different note.
+**Voice** — what a struck stone sounds like. Every stone shares one voice
+(Dash: per-stone voices are off the page). The editor shows the **bell** and
+the **synth layer** side by side. No presets.
 - *Bell*: level, decay, tone (upper partials), clang (bar-like ↔ clangy
   partials), tick (the water touching the stone).
 - *Strike*: dynamics (how much louder a hard strike is) and strike brightness.
 - *Water-held sustain*: while the water around a stone keeps moving, its note
   decays more slowly; as the water calms it lets go. The water holds the note,
   never you.
-- *Synth layer*: the **synth layer** knob (off until you raise it — raising
-  it opens the rest), then **shape the synth layer**: two oscillators (sine →
+- *Synth layer*: the **synth layer** knob (off until you raise it), then
+  the knobs under it: two oscillators (sine →
   triangle → saw → square), osc 2's pitch and detune, their mix, a low-pass
   that follows the stone's pitch and opens with each strike (cutoff, resonance,
   filter envelope and its decay), attack and decay. No note-off: it fades on
   its own like the bell.
 
 **Saved voices** — name the voice you're editing and **save voice** (the same
-name **replace**s it). Each saved voice has **use** (puts it on the voice
-you're editing; a stone that still follows the shared voice gets its own) and
-**delete** (tap twice). They're kept in this browser; nothing ships in the list.
+name **replace**s it). Each saved voice has **use** (puts it on every
+stone) and **delete** (tap twice). They're kept in this browser; nothing ships in the list.
 
-Edits reach stones that are already ringing. **… voice back to defaults**
-resets only the voice the knobs show. **Volume** and **water knobs back to
+Edits reach stones that are already ringing. **voice back to defaults**
+resets the voice. **Volume** and **water knobs back to
 defaults** are with the water; **show note names** is a dev aid, off by
 default.
 
@@ -312,12 +307,9 @@ voice editor untouched you hear exactly the Phase 1c bell.
 6. High saw or square notes (above about C6): any metallic, inharmonic shimmer?
 7. Synth decay doesn't shorten for high stones the way the bell's does. Do
    high synth notes ring too long?
-8. **One stone's own voice:** give one or two stones their own voice. Does
-   that feel like composing the pond? Is it clear on the pond which stones are
-   which, and which one you're editing?
-9. Give a stone its own voice, then change the scale so there are fewer
-   stones, then more again. The voice belongs to the stone's slot, so it may
-   come back on a different note. Right, or should overrides clear?
+8. (Retired — Dash, Oct 2026: one voice for every stone; per-stone voices
+   are off the page.)
+9. (Retired, as 8.)
 10. **Tapes:** record a phrase, let it loop, record another track. Does "a
     tape beside the pond" sit well with the water, or does fixed audio fight
     it? Overdub: useful?
@@ -389,14 +381,12 @@ voice editor untouched you hear exactly the Phase 1c bell.
     (drag up/down; double-tap resets)? Any control that should stay a slider?
 31. **Number of stones:** try fewer stones than notes (a sparse pond) and
     more (notes doubled in other places). Useful? Is "all" the right default?
-    A stone's own voice and a hand-placed spot belong to its slot, so
-    changing the count can move them to another note — fine, or should they
-    follow a note?
+    A hand-placed spot belongs to its slot, so changing the count can move
+    it to another note — fine, or should it follow a note?
 32. **Stones by hand:** tap a stone to lift it, tap the water to put it down;
     or drag it. While playing fast, do you ever lift a stone by accident
     (then your next tap puts it down instead of playing)? Is the stone easy
-    enough to hit on the phone? Does editing the lifted stone's voice feel
-    natural?
+    enough to hit on the phone?
 
 **Before testers see it:**
 
@@ -457,6 +447,9 @@ voice editor untouched you hear exactly the Phase 1c bell.
     take with them): fine, or distracting? Is a quick flick the right
     feel (a slow two-finger drag stays two trails)? Are up = rec, down =
     play/stop, left/right = track the right way round?
+49. **Bell and synth side by side:** do people find the synth layer right
+    away? Does seeing both invite raising it too far, so the synth buries
+    the water?
 
 ### Decisions for Dash
 
@@ -473,7 +466,9 @@ voice editor untouched you hear exactly the Phase 1c bell.
   next struck; the alternative is to let the old ring decay under the new one.
 - **Whether the water can move stones** (you can; the water can't, yet).
 - **Saving voices** — yes (Oct 2026): your own, by name, in this browser.
-- **Overrides on retune** — kept (Oct 2026); they belong to a stone's slot.
+- **One voice for every stone** (Oct 2026): per-stone voices are off the
+  page; the engine keeps them, unused, and older sessions' per-stone voices
+  are dropped on load.
 - **Tapes** record only the water (Oct 2026).
 - **Stone count** is the performer's (Oct 2026): one per note by default, or
   any number.
@@ -549,7 +544,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   brighter (and not, with dynamics and strike brightness at 0); moving a knob
   (synth level, oscillator mix, cutoff, resonance) and the filter's own fastest
   strike sweep never step at a control refresh, by the output's phase-binned
-  curvature and by the running value's own trajectory; overrides through the
+  curvature and by the running value's own trajectory; per-stone overrides (engine only; unused by the page) through the
   event path; water-held sustain holds while the water moves, lets go as it
   calms, and always ends in silence; the bell settling over 30 s of held
   strikes and still answering a strike by its hardness at that settled level;
@@ -594,7 +589,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
 | `looper.js` | The gesture looper and quantize. |
 | `tuning-limits.js` | What the page lets you choose (checked to always give playable stones). |
 | `engine.js` | Water + stones on one fixed clock; gestures; splash. |
-| `voice.js` | Voice parameters: one shared voice, an optional override per stone. |
+| `voice.js` | Voice parameters: one shared voice (the engine can still hold an override per stone; the page doesn't use it). |
 | `tape.js` | The audio looper: several tape tracks of the water's sound. |
 | `bells.js` | One voice per stone: the water-struck bell and the synth layer; water-held sustain. |
 | `instrument.js` | Everything for one audio stream; page events; visuals frames. |
@@ -654,7 +649,7 @@ Collected from the real-time safety, DSP and tuning reviews of Phases 1a and 1b.
     the hold factor: scale `exp(lnd·Δf)` from where the decay was (its own
     two-term series) rather than calling `exp` per partial per update.
   - Voice parameters are state, so prefer shared atomics/APVTS over queued
-    events; an override per stone is a *copy* of the shared voice (a slot
+    events; if per-stone voices return, an override per stone is a *copy* of the shared voice (a slot
     index), and switching it on or off mid-note must reach a ringing stone at
     the next block.
   - The block-splitting loop (water → hold tick → voices) must always advance:

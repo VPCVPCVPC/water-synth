@@ -193,7 +193,10 @@
       -webkit-user-select: none; user-select: none; outline: none; min-width: 0; }
     /* Only the dial turns (and holds the touch); the rest of the knob scrolls the page. */
     .knob svg { width: 46px; height: 46px; display: block; overflow: visible; cursor: ns-resize; touch-action: none; }
-    .synth-knobs { padding-top: 12px; }
+    /* The voice: the stone's bell and the synth layer side by side, both in view at once. */
+    .voice-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; align-items: start; }
+    .voice-cols .sub { margin-top: 0; }
+    .voice-cols .knobs { grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 12px 4px; }
     .hint-line { color: var(--fg); opacity: 0.75; }
     .knob .ring { fill: none; stroke: var(--faint); stroke-width: 1.2; }
     .knob .ring.faint { stroke: var(--edge); }
@@ -224,7 +227,6 @@
     .control > span { color: var(--fg); }
     .control output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
     .control small, .note { grid-column: 1 / -1; color: var(--muted); font-size: 10px; line-height: 1.8; }
-    .target { color: var(--fg); }
     .control.off { opacity: 0.35; }
     /* Sliders: a hairline and a small square. */
     input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; min-width: 0; min-height: 28px;
@@ -575,30 +577,30 @@
         <section class="page" id="page-voice" data-page="voice" role="tabpanel" aria-labelledby="tab-voice">
             <fieldset id="voice">
               <legend>Voice</legend>
-              <div class="toggle" role="group" aria-label="which voice the knobs change">
-                <button id="voice-all" type="button" aria-pressed="true">all stones</button>
-                <button id="voice-one" type="button" aria-pressed="false">selected stone</button>
+              <div class="voice-cols">
+                <div class="voice-col" role="group" aria-labelledby="voice-bell-head">
+                  <span class="sub" id="voice-bell-head">the bell</span>
+                  <div class="knobs">
+                    <div id="voice-bell-controls" style="display: contents"></div>
+                    <div id="voice-strike-controls" style="display: contents"></div>
+                    <div id="voice-sustain-controls" style="display: contents"></div>
+                  </div>
+                </div>
+                <div class="voice-col" role="group" aria-labelledby="voice-synth-head">
+                  <span class="sub" id="voice-synth-head">synth layer — oscillators, filter, envelope</span>
+                  <div class="knobs">
+                    <div id="voice-synthlevel-controls" style="display: contents"></div>
+                    <div id="voice-synth-controls" style="display: contents"></div>
+                  </div>
+                </div>
               </div>
-              <div class="row">
-                <span id="voice-target" class="target" aria-live="polite">all stones</span>
-                <button id="voice-own" type="button" hidden>give it its own voice</button>
-              </div>
-              <div class="knobs">
-                <div id="voice-synthlevel-controls" style="display: contents"></div>
-                <div id="voice-bell-controls" style="display: contents"></div>
-                <div id="voice-strike-controls" style="display: contents"></div>
-                <div id="voice-sustain-controls" style="display: contents"></div>
-              </div>
-              <span class="sub">synth layer — oscillators, filter, envelope</span>
-              <div id="voice-synth-controls" class="knobs synth-knobs"></div>
-              <button id="voice-defaults" type="button">shared voice back to defaults</button>
+              <button id="voice-defaults" type="button">voice back to defaults</button>
               <div class="row">
                 <input id="voice-name" type="text" maxlength="40" placeholder="name this voice" aria-label="name for the voice to save" style="flex: 1; min-width: 8em">
                 <button id="voice-save" type="button">save voice</button>
               </div>
               <div id="voice-saved"></div>
-              <div class="note" id="voice-saved-note" aria-live="polite">Your saved voices live in this browser. "use" puts one on the voice
-                you're editing (a stone that still follows the shared voice gets its own).</div>
+              <div class="note" id="voice-saved-note" aria-live="polite">Your saved voices live in this browser. "use" puts one on every stone.</div>
               <label class="row" style="color: var(--muted); font-size: 12px">
                 <input id="labels" type="checkbox"> show note names (dev aid)</label>
               <button id="fresh" type="button">start fresh (forget saved settings, tap twice)</button>

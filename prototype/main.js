@@ -4,7 +4,7 @@
 
 import {
   createRingBuffer, RingWriter, EV_DROP, EV_STROKE, EV_PARAM, EV_STONE, EV_STONES_COMMIT, EV_STONE_MOVE,
-  EV_VOICE, EV_VOICE_OVERRIDE, EV_TAPE, EV_STONE_TUNE, EV_TAPE_FADER, EV_STIR,
+  EV_VOICE, EV_TAPE, EV_STONE_TUNE, EV_TAPE_FADER, EV_STIR,
 } from './ring.js';
 import {
   createVisualBuffer, VisualReader, FRAME_FLASH, FRAME_LOOPS, FRAME_TAPES, FRAME_BEAT, FRAME_HEIGHTS, LOOP_FIELDS,
@@ -263,7 +263,6 @@ function repitch(i) {
   stones.labels[i] = p.label;
   voiceMarks++;
   if (events && !events.push(EV_STONE_TUNE, i, p.hz)) stonesUnsent = true; // the full set goes again next frame
-  if (i === voiceTarget) refreshVoice();
 }
 
 // Each stone is one event, then a commit makes them live together. If the
@@ -578,59 +577,23 @@ function buildVoiceControls() {
     voiceKnobs.push(row);
     document.getElementById(`${k.group}-controls`).append(row.el);
   }
-  const one = document.getElementById('voice-one');
-  const all = document.getElementById('voice-all');
-  const own = document.getElementById('voice-own');
-  const label = document.getElementById('voice-target');
-  const ownReset = document.getElementById('voice-defaults');
-  ownReset.addEventListener('click', () => {
-    // Only the voice the knobs show — and only if they're live.
-    const target = voiceTarget === SHARED ? SHARED : overridden.has(voiceTarget) ? voiceTarget : null;
-    if (target === null) return;
-    for (const k of VOICE_KEYS) { voiceValues.get(target)[k] = VOICE_PARAMS[k].def; sendVoiceTo(target, k); }
+  // One voice for every stone (Dash, Oct 2026: "it should be all stones").
+  document.getElementById('voice-defaults').addEventListener('click', () => {
+    const voice = voiceValues.get(SHARED);
+    for (const k of VOICE_KEYS) { voice[k] = VOICE_PARAMS[k].def; sendVoice(k); }
     for (const row of voiceKnobs) row.refresh();
   });
   refreshVoice = () => {
     if (lastSelected >= stones.count) lastSelected = -1;
     if (heldStone >= stones.count) heldStone = -1;
     for (const [id, gr] of grabs) if (gr.i >= stones.count) grabs.delete(id);
-    const isOne = voiceTarget !== SHARED && voiceTarget < stones.count;
-    if (!isOne && voiceTarget !== SHARED) voiceTarget = SHARED;
-    const isOwn = isOne && overridden.has(voiceTarget);
-    voiceMarks++;
-    const text = isOne
-      ? `stone ${voiceTarget + 1} · ${stones.labels[voiceTarget]}${isOwn ? ' · its own voice' : ' · follows the shared voice'}`
-      : lastSelected < 0 ? 'all stones · tap a stone on the pond to select it' : 'all stones';
-    if (label.textContent !== text) label.textContent = text; // aria-live: announce changes only
-    ownReset.disabled = isOne && !isOwn;
-    ownReset.textContent = isOne ? 'this stone\'s voice back to defaults' : 'shared voice back to defaults';
-    own.hidden = !isOne;
-    own.textContent = isOwn ? 'back to the shared voice' : 'give it its own voice';
-    own.classList.toggle('on', isOwn);
-    for (const row of voiceKnobs) { row.setDisabled(isOne && !isOwn); row.refresh(); }
-    all.setAttribute('aria-pressed', isOne ? 'false' : 'true');
-    one.setAttribute('aria-pressed', isOne ? 'true' : 'false');
-    if (lastSelected < 0 && document.activeElement === one) all.focus(); // never lose focus to a disabled button
-    one.disabled = lastSelected < 0;
+    for (const row of voiceKnobs) row.refresh();
     const lifted = heldStone >= 0 ? `stone ${heldStone + 1} lifted — tap the water to put it down, or the stone to put it back` : '';
     if (lifted) status.textContent = lifted;
     else if (status.textContent.startsWith('stone ')) status.textContent = playingStatus;
     surface.setAttribute('aria-label', heldStone >= 0 ? 'Water surface: tap to put the lifted stone down'
       : 'Water surface: touch to drop, drag to disturb; tap a stone to pick it up');
   };
-  all.addEventListener('click', () => { voiceTarget = SHARED; refreshVoice(); });
-  one.addEventListener('click', () => { if (lastSelected >= 0) { voiceTarget = lastSelected; refreshVoice(); } });
-  own.addEventListener('click', () => {
-    if (voiceTarget === SHARED) return;
-    if (overridden.has(voiceTarget)) {
-      overridden.delete(voiceTarget);
-      voiceValues.delete(voiceTarget);
-      sendOverride(voiceTarget, 0);
-    } else {
-      giveOwnVoice(voiceTarget);
-    }
-    refreshVoice();
-  });
   refreshVoice();
 }
 
@@ -648,75 +611,46 @@ function sendParam(key) {
 
 // ---- the voice editor ------------------------------------------------------------------
 //
-// The voice the editor is changing: SHARED (every stone) or one stone's own.
-// The page keeps its own copy of each voice's values — the audio thread owns the
-// real ones and clamps whatever it is sent — and an override starts as a copy of
-// the shared voice, exactly as the audio thread makes it.
+// One voice, shared by every stone (Dash, Oct 2026: per-stone voices are off
+// the page; the engine keeps them, unused here). The page keeps its own copy
+// of the voice's values — the audio thread owns the real ones and clamps
+// whatever it is sent.
 
-let voiceTarget = SHARED;
 const voiceValues = new Map([[SHARED, Object.fromEntries(VOICE_KEYS.map((k) => [k, VOICE_PARAMS[k].def]))]]);
-const overridden = new Set(); // stones the page has given their own voice
-let voiceMarks = 0; // bumped whenever the pond's voice marks may change (for the redraw check)
+let voiceMarks = 0; // bumped whenever the pond's stone labels may change (for the redraw check)
 
-// A stone the page has not given its own voice shows (and would follow) the
-// shared one; its knobs are disabled, so nothing can be sent for it.
-const voiceOf = (target) => voiceValues.get(target) || voiceValues.get(SHARED);
-const voiceValue = (key) => voiceOf(voiceTarget)[key];
-// Voice events go out in the order they were made, through one queue that
-// holds only the latest wish for each override and each knob: re-queueing an
-// entry moves it to the back. If the ring is full, the rest wait for the next
-// frame — in order, so a stone's edits never arrive before its override (the
-// audio thread ignores edits to a stone without one).
-const voiceQueue = new Map(); // "o:stone" → on (0/1); "v:target:key" → [target, key]
-function queueVoice(id, item) {
-  voiceQueue.delete(id);
-  voiceQueue.set(id, item);
-  flushVoice();
-}
+const voiceValue = (key) => voiceValues.get(SHARED)[key];
+// Voice events go out through one queue that holds only the latest wish for
+// each knob: re-queueing an entry moves it to the back. If the ring is full,
+// the rest wait for the next frame.
+const voiceQueue = new Map(); // key → true
 function flushVoice() {
   if (!events) return;
-  for (const [id, item] of voiceQueue) {
-    let sent = true;
-    if (id[0] === 'o') sent = events.push(EV_VOICE_OVERRIDE, Number(id.slice(2)), item);
-    else {
-      const voice = voiceValues.get(item[0]);
-      if (voice) sent = events.push(EV_VOICE, item[0], VOICE_KEYS.indexOf(item[1]), voice[item[1]]); // else: gone, nothing to send
-    }
-    if (!sent) return;
-    voiceQueue.delete(id);
+  const voice = voiceValues.get(SHARED);
+  for (const key of voiceQueue.keys()) {
+    if (!events.push(EV_VOICE, SHARED, VOICE_KEYS.indexOf(key), voice[key])) return;
+    voiceQueue.delete(key);
   }
 }
-function sendVoiceTo(target, key) { queueVoice(`v:${target}:${key}`, [target, key]); }
-function sendOverride(stone, on) {
-  queueVoice(`o:${stone}`, on);
-  // Its values follow the override, so both sides agree however the override
-  // toggles arrived.
-  if (on) for (const k of VOICE_KEYS) sendVoiceTo(stone, k);
-}
-function sendVoice(key) { sendVoiceTo(voiceTarget, key); }
-// An override starts as a copy of the shared voice, as the audio thread makes it.
-function giveOwnVoice(stone) {
-  voiceValues.set(stone, { ...voiceValues.get(SHARED) });
-  overridden.add(stone);
-  sendOverride(stone, 1);
+function sendVoice(key) {
+  voiceQueue.delete(key);
+  voiceQueue.set(key, true);
+  flushVoice();
 }
 
 function setVoiceValue(key, v) {
-  const voice = voiceValues.get(voiceTarget);
-  if (!voice) return; // not an override: its knobs are disabled
-  voice[key] = v;
+  voiceValues.get(SHARED)[key] = v;
   sendVoice(key);
 }
 
 // ---- saved voices ---------------------------------------------------------------------
 //
 // Voices you designed, by name, kept in this browser (no presets ship). "use"
-// puts one on the voice the editor shows; a stone that still follows the
-// shared voice gets its own first. Storage can be missing or full (a private
+// puts one on every stone. Storage can be missing or full (a private
 // window): the page works without it and says so.
 
 const SAVED_KEY = 'water-synth.voices';
-const SAVED_NOTE = 'Your saved voices live in this browser. "use" puts one on the voice you\'re editing (a stone that still follows the shared voice gets its own).';
+const SAVED_NOTE = 'Your saved voices live in this browser. "use" puts one on every stone.';
 // Saved voices as a Map (names are any text — "constructor" or "__proto__"
 // included — so never keys on a plain object). Entries that aren't objects
 // are dropped. null when storage can't be read.
@@ -741,11 +675,8 @@ function voiceFrom(saved) {
   return out;
 }
 function useVoice(saved) {
-  if (voiceTarget !== SHARED && !overridden.has(voiceTarget)) giveOwnVoice(voiceTarget); // its own voice first
-  const voice = voiceValues.get(voiceTarget);
-  if (!voice) return;
-  Object.assign(voice, voiceFrom(saved));
-  for (const k of VOICE_KEYS) sendVoiceTo(voiceTarget, k);
+  Object.assign(voiceValues.get(SHARED), voiceFrom(saved));
+  for (const k of VOICE_KEYS) sendVoice(k);
   refreshVoice();
 }
 function buildSavedVoices() {
@@ -785,7 +716,7 @@ function buildSavedVoices() {
   save.addEventListener('click', () => {
     const n = name.value.trim(), all = loadSaved();
     if (!n || !all) return;
-    all.set(n, { ...voiceOf(voiceTarget) });
+    all.set(n, { ...voiceValues.get(SHARED) });
     const ok = storeSaved(all);
     say(ok, "Couldn't save here (this browser isn't keeping data — a private window?).");
     if (ok) name.value = '';
@@ -1215,20 +1146,14 @@ function restoreSession() {
   const speed = num(an.speed, 0, 1); if (speed !== undefined) animator.speed = speed;
   if (Array.isArray(an.path)) animator.setPath(an.path.slice(0, 2000).map((p) => ({ x: num(p && p[0], 0, 1), y: num(p && p[1], 0, 1) })));
   if (Array.isArray(saved.faders)) for (let t = 0; t < TRACKS; t++) { const f = num(saved.faders[t], 0, 1); if (f !== undefined) tapeFaders[t] = f; }
+  // (Stones' own voices from older sessions are left behind: one voice now.)
   if (saved.voices && saved.voices.shared) voiceValues.set(SHARED, voice(saved.voices.shared));
-  for (const e of Array.isArray(saved.voices && saved.voices.own) ? saved.voices.own : []) {
-    const i = num(e && e[0], 0, MAX_STONES - 1);
-    if (i === undefined) continue;
-    voiceValues.set(Math.round(i), voice(e[1]));
-    overridden.add(Math.round(i));
-  }
 }
 let lastSaved = '';
 function saveSession() {
-  const own = [...overridden].map((i) => [i, voiceValues.get(i)]);
   const json = JSON.stringify({
     v: 1, values, tuning, layout, placed: [...placed].map(([i, p]) => [i, p.x, p.y]),
-    voices: { shared: voiceValues.get(SHARED), own },
+    voices: { shared: voiceValues.get(SHARED) },
     animate: { mode: animator.mode === 'camera' ? 'off' : animator.mode, speed: animator.speed, path: animator.path.map((p) => [p.x, p.y]) },
     faders: tapeFaders,
   });
@@ -1364,7 +1289,6 @@ async function startAudio() {
 
   for (const k of Object.keys(PARAMS)) sendParam(k);
   for (const k of VOICE_KEYS) sendVoice(k);
-  for (const i of overridden) sendOverride(i, 1); // stones with their own voice (restored)
   for (let t = 0; t < TRACKS; t++) sendFader(t); // the tape faders where they were left
   document.getElementById('quick').hidden = false;
   retune();
@@ -1638,14 +1562,14 @@ function releaseAllStirs() {
 window.addEventListener('blur', releaseAllStirs);
 document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllStirs(); });
 
-// Stones by hand: tap a stone to pick it up (it lifts, and the voice editor
-// turns to it); tap the water to put it down there, or the stone to put it
-// back. Pressing a stone and dragging moves it directly.
+// Stones by hand: tap a stone to pick it up (it lifts); tap the water to put
+// it down there, or the stone to put it back. Pressing a stone and dragging
+// moves it directly.
 
-function selectStone(i) {
+function selectStone(i, byKey = false) {
   lastSelected = i;
-  voiceTarget = i;
   refreshVoice();
+  if (byKey) status.textContent = `stone ${i + 1} · ${stones.labels[i]} — Enter lifts it`;
 }
 function putStone(i, p) {
   if (!(i >= 0 && i < stones.count)) return; // gone in a retune
@@ -1868,7 +1792,7 @@ surface.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
     const n = stones.count, from = lastSelected;
-    selectStone(e.key === 'ArrowRight' ? (from < 0 ? 0 : (from + 1) % n) : (from < 0 ? n - 1 : (from - 1 + n) % n));
+    selectStone(e.key === 'ArrowRight' ? (from < 0 ? 0 : (from + 1) % n) : (from < 0 ? n - 1 : (from - 1 + n) % n), true);
     e.preventDefault();
   } else if (e.key === 'Enter' && lastSelected >= 0) {
     setLift(heldStone >= 0 ? -1 : lastSelected);
@@ -1952,7 +1876,7 @@ function draw(now) {
   let glowing = false;
   for (let i = 0; i < flashShown.length; i++) { flashShown[i] *= fade; if (flashShown[i] > 0.01) glowing = true; }
   // Nothing new, nothing fading, nothing held: skip the redraw (battery).
-  const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceTarget}x${voiceMarks}x${heldStone}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
+  const size = `${surface.clientWidth}x${surface.clientHeight}x${rotated}x${showLabels}x${voiceMarks}x${document.activeElement === surface ? lastSelected : -1}x${heldStone}x${hover ? hover.x.toFixed(3) + hover.y.toFixed(3) : ''}`;
   if (!frame && !glowing && !beating && grabs.size === 0 && !stirVisible && !(camMarks.length && now - camMarks[camMarks.length - 1].at < 500) && heldStone < 0 && !animating && drawingPointer < 0 &&
       size === lastSize) { requestAnimationFrame(draw); return; }
   lastSize = size;
@@ -1987,9 +1911,9 @@ function draw(now) {
     g.drawImage(grid, 0, 0, w, h);
   }
 
-  // Stones: a small dot; when one rings it glows, harder strikes brighter. A
-  // stone with its own voice is hollow; the one the voice editor is on has a
-  // dashed ring; a lifted one glows inside a slow pulsing ring.
+  // Stones: a small dot; when one rings it glows, harder strikes brighter. The
+  // stone chosen from the keyboard has a dashed ring; a lifted one glows
+  // inside a slow pulsing ring.
   const r = Math.max(2, Math.max(w, h) / 180);
   g.font = `${Math.round(11 * dpr)}px ui-sans-serif, system-ui, sans-serif`;
   for (let i = 0; i < stones.count; i++) {
@@ -2001,19 +1925,13 @@ function draw(now) {
       g.fillStyle = `rgba(255, 255, 255, ${(0.2 + 0.6 * f).toFixed(3)})`;
       g.beginPath(); g.arc(x, y, r * (1.5 + 4 * f), 0, Math.PI * 2); g.fill();
     }
-    // A dark hairline keeps every stone visible on a bright crest; a stone
-    // with its own voice is hollow (a white ring around a dark centre).
-    const own = overridden.has(i);
+    // A dark hairline keeps every stone visible on a bright crest.
     g.beginPath(); g.arc(x, y, r + Math.max(1, dpr), 0, Math.PI * 2);
     g.fillStyle = 'rgba(0, 0, 0, 0.6)'; g.fill();
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
     g.fillStyle = grabbed ? 'rgba(255, 255, 255, 1)' : 'rgba(236, 236, 232, 0.85)';
     g.fill();
-    if (own) {
-      g.beginPath(); g.arc(x, y, r * 0.5, 0, Math.PI * 2);
-      g.fillStyle = 'rgba(0, 0, 0, 0.9)'; g.fill();
-    }
-    if (i === voiceTarget) { // the stone the voice editor is on: a dashed ring
+    if (i === lastSelected && document.activeElement === surface && i !== heldStone) { // chosen from the keyboard: a dashed ring
       g.strokeStyle = 'rgba(255, 255, 255, 0.9)';
       g.lineWidth = Math.max(1, dpr);
       g.setLineDash([3 * dpr, 3 * dpr]);

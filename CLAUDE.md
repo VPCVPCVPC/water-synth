@@ -60,8 +60,7 @@ echoes that repeat but drift.
 The performer can **move stones** — drag them by hand, or tap one to lift it
 and tap the water to set it down; randomize them, or change how they spread
 (Dash, Phase 1c / Oct 2026). A tap right on a stone handles it rather than
-disturbing the water, and the stone last tapped is the one the voice editor's
-"selected stone" reaches. A stone moved through moving water
+disturbing the water. A stone moved through moving water
 rings as crests pass over it.
 A stone struck while still ringing rings on: it is one object, not a sampler.
 
@@ -88,15 +87,16 @@ The voice can be designed (Phase 1c) — but the water still decides when
 loudness and brightness by default. A voice is the **bell** (its partials, decay, tick and
 brightness, all editable) plus an optional **synth layer** (two oscillators →
 filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
-- All stones share one voice; any single stone can be given an override.
+The editor shows the two side by side — the bell and the synth layer — so
+both are in view at once (Dash, Oct 2026).
+- All stones share one voice (Dash, Oct 2026: "it should be all stones").
+  Per-stone voices are off the page; the engine keeps them, unused.
 - **Stones have no note-off.** Every voice falls silent on its own. A voice may
   sustain only while the water around its stone keeps moving, releasing as the
   water calms — the water holds the note, never the player.
 - No factory presets or preset browser. Saving the session's state is fine,
   and you can save and recall your own voices (Dash, Oct 2026): a voice you
-  designed, by name, onto the shared voice or any stone. Nothing ships in
-  the list.
-- A stone's own voice stays with the stone when you retune (Dash, Oct 2026).
+  designed, by name, onto every stone. Nothing ships in the list.
 - The Phase mode (prototyped in build phase 2) will act on these voice
   parameters; the voice editor is a sound-design surface, not the Phase
   mechanism.

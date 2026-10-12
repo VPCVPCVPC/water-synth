@@ -108,14 +108,9 @@ Voice) forgets them.
   device and never recorded or sent. Its touches start a primed tape, and
   the tape hears the result. Needs the https link
   (it asks for the camera).
-- **Hold** (Still) — press and keep still for about a third of a second: a
-  hand rests on the water, a soft pale patch. The water under it flattens
-  and ripples reaching it die there (and any note the water was holding
-  there lets go). Slide it to calm along the way; lift your finger to lift
-  the hand. Several fingers can rest at once. Only a press that hasn't moved
-  becomes a hand: a drag that pauses stays a drag. A hold starts with the touch's
-  drop (the hand comes down after it); held on a stone, there's no drop —
-  the stone is selected and the hand calms around it.
+- **Hold** (Still) is off the page (Dash: "it doesn't really add anything
+  and it distracts from playing"): a press held still is just a touch. The
+  water's hands stay in the engine (and its checks), unused for now.
 - Stones ring when a crest reaches them, harder for higher crests, and glow
   as they do (the glow shows how hard the water hit, not how loud the stone
   then rings). Two ripples too small to ring a stone alone can ring it together.
@@ -158,8 +153,8 @@ your touches into the water, are set aside for now.)
   on the page except while typing in a field. The picked track is
   underlined on the deck.
 - Each track: **rec** primes it — the key blinks *primed*, and the take
-  starts on your next touch of the water (a tap, a drag, a hold, a stir, or
-  the camera), so there's no dead air while your hand comes back to the
+  starts on your next touch of the water (a tap, a drag, a stir, or the
+  camera), so there's no dead air while your hand comes back to the
   pond; rec again lets it go. **finish** ends it on the nearest beat and it
   plays; **dub** primes an overdub the same way, which adds more on top
   (heard live once, replayed from the next pass); **mute**
@@ -423,13 +418,7 @@ voice editor untouched you hear exactly the Phase 1c bell.
     (water | stones) feel like part of the pond? Is everything you reach for
     while playing above the fold? On the phone, are the tabs clear, and does
     swiping between pages feel natural (and never fight turning a knob)?
-41. **Still:** hold a finger on the water. Does it feel like a hand calming
-    it? Is a third of a second the right wait (does Still ever start when
-    you meant a slow drag, or a drag when you meant to rest)? A drag that
-    pauses stays a drag — should pausing calm instead? Is the hand's
-    size and strength right? Holding on a stone now stills around it
-    instead of only selecting it — and you can no longer drag a stone after
-    resting on it first (start the drag straight away). OK?
+41. (Retired — Still is off the page; Dash: it distracted from playing.)
 42. **Camera ripples:** turn on **camera** and move. Does it feel like your
     movement is touching the water? Too much (the pond always churning) or
     too little (you have to flail)? Does a sudden gesture drop hard enough
@@ -570,7 +559,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   rather than cut (restarts and clears mid-fade included); the loop seam is
   crossfaded; takes always start on a beat (the first sets the downbeat) and
   finish on the nearest one, whole beats of their own lengths; record primes
-  a track and the next touch (a drop, drag, hand or stir — not a lift or a
+  a track and the next touch (a drop, drag or stir — or a hand, which the engine still accepts — not a lift or a
   let-go) starts it; retuning never touches a tape; the status frame; bit-identical at
   block sizes 1…8192 and the same loudness over time at 44.1/48/96 kHz; limits
   and bad input; the whole path through the instrument (the knob, `EV_TAPE`,

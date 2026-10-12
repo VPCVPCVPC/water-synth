@@ -111,8 +111,9 @@ filter → envelopes), mixed; the default is the bell alone (Dash, Oct 2026).
   living water, so each pass lands in water that is already moving and
   differs. Several loops of different lengths can layer and drift. Loop
   playback is a natural input for Erosion later, so loops are stored as timed
-  gesture events. (Still and Stir, built since, aren't recorded yet: a returning
-  looper must record their streams of hand and stir states, let-go included.)
+  gesture events. (Stir, built since, isn't recorded yet: a returning looper
+  must record its stream of stir states, let-go included — and the hand
+  states of Still, if Still returns.)
 - **The beat** (Dash, Oct 2026): one tempo, its BPM always shown, that the
   tape always keeps. It starts with the first take (or when quantize notes is
   turned on), and while it runs the pond's rim pulses on it. **Quantize
@@ -257,14 +258,15 @@ Later, if it earns its place: MTS-ESP support and MPE per-note pitch.
 Build in this order:
 1. **XY surface in the plugin UI** — click = Drop, drag = a trail and a drag
    that keeps circling = Stir (built Oct 2026, to try), swipe = Wave,
-   press-and-hold = Still (a quick tap right on a stone lifts it instead — see
-   Tuned stones; a hold on a stone is Still, around the stone — provisional,
-   see Open questions). No hardware needed; the primary way to play.
+   press-and-hold = Still (built Oct 2026, then taken off the page — Dash:
+   "it doesn't really add anything and it distracts from playing"; the
+   engine keeps it — whether and how it returns is open). A quick tap right on a stone
+   lifts it — see Tuned stones. No hardware needed; the primary way to play.
    **Touch first:** on iPad and iPhone — likely the ideal way to play — every
    finger is its own disturbance (multi-touch), and Apple Pencil pressure sets
    strength.
 2. **MIDI keyboard** — a note drops energy at the stone holding that scale
-   degree (the water then carries it to the others), velocity sets energy, aftertouch feeds continuous stirring, sustain pedal engages Still.
+   degree (the water then carries it to the others), velocity sets energy, aftertouch feeds continuous stirring, sustain pedal could engage Still (see Open questions).
    Mod wheel / CCs morph Phase.
 3. **MPE controllers** (Seaboard, LinnStrument, Push) — per-note pressure and
    glide map naturally onto disturbance and microtonal pitch.
@@ -316,19 +318,19 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
 2. **Web prototype for user testing** (Dash, Oct 2026) — a close-to-final
    instrument in the browser that other people play before any app ships:
    a designed interface, fun and pretty (the water visuals, and the Tape as
-   a 4-track tape machine — see Look and feel); the remaining gestures
-   (Stir, Wave, Still) and Phase (ice / liquid / vapor); and some of MIDI,
+   a 4-track tape machine — see Look and feel); the remaining gestures (Stir, Wave; Still was built and then set aside — see Open questions) and Phase (ice / liquid / vapor); and some of MIDI,
    Vessel and hosting for testers, scoped with Dash when we get there. It ends
    in user testing; what testers find feeds the phases below. The first
    testing release (Dash, Oct 2026): hosted on Netlify or Cloudflare Pages,
    record piece (WAV), a first-run "how to play" guide that stays true to
    "you don't play notes", a feedback form link, and settings kept in the
-   browser. Stir, Wave, Still, Phase and MIDI come later in this phase (Still
+   browser. Stir, Wave, Phase and MIDI come later in this phase (Still
    was built first, Oct 2026, after Dash's "keep building"; then camera ripples
    came in at his request, ahead of Stir and Wave — see Camera / motion input;
    then quick tape, tape faders, and Stir: circling builds turbulence that
    dies away when you stop; then an output limiter, and record that primes
-   on your next touch with tapes always on the beat).
+   on your next touch with tapes always on the beat; Still then came off the
+   touch surface).
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
    including its gestures and the Phase modes).
@@ -379,12 +381,10 @@ Inside `processBlock` and anything it calls:
 - How Phase changes the surface and the bell voices (ice / liquid / vapor).
 - How Vessel works now: outside audio disturbing the water, or becoming the
   stones' voice.
-- Still (built Oct 2026, to try): a press held ~⅓ s without moving becomes a
-  hand that flattens the water under it (a drag stays a drag). Provisionally
-  a hold on a stone is Still too (only a quick tap lifts; a drag that starts
-  at once moves) — Dash to confirm. A hold on open water starts with the
-  touch's drop — fine, or should Still never make a sound? Still isn't
-  recorded by the gesture looper yet (a gap for its return, or Erosion).
+- Still: built Oct 2026 as press-and-hold, then taken off the touch surface
+  (Dash: it distracted from playing). Whether it returns, and through what
+  (a sustain pedal, the camera, a dedicated control), is open; the engine
+  keeps it.
 - How camera / body motion maps to Stir, Wave and Still (drops and drags for
   now) — e.g. should a still pose or an open palm ever mean Still?
 - Instrument name.

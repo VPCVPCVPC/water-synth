@@ -8,6 +8,7 @@
 import { Instrument } from './instrument.js';
 import { RingReader } from './ring.js';
 import { VisualWriter } from './visuals.js';
+import { Limiter } from './limiter.js';
 
 const FRAME_RATE = 60;
 
@@ -17,6 +18,9 @@ class WaterProcessor extends AudioWorkletProcessor {
     const { eventBuffer, visualBuffer, seed } = options.processorOptions;
     // `sampleRate` is a global in the AudioWorklet scope.
     this.inst = new Instrument({ sampleRate, seed });
+    // Last in the chain: keeps the water and every tape under full scale
+    // by turning the mix down, never clipping it (limiter.js).
+    this.limiter = new Limiter({ sampleRate });
     this.events = new RingReader(eventBuffer);
     this.visuals = new VisualWriter(visualBuffer);
     // The page sized the shared frame; refuse to write past it (or leave stale
@@ -39,6 +43,9 @@ class WaterProcessor extends AudioWorkletProcessor {
     // to the scratch whenever the two are not distinct.
     const R = out[1] && out[1] !== L ? out[1] : this.scratch;
     this.inst.process(L, R, L.length);
+    // (On a mono path the unheard right channel still counts toward the
+    // limiter's peaks — it can only turn the left down a little more.)
+    this.limiter.process(L, R, L.length);
     this.samplesSinceFrame += L.length;
     if (this.publish && this.samplesSinceFrame >= this.frameSamples) {
       // Exact 60 Hz on average; never accumulates a backlog with large blocks.

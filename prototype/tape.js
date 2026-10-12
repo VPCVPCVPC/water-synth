@@ -38,7 +38,7 @@ const FADE_IN_SECONDS = 0.02; // play and unmute fade in (no click)
 const SEAM_SECONDS = 0.01; // the loop seam's crossfade
 const PUNCH_SECONDS = 0.01; // overdub punch in and out
 const MIN_TAKE_SECONDS = 0.05; // shorter takes are dropped
-const KNEE = 0.9; // the tape mix's soft clip leaves everything below this alone
+export const TAPE_MIX_GAIN = 0.7; // tapes play back −3 dB under the live water: layers sit under what you're playing, and the limiter rides them gently (at full level it pumps)
 const MAX_BLOCK = 4096; // samples of mix scratch; a longer block is processed in parts
 const LEVEL_GLIDE_SECONDS = 0.02; // the tape level knob glides, never steps
 const FADER_GLIDE_SECONDS = 0.03; // each track's fader glides too (a hand on a fader, never a step)
@@ -102,7 +102,7 @@ export class TapeDeck {
     this.punchStep = 1 / Math.max(1, Math.round(PUNCH_SECONDS * fs));
     this.minTake = Math.round(MIN_TAKE_SECONDS * fs);
     this.tapeLevel = TAPE_PARAMS.tapeLevel.def;
-    this.level = this.tapeLevel; // the smoothed tape level
+    this.level = this.tapeLevel * TAPE_MIX_GAIN; // the smoothed tape level (with the trim)
     this.levelGlide = 1 - Math.exp(-1 / (LEVEL_GLIDE_SECONDS * fs));
     this.faderGlide = 1 - Math.exp(-1 / (FADER_GLIDE_SECONDS * fs));
     this.now = 0; // stream sample at the start of the current block
@@ -256,21 +256,22 @@ export class TapeDeck {
       this.preL[this.preAt] = outL[off + i]; this.preR[this.preAt] = outR[off + i];
       this.preAt = this.preAt + 1 === seam ? 0 : this.preAt + 1;
     }
-    // Mix: live + tapes, through a soft knee only while a tape sounds (the
-    // water alone is never touched).
+    // Mix: live + tapes, summed as they are. Layers add up past full scale;
+    // the limiter at the end of the chain (limiter.js) turns the whole mix
+    // down rather than clipping it.
     if (audible) {
-      const target = this.tapeLevel, a = this.levelGlide;
+      const target = this.tapeLevel * TAPE_MIX_GAIN, a = this.levelGlide;
       let lv = this.level;
       for (let i = 0; i < n; i++) {
         lv += a * (target - lv);
         if (lv - target < 1e-9 && target - lv < 1e-9) lv = target; // exact, never subnormal
-        outL[off + i] = knee(outL[off + i] + lv * tapeL[i]);
-        outR[off + i] = knee(outR[off + i] + lv * tapeR[i]);
+        outL[off + i] = finite(outL[off + i] + lv * tapeL[i]);
+        outR[off + i] = finite(outR[off + i] + lv * tapeR[i]);
         tapeL[i] = tapeR[i] = 0;
       }
       this.level = lv;
     } else {
-      this.level = this.tapeLevel;
+      this.level = this.tapeLevel * TAPE_MIX_GAIN;
     }
     this.audible = audible;
   }
@@ -437,12 +438,8 @@ export class TapeDeck {
   }
 }
 
-function knee(x) {
-  const a = x < 0 ? -x : x;
-  if (!(a > KNEE)) return Number.isFinite(x) ? x : 0;
-  if (!Number.isFinite(a)) return 0;
-  const y = KNEE + (1 - KNEE) * Math.tanh((a - KNEE) / (1 - KNEE));
-  return x < 0 ? -y : y;
+function finite(x) {
+  return x === x && x - x === 0 ? x : 0;
 }
 
 function mod(a, n) {

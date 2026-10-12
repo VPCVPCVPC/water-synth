@@ -5,7 +5,7 @@
 //   node check-tape.mjs
 
 import {
-  TapeDeck, TAPE_TRACKS, TAPE_FIELDS, TAPE_PARAMS, MAX_TAPE_SECONDS,
+  TapeDeck, TAPE_TRACKS, TAPE_FIELDS, TAPE_PARAMS, MAX_TAPE_SECONDS, TAPE_MIX_GAIN,
   EMPTY, RECORDING, PLAYING, OVERDUB, STOPPED,
   TAPE_RECORD, TAPE_PLAY_STOP, TAPE_MUTE, TAPE_CLEAR, TAPE_CLEAR_ALL,
 } from './tape.js';
@@ -44,7 +44,7 @@ const peak = (x, from = 0, to = x.length) => {
 };
 
 // A source of live sound: two tones and a slow tremolo, quiet enough that the
-// tape mix never reaches the deck's soft knee (so checks can add signals up).
+// tape mix stays well under full scale (so checks can add signals up).
 const TONE = (t) => 0.22 * (Math.sin(2 * Math.PI * 220 * t) + 0.4 * Math.sin(2 * Math.PI * 331 * t)) * (0.7 + 0.3 * Math.sin(2 * Math.PI * 0.7 * t));
 
 // A stream position for the deck: render output, feeding `live(t)` (t in
@@ -94,7 +94,7 @@ console.log('\n1. Record the water\'s sound, play it back fixed');
   let follows = 0;
   for (let i = skip; i < p1.length; i++) {
     const lp = (x0 + i - origin) % len;
-    follows = Math.max(follows, Math.abs(p1[i] - TONE(lp / rate)));
+    follows = Math.max(follows, Math.abs(p1[i] - TAPE_MIX_GAIN * TONE(lp / rate))); // played back a fixed −3 dB under the water
   }
   r.run(LEN - 0.3, () => 0); // stream 2.3 → 4.0 s
   const again = r.run(0.3, () => 0); // stream 4.0 → 4.3 s = the same loop offsets
@@ -112,7 +112,7 @@ console.log('\n1. Record the water\'s sound, play it back fixed');
   let worst = 0;
   for (let i = 0; i < mixed.length; i++) {
     const at = mx0 + i, lp = (at - origin) % len;
-    worst = Math.max(worst, Math.abs(mixed[i] - (loud(at / rate) + TONE(lp / rate))));
+    worst = Math.max(worst, Math.abs(mixed[i] - (loud(at / rate) + TAPE_MIX_GAIN * TONE(lp / rate))));
   }
   report(worst < 1e-6, 'with the water playing, a tape still plays its own (fixed) sound on top',
     `worst deviation from live + tape ${worst.toExponential(1)}`);
@@ -614,7 +614,7 @@ console.log('\n15. Each track\'s fader');
     const len = d.length[0], origin = d.origin[0], x0 = r.pos;
     const x = r.run(0.5, () => 0);
     let worst = 0;
-    for (let i = 0; i < x.length; i++) worst = Math.max(worst, Math.abs(x[i] - TONE(((x0 + i - origin) % len) / rate)));
+    for (let i = 0; i < x.length; i++) worst = Math.max(worst, Math.abs(x[i] - TAPE_MIX_GAIN * TONE(((x0 + i - origin) % len) / rate)));
     report(worst < 1e-6, 'a take recorded with the fader down still holds the water at full level (the fader is only what you hear)',
       `max difference ${worst.toExponential(1)}`);
   }

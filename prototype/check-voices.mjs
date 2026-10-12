@@ -573,10 +573,10 @@ function play(inst, seconds, block = 128, gestures = (e) => { e.drop(0.5, 0.5, 1
 {
   // The same thing end to end, in water that never calms (a long water decay,
   // a drop every 0.5 s) so `hold` stays engaged: the mix must stop growing.
-  // The output's soft limiter would hide a pile-up, so the limiter is undone
-  // (out = tanh(pre)) and the pre-limiter level is what gets measured. Note
-  // that a held pond keeps many stones ringing at once, so it does sit in the
-  // limiter — the check is about the runaway, not about that loudness. The
+  // The instrument's output is pre-limiter (the limiter is the worklet's,
+  // limiter.js), so a pile-up shows directly. Note that a held pond keeps
+  // many stones ringing at once, so it is loud — the check is about the
+  // runaway, not about that loudness. The
   // statistics are gathered as the stream runs, so no 30-second buffer is held.
   const fs = 48000, SECONDS = 30, EVERY = 0.5, block = 128;
   const inst = makeInstrument(fs, { hold: 1, synthLevel: 1, bellDecay: 8, synthDecay: 12, cutoff: 2 });
@@ -584,9 +584,9 @@ function play(inst, seconds, block = 128, gestures = (e) => { e.drop(0.5, 0.5, 1
   inst.setParam('threshold', 0.005);
   const n = Math.round(SECONDS * fs);
   const bl = new Float32Array(block), br = new Float32Array(block);
-  const lim = 1 - 1e-9, preOf = (v) => Math.atanh(v > lim ? lim : v < -lim ? -lim : v);
+  const preOf = (v) => v;
   const earlyFrom = Math.round(5 * fs), earlyTo = Math.round(10 * fs), lateFrom = Math.round((SECONDS - 5) * fs);
-  let next = 0, drops = 0, peak = 0, inLimiter = 0, finite = true;
+  let next = 0, drops = 0, peak = 0, loud = 0, finite = true;
   let eSum = 0, eN = 0, lSum = 0, lN = 0;
   for (let pos = 0; pos < n; pos += block) {
     const m = Math.min(block, n - pos);
@@ -598,15 +598,15 @@ function play(inst, seconds, block = 128, gestures = (e) => { e.drop(0.5, 0.5, 1
       const aa = a < 0 ? -a : a, bb = b2 < 0 ? -b2 : b2;
       if (aa > peak) peak = aa;
       if (bb > peak) peak = bb;
-      if (aa > 0.8 || bb > 0.8) inLimiter++;
+      if (aa > 0.8 || bb > 0.8) loud++;
       if (at >= lateFrom) { lSum += preOf(a) * preOf(a) + preOf(b2) * preOf(b2); lN += 2; }
       else if (at >= earlyFrom && at < earlyTo) { eSum += preOf(a) * preOf(a) + preOf(b2) * preOf(b2); eN += 2; }
     }
   }
   const early = Math.sqrt(eSum / eN), late = Math.sqrt(lSum / lN), growth = db(late / early);
-  report(finite && peak < 1 && growth < 2,
+  report(finite && peak < 1e3 && growth < 2,
     `hold on, ${drops} drops over ${SECONDS} s in water that never calms: the mix stops growing`,
-    `pre-limiter level ${early.toFixed(2)} → ${late.toFixed(2)} (${growth >= 0 ? '+' : ''}${growth.toFixed(2)} dB); peak ${peak.toFixed(3)}, ${((inLimiter / n) * 100).toFixed(1)}% of samples in the limiter`);
+    `pre-limiter level ${early.toFixed(2)} → ${late.toFixed(2)} (${growth >= 0 ? '+' : ''}${growth.toFixed(2)} dB); peak ${peak.toFixed(3)}, ${((loud / n) * 100).toFixed(1)}% of samples above 0.8`);
 }
 
 // ---- 7. Bad input and extremes --------------------------------------------------------

@@ -55,7 +55,7 @@ import { VoiceBank, VOICE_PARAMS, VOICE_SIZE, V, SHARED } from './voice.js';
 
 // Knobs that belong to the whole instrument, not to a voice.
 export const BELL_PARAMS = {
-  volume: { min: 0, max: 2, def: 0.7 },
+  volume: { min: 0, max: 1.2, def: 0.7 }, // above ~1.2 the knob only drives the output limiter harder (pumping), not louder
 };
 
 // Bar-like partials: the octave and twelfth keep the bell tuneful; one
@@ -280,7 +280,7 @@ export class Bells {
   }
 
   // Add n samples into outL / outR (which the caller zeroes), then apply
-  // volume and the soft limiter.
+  // volume.
   render(outL, outR, n) {
     this.applyPending();
     this.renderRange(outL, outR, 0, n);
@@ -450,7 +450,11 @@ export class Bells {
     }
   }
 
-  // Finish a block: volume and soft limiter over [0, n).
+  // Finish a block: volume over [0, n). No saturation here: a tanh on
+  // every sample put grit on loud, busy playing (Dash, Oct 2026: "a bit of
+  // distortion when it's very loud and many are going at once"); the output
+  // limiter at the end of the chain (limiter.js) keeps the whole mix under
+  // full scale by turning it down instead.
   // The gain glides per sample toward its target (~20 ms), in stream time, so
   // volume moves and stone-count changes never click and the output stays
   // identical however the stream is split into blocks.
@@ -462,8 +466,8 @@ export class Bells {
       g += a * (target - g);
       if (g - target < 1e-9 && target - g < 1e-9) g = target; // exact, never subnormal
       const l = outL[i] * g, r = outR[i] * g;
-      outL[i] = Number.isFinite(l) ? Math.tanh(l) : 0;
-      outR[i] = Number.isFinite(r) ? Math.tanh(r) : 0;
+      outL[i] = l === l && l - l === 0 ? l : 0; // NaN or ±∞ → silence
+      outR[i] = r === r && r - r === 0 ? r : 0;
     }
     this.gain = g;
   }

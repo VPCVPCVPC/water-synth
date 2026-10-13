@@ -110,7 +110,7 @@ Voice) forgets them.
   it's on, **camera sense** (with the water's sliders) sets how much
   movement it needs: lower for a busy or flickering room. A small grey preview sits in the pond's
   corner while it's on; the picture is shrunk to a 32 × 24 thumbnail on this
-  device and never recorded or sent. Its touches start a primed tape, and
+  device and never recorded or sent. The stones it rings start a primed tape, and
   the tape hears the result. Needs the https link
   (it asks for the camera).
 - **Hold** (Still) is off the page (Dash: "it doesn't really add anything
@@ -167,9 +167,10 @@ your touches into the water, are set aside for now.)
   on the page except while typing in a field. The picked track is
   underlined on the deck.
 - Each track: **rec** primes it — the key blinks *primed*, and the take
-  starts on your next touch of the water (a tap, a drag, a stir, or the
-  camera), so there's no dead air while your hand comes back to the
-  pond; rec again lets it go. **finish** ends it on the nearest beat and it
+  starts the moment the water first rings a stone (Dash: "when the first
+  stone gets hit with a wave"), so a take never opens on dead air — not
+  while your hand comes back to the pond, nor while your ripple travels;
+  rec again lets it go. **finish** ends it on the nearest beat and it
   plays; **dub** primes an overdub the same way, which adds more on top
   (heard live once, replayed from the next pass); **mute**
   silences it and keeps its place; **stop** then **play** restarts it from its
@@ -442,10 +443,10 @@ voice editor untouched you hear exactly the Phase 1c bell.
     turbulence that builds, then settles when you stop? Does it start too
     easily (catching a curvy drag you meant as a trail) or too late? Is the
     churn too busy, too gentle, the right size?
-46. **Primed record:** press rec, then play — the take starts on your first
-    touch. Does that feel right? Did you ever want to catch the water's tail,
-    or Animate's drift, without touching it again? With the camera on, a
-    dancer in frame starts a primed take almost at once — fine? Finish lands
+46. **Primed record:** press rec, then play — the take starts when the water
+    first rings a stone. Does that feel right? If the water is still ringing
+    when you press rec, the take starts almost at once — fine? (It also
+    catches the water's tail and Animate's drift without a new touch.) Finish lands
     on the nearest beat: does a late finish trimming back feel right?
 47. **Overload:** with four tapes and live playing, is the sound clean now?
     Do you hear the tapes dip when you strike hard? Fast, hard playing with
@@ -579,8 +580,8 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   rather than cut (restarts and clears mid-fade included); the loop seam is
   crossfaded; takes always start on a beat (the first sets the downbeat) and
   finish on the nearest one, whole beats of their own lengths; record primes
-  a track and the next touch (a drop, drag or stir — or a hand, which the engine still accepts — not a lift or a
-  let-go) starts it; retuning never touches a tape; the status frame; bit-identical at
+  a track and the first stone the water rings starts it, at that sample (a
+  touch alone doesn't); retuning never touches a tape; the status frame; bit-identical at
   block sizes 1…8192 and the same loudness over time at 44.1/48/96 kHz; limits
   and bad input; the whole path through the instrument (the tape level, `EV_TAPE`,
   the frame); CPU.

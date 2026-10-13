@@ -138,8 +138,9 @@ both are in view at once (Dash, Oct 2026).
   first take sets the downbeat if no beat is running) and finishes on the
   beat nearest where you end it, so it lasts whole beats; their lengths
   differ, so the way they line up keeps changing. **Record primes** (Dash,
-  Oct 2026): rec arms the track, and the take — or an overdub — starts on
-  your next touch of the water, from any source; rec again lets it go.
+  Oct 2026): rec arms the track, and the take — or an overdub — starts the
+  moment the water first rings a stone ("when the first stone gets hit with
+  a wave"), so it never opens on dead air; rec again lets it go.
   Stopping, muting and clearing fade, never cut. Each track also has a
   **fader** (Dash, Oct 2026), so a track can be faded in and out while you
   record and perform; it sets only what you hear (takes still record the
@@ -298,7 +299,7 @@ moves stones and never disturbs the water.) The first version (Dash, Oct
 harder for bigger, sharper movement; while it keeps moving, a drag that
 follows it; up to four moving things at once, at most ten drops a second;
 mirrored; it learns the camera's grain by itself. It goes through the same
-path as touch (its touches start a primed tape; the tape hears it). Turned on from
+path as touch (the stones it rings start a primed tape; the tape hears it). Turned on from
 the top bar; it shares the one camera with Animate.
 
 Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
@@ -351,7 +352,7 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    came in at his request, ahead of Stir and Wave — see Camera / motion input;
    then quick tape, tape faders, and Stir: circling builds turbulence that
    dies away when you stop; then an output limiter, and record that primes
-   on your next touch with tapes always on the beat; Still then came off the
+   on the first stone the water rings, with tapes always on the beat; Still then came off the
    touch surface).
 
    2b. **Phone and tablet app** (Dash, Oct 2026: release for phones and

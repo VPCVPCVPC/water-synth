@@ -965,7 +965,7 @@ function paintTrack(ui, t) {
   else text = whole ? `${Math.round(beats)} beats` : `${length.toFixed(1)} s`;
   if (state === STOPPED) text += ' · stop';
   if (muted) text += ' · mute';
-  if (waiting === 2) text += state === EMPTY ? ' · primed: touch the water' : ' · primed to dub';
+  if (waiting === 2) text += state === EMPTY ? ' · primed: waits for a stone' : ' · primed to dub';
   else if (waiting) text += ' · on the beat…';
   if (state === OVERDUB) text += ' · dub';
   if (fading === 1) text += ' · stopping';
@@ -997,7 +997,7 @@ function paintTrack(ui, t) {
 }
 function recWords(label) {
   return label === 'rec' ? 'record' : label === 'dub' ? 'overdub' : label === 'end' ? 'end overdub'
-    : label === 'primed' ? 'primed: recording starts on your next touch — press to cancel' : label;
+    : label === 'primed' ? 'primed: recording starts when a stone rings — press to cancel' : label;
 }
 // The quick controls show the picked track's rec and play keys as they are
 // on the deck, and every track's lamp on its number.
@@ -1740,15 +1740,15 @@ function tapeSwipe(dir, from) {
   } else if (dir === 'up') {
     note = primed ? `tape ${t + 1} · rec off` : state === EMPTY ? `tape ${t + 1} · primed`
       : state === RECORDING ? `tape ${t + 1} · finish` : state === OVERDUB ? `tape ${t + 1} · dub off` : `tape ${t + 1} · dub primed`;
-    // Primed, the swipe lets it go — but its own fingers' drops may already
-    // have started the take: clear unprimes a track still waiting, and
-    // erases a take only just begun. (A primed dub: rec unprimes it, or
-    // ends the dub those drops began.)
+    // Primed, the swipe lets it go — but a stone the water was still ringing
+    // may already have started the take: clear unprimes a track still
+    // waiting, and erases a take only just begun. (A primed dub: rec
+    // unprimes it, or ends the dub that stone began.)
     if (primed && state === EMPTY) { wake(); sendTape(t, TAPE_CLEAR); } else quickTape('rec');
   } else {
     note = state === EMPTY ? `tape ${t + 1} · ${primed ? 'rec off' : 'empty'}` : state === PLAYING || state === OVERDUB ? `tape ${t + 1} · stop` : `tape ${t + 1} · play`;
     if (state !== EMPTY) quickTape('play');
-    else if (primed) { wake(); sendTape(t, TAPE_CLEAR); } // its own drops may have started the primed take
+    else if (primed) { wake(); sendTape(t, TAPE_CLEAR); } // a ringing stone may have started the primed take
   }
   showSwipeNote(note);
 }

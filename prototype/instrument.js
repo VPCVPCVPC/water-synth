@@ -67,6 +67,7 @@ export class Instrument {
     this.onBeat = Math.round(ON_BEAT_SECONDS * sampleRate);
     this.strikes = new StrikeBuffer(SEGMENT_STRIKES);
     this.outputPeak = 0;
+    this.blockStart = 0; // stream sample of the block being rendered (for ring())
     this.frameEnergy = 0;
     this.segmentGuards = 0; // diagnostics: a segment that would not have advanced
   }
@@ -120,19 +121,17 @@ export class Instrument {
     switch (d[o]) {
       // Live gestures — from any source — land at the next step, as played
       // (quantize moves only when stones are heard — Dash, Oct 2026), and
-      // are recorded by any looper layer that's listening. Each one is also
-      // a touch of the water: a primed tape starts recording on it.
+      // are recorded by any looper layer that's listening. (A primed tape
+      // starts when a stone first rings — see ring().)
       case EV_DROP: {
         const now = e.simStep + 1;
         // Recorded only if it went into the water at all.
         if (e.drop(d[o + 1], d[o + 2], d[o + 3])) this.looper.record(GESTURE_DROP, d[o + 1], d[o + 2], 0, 0, d[o + 3], now, false);
-        this.tape.touched();
         break;
       }
       case EV_STROKE:
         e.trail(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]);
         this.looper.record(GESTURE_TRAIL, d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5], e.simStep + 1);
-        this.tape.touched();
         break;
       case EV_LOOP: this.looper.action(d[o + 1], d[o + 2]); break;
       case EV_STONE_MOVE: e.stones.moveStone(e.surface, d[o + 1], d[o + 2], d[o + 3]); break;
@@ -140,11 +139,9 @@ export class Instrument {
       // Still and Stir: never delayed (like a drag); not recorded (the tape hears what they do).
       case EV_STILL:
         e.still(d[o + 1], d[o + 2], d[o + 3], d[o + 4]);
-        if (d[o + 4] > 0) this.tape.touched(); // a hand coming down (not a lift)
         break;
       case EV_STIR:
         e.stir(d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]);
-        if (d[o + 5] !== 0) this.tape.touched(); // stirring (not a let-go)
         break;
       case EV_PARAM: this.setParamIndex(d[o + 1], d[o + 2]); break;
       case EV_VOICE: this.bells.voices.set(d[o + 1], d[o + 2], d[o + 3]); break;
@@ -238,7 +235,9 @@ export class Instrument {
   ring(k, velocity, at) {
     const stones = this.engine.stones;
     if (!(k < stones.count) || !stones.enabled[k]) return;
-    if (this.bells.strike(k, stones.hz[k], velocity, stones.x[k], at) && velocity > this.flash[k]) this.flash[k] = velocity;
+    if (!this.bells.strike(k, stones.hz[k], velocity, stones.x[k], at)) return;
+    if (velocity > this.flash[k]) this.flash[k] = velocity;
+    this.tape.rang(this.blockStart + at); // a primed tape starts on the first stone heard
   }
 
   // Render n samples into outL / outR.
@@ -247,6 +246,7 @@ export class Instrument {
     if (!Number.isInteger(n) || n <= 0) return;
     const e = this.engine, stones = e.stones, bells = this.bells, tape = this.tape;
     const blockStream = e.sample; // stream sample of this block's first sample
+    this.blockStart = blockStream;
     // The tapes run on the same stream position the water does, so their loop
     // positions never depend on how the stream is split into blocks.
     tape.now = e.sample;

@@ -14,9 +14,11 @@
 // tape is a whole number of beats, but their lengths differ (3, 5, 7
 // beats…), so the way they line up keeps changing.
 //
-// Record primes a track (Dash, Oct 2026): the take doesn't start until your
-// next touch of the water, so there's no dead air while your hand travels
-// from the rec key back to the pond. An overdub primes the same way.
+// Record primes a track (Dash, Oct 2026): the take doesn't start until the
+// water first rings a stone ("it should start recording when the first
+// stone gets hit with a wave"), so a take never opens on dead air — not
+// while your hand travels back to the pond, nor while your first ripple
+// travels to a stone. An overdub primes the same way.
 //
 // A tape always plays back exactly what it recorded: retuning the stones
 // never touches it, so a bassline, a melody and harmonies can be laid in
@@ -75,12 +77,16 @@ export class TapeDeck {
     this.preAt = 0;
     this.takePreL = new Float32Array(TAPE_TRACKS * this.seam);
     this.takePreR = new Float32Array(TAPE_TRACKS * this.seam);
+    // A take starts mid-block (on a stone's sample): its seam keeps rolling
+    // through the samples before that, as a ring starting at takePreAt.
+    this.takePreAt = new Int32Array(TAPE_TRACKS);
+    this.dubFrom = new Float64Array(TAPE_TRACKS); // an overdub punches in from this stream sample
     this.state = new Uint8Array(TAPE_TRACKS);
     this.muted = new Uint8Array(TAPE_TRACKS);
     this.clearing = new Uint8Array(TAPE_TRACKS); // fading out, then erased
     this.stopping = new Uint8Array(TAPE_TRACKS); // fading out, then stopped
     this.onGrid = new Uint8Array(TAPE_TRACKS);
-    this.primed = new Uint8Array(TAPE_TRACKS); // record pressed: waiting for the next touch
+    this.primed = new Uint8Array(TAPE_TRACKS); // record pressed: waiting for the first stone the water rings
     this.origin = new Float64Array(TAPE_TRACKS); // stream sample of the loop's position 0
     this.takeStart = new Float64Array(TAPE_TRACKS);
     this.takeEnd = new Float64Array(TAPE_TRACKS); // a finishing take stops recording here (−1: not yet set)
@@ -160,7 +166,7 @@ export class TapeDeck {
     }
     switch (act) {
       case TAPE_RECORD:
-        // Primed: the take (or the overdub) starts on the next touch.
+        // Primed: the take (or the overdub) starts when the water next rings a stone (see rang()).
         if (s === EMPTY || s === STOPPED || (s === PLAYING && !this.stopping[track])) this.primed[track] = 1;
         else if (s === RECORDING) this.finishTake(track, now);
         else if (s === OVERDUB) this.state[track] = PLAYING;
@@ -179,18 +185,18 @@ export class TapeDeck {
     }
   }
 
-  // Someone touched the water (any gesture, from any source): primed tracks
-  // start — a first take, or an overdub — at the start of this block.
-  touched() {
-    const now = this.now;
+  // A stone rang, at stream sample `at` (in the block now starting at
+  // this.now): primed tracks start there — a first take, or an overdub.
+  rang(at = this.now) {
+    const now = at > this.now ? at : this.now;
     for (let t = 0; t < TAPE_TRACKS; t++) {
       if (!this.primed[t]) continue;
       this.primed[t] = 0;
       const s = this.state[t];
       if (this.clearing[t]) continue;
       if (s === EMPTY) this.startTake(t, now);
-      else if (s === STOPPED) { this.restart(t, now); this.state[t] = OVERDUB; }
-      else if (s === PLAYING && !this.stopping[t]) this.state[t] = OVERDUB;
+      else if (s === STOPPED) { this.restart(t, now); this.state[t] = OVERDUB; this.dubFrom[t] = now; }
+      else if (s === PLAYING && !this.stopping[t]) { this.state[t] = OVERDUB; this.dubFrom[t] = now; }
     }
   }
 
@@ -232,6 +238,11 @@ export class TapeDeck {
           if (this.takeEnd[t] < 0 && at >= this.deadline[t]) this.finishTake(t, at);
           if (this.takeEnd[t] >= 0 && at >= this.takeEnd[t]) this.endTake(t, this.takeEnd[t], at);
           if (this.state[t] === RECORDING) {
+            if (at < this.takeStart[t]) { // before the stone: still the sound just before the take (its seam)
+              const pa = this.takePreAt[t];
+              this.takePreL[t * seam + pa] = live; this.takePreR[t * seam + pa] = liveR;
+              this.takePreAt[t] = pa + 1 === seam ? 0 : pa + 1;
+            }
             const k = at - this.origin[t];
             if (k >= 0 && k < cap) { this.L[base + k] = live; this.R[base + k] = liveR; }
             continue;
@@ -266,7 +277,7 @@ export class TapeDeck {
         // Overdub: the live sound goes on top (punched in and out over 10 ms),
         // read first, so this pass plays what was there and the next pass
         // plays both.
-        const dub = this.state[t] === OVERDUB && !this.stopping[t] ? 1 : 0;
+        const dub = this.state[t] === OVERDUB && !this.stopping[t] && at >= this.dubFrom[t] ? 1 : 0;
         if (punch < dub) { punch += this.punchStep; if (punch > 1) punch = 1; } else if (punch > dub) { punch -= this.punchStep; if (punch < 0) punch = 0; }
         if (punch > 0) { this.L[k] = l + punch * live; this.R[k] = r + punch * liveR; }
         if (g > 0) {
@@ -356,6 +367,7 @@ export class TapeDeck {
       this.takePreL[t * this.seam + j] = this.preL[src];
       this.takePreR[t * this.seam + j] = this.preR[src];
     }
+    this.takePreAt[t] = 0;
     this.state[t] = RECORDING;
   }
 
@@ -403,7 +415,7 @@ export class TapeDeck {
     for (let k = from; k < head; k++) { this.L[base + k] = 0; this.R[base + k] = 0; }
     if (this.gapEnd[t] > from) this.gapEnd[t] = from;
     for (let j = 0; j < X; j++) {
-      const k = base + mod(head - X + j, len), w = (j + 1) / X, pj = t * this.seam + this.seam - X + j;
+      const k = base + mod(head - X + j, len), w = (j + 1) / X, pj = t * this.seam + (this.takePreAt[t] + this.seam - X + j) % this.seam;
       this.L[k] = this.L[k] * (1 - w) + this.takePreL[pj] * w;
       this.R[k] = this.R[k] * (1 - w) + this.takePreR[pj] * w;
     }
@@ -478,7 +490,7 @@ export class TapeDeck {
       frame[o + 2] = (s === RECORDING ? this.now - this.origin[t] : this.length[t]) / fs; // seconds
       frame[o + 3] = (s === PLAYING || s === OVERDUB) && this.length[t] > 0 && this.now >= this.startAt[t]
         ? mod(this.now - this.origin[t], this.length[t]) / fs : 0;
-      // Waiting: 2 primed (for the next touch), 1 for a beat, 0 not.
+      // Waiting: 2 primed (for a stone to ring), 1 for a beat, 0 not.
       frame[o + 4] = this.primed[t] ? 2 : this.now < this.startAt[t] || (s === RECORDING && this.takeEnd[t] >= 0) ? 1 : 0;
       frame[o + 5] = this.clearing[t] ? 2 : this.stopping[t] ? 1 : 0; // fading out: 1 stopping, 2 clearing
     }

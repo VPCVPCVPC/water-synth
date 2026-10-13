@@ -335,7 +335,7 @@
     @media (pointer: coarse) { .quick button { min-height: 40px; min-width: 40px; } }
     .quick-rec.primed .dot { background: currentColor; }
     .quick-deck .primed { border-color: var(--fg); }
-    /* primed: the lamp blinks hollow, waiting for the next touch */
+    /* primed: the lamp blinks hollow, waiting for the first stone to ring */
     [data-state="primed"]:is(.quick-track, .quick-pick)::after { box-shadow: inset 0 0 0 1px currentColor; animation: blink 0.8s steps(2) infinite; }
     @media (prefers-reduced-motion: reduce) { [data-state="rec"]:is(.quick-track, .quick-pick)::after, .quick-rec.rec .dot,
       [data-state="primed"]:is(.quick-track, .quick-pick)::after { animation: none; } }
@@ -395,7 +395,7 @@
     .key .glyph { font-size: 11px; letter-spacing: 0; line-height: 1; font-family: ui-sans-serif, system-ui, sans-serif; }
     .key:hover:not(:disabled) { border-color: var(--ink-muted); }
     .key.on, .key.rec { background: var(--ink); color: var(--panel); border-color: var(--ink); box-shadow: none; }
-    /* primed: record waits for the next touch of the water */
+    /* primed: record waits for the water to ring a stone */
     .key.primed { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
     .key.primed .glyph, .quick-rec.primed .dot, .quick-deck .primed { animation: blink 0.8s steps(2) infinite; }
     @media (prefers-reduced-motion: reduce) { .key.primed .glyph, .quick-rec.primed .dot, .quick-deck .primed { animation: none; } }
@@ -628,7 +628,7 @@
         <li><b>Drag</b> to draw a trail of ripples; keep <b>circling</b> to stir the water up. One finger plays at a time: two fingers on the water are for the tape (below).</li>
         <li><b>Camera</b> (top bar): move in front of it and your movement makes ripples — the picture stays on this device.</li>
         <li><b>Tap a stone</b> to lift it, then tap the water to set it down. Its sound is under Voice.</li>
-        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out. <b>● REC</b> at the top of the pond primes the picked track: the take starts with your next touch of the water, and ends on the nearest beat when you press it again, so every tape is whole beats of the tempo. Tap <b>TAPE</b> for every track's keys and faders. Or, without leaving the water, <b>swipe two fingers</b> on the pond: <b>up</b> to rec (again to finish), <b>down</b> to play or stop, <b>left / right</b> to change track (on a computer: 1–4, R, P).</li>
+        <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out. <b>● REC</b> at the top of the pond primes the picked track: the take starts when the water first rings a stone, and ends on the nearest beat when you press it again, so every tape is whole beats of the tempo. Tap <b>TAPE</b> for every track's keys and faders. Or, without leaving the water, <b>swipe two fingers</b> on the pond: <b>up</b> to rec (again to finish), <b>down</b> to play or stop, <b>left / right</b> to change track (on a computer: 1–4, R, P).</li>
         <li><b>Record piece</b> saves everything you hear as a WAV.</li>
       </ol>
       <p class="note">Sliders: drag along one, or tap where you want it; double-tap to reset. Your settings stay in this browser.

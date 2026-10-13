@@ -62,14 +62,14 @@ function rig({ rate = 48000, grid = null, block = 128 } = {}) {
       const out = new Float64Array(end - start);
       let q = 0;
       while (pos < end) {
-        // Record primes a track until the next touch of the water; these
-        // checks touch at the same moment (unless an action says touch:
-        // false — §16 checks priming itself).
+        // Record primes a track until the water next rings a stone; these
+        // checks ring one (rang()) at the same moment (unless an action says
+        // touch: false — §16 checks priming itself).
         while (q < actions.length && actions[q].sample <= pos) {
           const a = actions[q++];
           d.now = pos;
           d.action(a.track, a.act);
-          if (a.act === TAPE_RECORD && a.touch !== false) d.touched();
+          if (a.act === TAPE_RECORD && a.touch !== false) d.rang();
         }
         let m = Math.min(block, end - pos);
         if (q < actions.length && actions[q].sample < pos + m) m = actions[q].sample - pos; // stop exactly on the action
@@ -337,7 +337,7 @@ console.log('\n9. The status frame the page reads');
   const r = rig(), d = r.d;
   r.run(0.4, TONE, [{ sample: 0, track: 0, act: TAPE_RECORD }]);
   r.run(0.001, () => 0, [{ sample: rate * 0.4, track: 0, act: TAPE_RECORD }]);
-  d.action(1, TAPE_RECORD); d.touched();
+  d.action(1, TAPE_RECORD); d.rang();
   r.run(0.1, () => 0);
   const frame = new Float32Array(TAPE_TRACKS * TAPE_FIELDS);
   d.writeStatus(frame, 0);
@@ -400,8 +400,8 @@ console.log('\n11. Through the instrument');
   send(EV_DROP, 0.5, 0.5, 2);
   for (let k = 0; k < 40; k++) inst.process(L, R, 128); // let the drop ring the stones
   send(EV_TAPE, 0, TAPE_RECORD);
-  send(EV_DROP, 0.3, 0.6, 1); // the next touch starts the primed take
-  const origin = inst.tape.origin[0], captured = [];
+  send(EV_DROP, 0.3, 0.6, 1); // (the water is still ringing stones: the primed take starts on the next one)
+  const capturedFrom = inst.tape.now, captured = []; // the stream sample captured[0] is
   for (let k = 0; k < Math.round(rate / 128); k++) {
     inst.process(L, R, 128);
     for (let i = 0; i < 128; i++) captured.push(L[i]);
@@ -420,10 +420,11 @@ console.log('\n11. Through the instrument');
   // The tape holds exactly what the instrument output, sample for sample
   // (except the seam, which blends in the sound from before the take).
   let worst = 0;
-  // (The take starts on the grid's step at or just before the touch: up to
-  // a millisecond of silence leads the tape.)
-  const lead = Math.round(inst.tape.takeStart[0] - inst.tape.origin[0]);
-  for (let k = lead; k < len - 480; k++) worst = Math.max(worst, Math.abs(inst.tape.L[k] - captured[k - lead]));
+  // (The take starts on the grid's step at or just before the stone that
+  // started it: a little silence leads the tape. Tape sample k is stream
+  // sample origin + k.)
+  const origin = inst.tape.origin[0], lead = Math.round(inst.tape.takeStart[0] - origin);
+  for (let k = lead; k < len - 480; k++) worst = Math.max(worst, Math.abs(inst.tape.L[k] - captured[origin + k - capturedFrom]));
   report(worst < 1e-7, "a tape records the instrument's own output, sample for sample",
     `worst difference ${worst.toExponential(1)} over ${(len / rate).toFixed(2)} s`);
 
@@ -672,8 +673,8 @@ console.log('\n15. Each track\'s fader');
   }
 }
 
-// ---- 16. Primed: record waits for your next touch -----------------------------------------
-console.log('\n16. Record primes; the next touch of the water starts the take');
+// ---- 16. Primed: record waits for the first stone the water rings -----------------------------------------
+console.log('\n16. Record primes; the first stone the water rings starts the take');
 {
   const rate = 48000, grid = new GestureLooper();
   grid.setParam('bpm', 120);
@@ -682,10 +683,10 @@ console.log('\n16. Record primes; the next touch of the water starts the take');
   r.run(0.5, TONE, [{ sample: 0, track: 0, act: TAPE_RECORD, touch: false }]);
   report(d.state[0] === EMPTY && d.primed[0] === 1 && status()[4] === 2,
     'record on an empty track primes it: nothing recorded yet, and the page is told (waiting = 2)');
-  d.now = r.pos; d.touched(); const touchAt = r.pos;
+  d.now = r.pos; d.rang(); const touchAt = r.pos;
   r.run(0.1, TONE);
   report(d.state[0] === RECORDING && d.primed[0] === 0 && d.takeStart[0] === touchAt,
-    'the next touch starts the take right then', `take starts at ${d.takeStart[0]}, touched at ${touchAt}`);
+    'the first stone heard starts the take right then', `take starts at ${d.takeStart[0]}, touched at ${touchAt}`);
   report(grid.transportOrigin >= 0 && Math.abs(d.origin[0] - (grid.transportOrigin * rate) / SIM_RATE) < 1e-6 && touchAt - d.origin[0] < rate / SIM_RATE,
     'with no beat yet, the first take starts it: the touch is the downbeat', `origin ${d.origin[0]}, touch ${touchAt}`);
   r.run(1.9, TONE, [{ sample: r.pos + 1, track: 0, act: TAPE_RECORD }]);
@@ -693,7 +694,7 @@ console.log('\n16. Record primes; the next touch of the water starts the take');
 
   // Record again while primed lets it go: a later touch starts nothing.
   r.run(0.1, TONE, [{ sample: r.pos, track: 1, act: TAPE_RECORD, touch: false }, { sample: r.pos + 10, track: 1, act: TAPE_RECORD, touch: false }]);
-  d.now = r.pos; d.touched(); r.run(0.1, TONE);
+  d.now = r.pos; d.rang(); r.run(0.1, TONE);
   report(d.state[1] === EMPTY && d.primed[1] === 0, 'record again while primed cancels it');
   // Mute leaves it primed; play/stop and clear let it go.
   r.run(0.05, TONE, [{ sample: r.pos, track: 1, act: TAPE_RECORD, touch: false }, { sample: r.pos + 5, track: 1, act: TAPE_MUTE }]);
@@ -713,8 +714,8 @@ console.log('\n16. Record primes; the next touch of the water starts the take');
   r.run(1, () => 0, [{ sample: r.pos, track: 0, act: TAPE_RECORD }]);
   r.run(0.5, () => 0, [{ sample: r.pos, track: 0, act: TAPE_RECORD, touch: false }]);
   const waited = d.state[0] === PLAYING && d.primed[0] === 1;
-  d.now = r.pos; d.touched(); r.run(0.05, () => 0);
-  report(waited && d.state[0] === OVERDUB, 'record on a playing tape primes an overdub; the touch starts it', `state ${d.state[0]}`);
+  d.now = r.pos; d.rang(); r.run(0.05, () => 0);
+  report(waited && d.state[0] === OVERDUB, 'record on a playing tape primes an overdub; the first stone rung starts it', `state ${d.state[0]}`);
 }
 {
   // A finish rounded back to the beat just gone starts the loop mid-way: the
@@ -751,28 +752,54 @@ console.log('\n16. Record primes; the next touch of the water starts the take');
     'a take begun just before a beat is never rounded down to nothing', `state ${d2.state[0]}, ${(d2.length[0] / beat).toFixed(2)} beats`);
 }
 {
-  // Through the instrument: which gestures are a touch.
+  // Through the instrument: a primed take starts when the water first rings a
+  // stone (Dash, Oct 2026), at that very sample — not on the touch.
   const rate = 48000, inst = new Instrument({ sampleRate: rate, seed: 6 });
-  inst.setStones([0.5], [0.5], [220], 1);
+  inst.setParam('splash', 0);
+  inst.setStones([0.85], [0.5], [220], 1);
   const send = (...v) => { const e = new Float32Array(8); v.forEach((x, i) => { e[i] = x; }); inst.handleEvent(e, 0); };
   const L = new Float32Array(128), R = new Float32Array(128);
-  const tryWith = (gesture) => {
-    inst.tape.action(0, TAPE_CLEAR_ALL);
-    for (let k = 0; k < 200; k++) inst.process(L, R, 128); // cleared and quiet
+  let firstStrike = -1;
+  const strike = inst.bells.strike.bind(inst.bells);
+  inst.bells.strike = (k, hz, v, p, at) => { const ok = strike(k, hz, v, p, at); if (ok && firstStrike < 0) firstStrike = inst.blockStart + at; return ok; };
+  send(EV_TAPE, 0, TAPE_RECORD);
+  send(EV_DROP, 0.15, 0.5, 1); // far from the stone: the ripple takes a while to reach it
+  for (let k = 0; k < 4; k++) inst.process(L, R, 128);
+  const waitingAfterTouch = inst.tape.state[0] === EMPTY && inst.tape.primed[0] === 1 && firstStrike < 0;
+  let blocks = 0;
+  while (firstStrike < 0 && blocks++ < 2000) inst.process(L, R, 128);
+  report(waitingAfterTouch && firstStrike >= 0 && inst.tape.state[0] === RECORDING && inst.tape.takeStart[0] === firstStrike,
+    'a touch alone doesn\'t start a primed take; the first stone the water rings does, at that sample',
+    `primed after the touch: ${waitingAfterTouch}; stone rang at ${firstStrike}, take starts ${inst.tape.takeStart[0]}`);
+}
+
+{
+  // The same, with a stone already ringing when the take is primed (so it
+  // starts mid-block, on that stone's sample), as a first take and as an
+  // overdub: tape and output must not depend on the block size.
+  const render = (block, overdub) => {
+    const rate = 48000, inst = new Instrument({ sampleRate: rate, seed: 8 });
+    inst.setParam('splash', 0);
+    inst.setStones([0.3, 0.75], [0.5, 0.5], [220, 330], 2);
+    const send = (...v) => { const e = new Float32Array(8); v.forEach((x, i) => { e[i] = x; }); inst.handleEvent(e, 0); };
+    const L = new Float32Array(block), R = new Float32Array(block), out = [];
+    const run = (seconds) => { const n = Math.round((seconds * rate) / 6144) * 6144; for (let k = 0; k < n; k += block) { inst.process(L, R, block); out.push(...L); } };
+    send(EV_DROP, 0.5, 0.5, 1.5);
+    run(0.768);
+    if (overdub) { send(EV_TAPE, 0, TAPE_RECORD); run(0.128); send(EV_TAPE, 0, TAPE_RECORD); run(1.536); send(EV_DROP, 0.4, 0.4, 1); run(0.256); }
+    send(EV_TAPE, 0, TAPE_RECORD); // primed: the next stone the water rings starts it
+    run(1.536);
     send(EV_TAPE, 0, TAPE_RECORD);
-    gesture();
-    inst.process(L, R, 128);
-    return inst.tape.state[0] === RECORDING;
+    run(1.536);
+    return { out, tape: Array.from(inst.tape.L.subarray(0, inst.tape.length[0])), start: inst.tape.takeStart[0] };
   };
-  const drop = tryWith(() => send(EV_DROP, 0.3, 0.3, 1));
-  const drag = tryWith(() => send(EV_STROKE, 0.2, 0.2, 0.3, 0.3, 1));
-  const hand = tryWith(() => send(EV_STILL, 0, 0.4, 0.4, 1));
-  const lift = tryWith(() => send(EV_STILL, 0, 0.4, 0.4, 0));
-  const stir = tryWith(() => send(EV_STIR, 0, 0.5, 0.5, 0.1, 1.5));
-  const letGo = tryWith(() => send(EV_STIR, 0, 0.5, 0.5, 0.1, 0));
-  report(drop && drag && hand && stir && !lift && !letGo,
-    'a touch, a drag, a hand coming down and stirring start a primed take; a lift or a let-go doesn\'t',
-    `drop ${drop}, drag ${drag}, hand ${hand}, lift ${lift}, stir ${stir}, let go ${letGo}`);
+  for (const overdub of [false, true]) {
+    const runs = [64, 128, 1024, 6144].map((b) => render(b, overdub));
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    const ok = runs.every((r) => same(r.out, runs[0].out) && same(r.tape, runs[0].tape) && r.start === runs[0].start);
+    report(ok, `${overdub ? 'an overdub' : 'a first take'} started by a stone mid-block: tape and output identical at block sizes 64, 128, 1024 and 6144`,
+      `take starts at ${runs.map((r) => r.start).join(' / ')}`);
+  }
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll tape checks passed.');

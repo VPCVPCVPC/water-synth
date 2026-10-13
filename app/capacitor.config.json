@@ -1,0 +1,12 @@
+{
+  "appId": "com.watersynth.app",
+  "appName": "Water Synth",
+  "webDir": "../prototype/dist",
+  "ios": {
+    "contentInset": "never"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "backgroundColor": "#000000"
+}

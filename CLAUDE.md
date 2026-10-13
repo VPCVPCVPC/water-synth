@@ -129,7 +129,7 @@ both are in view at once (Dash, Oct 2026).
   grid; drags keep their own timing.
 - **Audio looper** (the *Tape* on the page) — "a tape beside the pond":
   records the instrument's output and layers fixed audio, like a loop pedal.
-  The one feature that isn't the water; mainly for the standalone app. Several
+  The one feature that isn't the water; mainly for the app. Several
   tape tracks of their own lengths, each with record, overdub, mute and clear
   (Dash, Oct 2026); they record the water's sound, not other tapes. A tape
   always plays back exactly what was recorded — retuning never touches it — so
@@ -304,17 +304,25 @@ the top bar; it shares the one camera with Animate.
 Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
 
 ## Tech stack
-- **Framework:** JUCE (C++), built with CMake.
-- **Formats:** AU + VST3 + Standalone first (AU is required for Logic). CLAP
+- **Framework:** the phone and tablet app is the web instrument wrapped with
+  Capacitor (`app/`; Dash, Oct 2026); the plugin is JUCE (C++), built with CMake.
+- **Formats (the plugin):** AU + VST3 + Standalone first (AU is required for Logic). CLAP
   when convenient. AAX only if Pro Tools support is ever needed — it requires an
   Avid partnership and PACE signing.
-- **Platforms:** macOS first (Apple Silicon + Intel), Windows and Linux via CI.
-  **iPad and iPhone** are an intended target — a standalone app and AUv3, via
-  JUCE — likely the ideal way to play; this doesn't reorder the build phases.
+- **Platforms:** phones and tablets first (below); for the plugin, macOS first
+  (Apple Silicon + Intel), Windows and Linux via CI.
+  **Phones and tablets are released first** (Dash, Oct 2026): iPhone, iPad
+  and Android — likely the ideal way to play — as the web instrument wrapped
+  for the app stores from one code base (Capacitor), with its own JS / Web
+  Audio engine. The JUCE plugin (and any iPad AUv3) follows in the later
+  phases, reusing this interface.
   No platform-specific code in the DSP layer, ever.
-- **UI:** JUCE WebView — interface and water visuals in HTML/CSS/JS/WebGL.
-- **Prototyping:** medium physics sketched in the browser (JS + Web Audio) in
-  `prototype/`, then ported to C++.
+- **UI:** interface and water visuals in HTML/CSS/JS/WebGL — the same
+  interface in the phone/tablet app (Capacitor) and, later, the plugin's
+  JUCE WebView.
+- **Prototyping:** the instrument is built in the browser (JS + Web Audio) in
+  `prototype/`; that same code is the website and the phone/tablet app, and
+  is later ported to C++ for the plugin.
 
 ## Build phases
 1. **Browser prototype** of the generative medium — iterate until it feels
@@ -345,6 +353,12 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    dies away when you stop; then an output limiter, and record that primes
    on your next touch with tapes always on the beat; Still then came off the
    touch surface).
+
+   2b. **Phone and tablet app** (Dash, Oct 2026: release for phones and
+   tablets, all OS, first) — set up alongside build phase 2 (when it ships
+   relative to phase 2's user testing is Dash's call): the build-phase-2
+   instrument wrapped with Capacitor for the iPhone/iPad and Android app
+   stores from one code base (`app/`). Phases 3–6 (the JUCE plugin) follow and reuse this interface.
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
    including its gestures and the Phase modes).
@@ -364,9 +378,11 @@ end of every milestone, stop and ask Dash to listen and play. Describe what
 should be audible so he knows what to evaluate.
 
 ### Real-time audio safety (non-negotiable)
-Inside `processBlock` and anything it calls:
+Inside `processBlock`, the web engine's AudioWorklet `process()`, and
+anything they call:
 - No memory allocation or deallocation (watch hidden ones: container growth,
-  `std::string`, `std::function` captures, `shared_ptr` copies).
+  `std::string`, `std::function` captures, `shared_ptr` copies). In JS: no
+  new arrays, objects or closures per block.
 - No locks, mutexes, or blocking waits.
 - No file, network, or console I/O, including logging.
 - No unbounded loops.

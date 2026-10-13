@@ -42,12 +42,21 @@ export const LOOP_RECORD = 1, LOOP_PLAY_STOP = 2, LOOP_MUTE = 3, LOOP_CLEAR = 4,
 export const LOOPER_PARAMS = {
   quantize: { min: 0, max: 1, def: 0 }, // 0 off, 1 on
   bpm: { min: 40, max: 240, def: 90 },
-  grid: { min: 1, max: 8, def: 2 }, // subdivisions per beat (2 = eighths, 4 = sixteenths, 3 = triplets)
+  // Grid points per beat: 0.25 a whole note (a bar of 4), 0.5 half notes, 1
+  // quarters, 1.5 quarter triplets, 2 eighths, 3 eighth triplets, 4
+  // sixteenths, 6 sixteenth triplets, 8 thirty-seconds.
+  grid: { min: 0.25, max: 8, def: 2 },
   quantizeStrength: { min: 0, max: 1, def: 1 }, // 0 = as played, 1 = snapped (Dash: snap by default)
   swing: { min: 0, max: 0.5, def: 0 }, // fraction of a grid step that every second step is pushed late
 };
 
 const BEATS_PER_BAR = 4;
+const GRIDS = [0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8]; // the grids the page offers (points per beat)
+// A tempo change glides there over about this (Dash, Oct 2026: "the
+// transition should be smooth, so you can gradually speed up or slow down
+// your piece"), and the beat keeps its place: the grid's origin moves so
+// the beat count carries on from where it was, only faster or slower.
+const BPM_GLIDE = 1 - Math.exp(-1 / (0.2 * SIM_RATE)); // per step
 
 export class GestureLooper {
   constructor() {
@@ -77,7 +86,8 @@ export class GestureLooper {
     // alive while it holds a tape on it.
     this.gridUser = null;
     this.quantize = LOOPER_PARAMS.quantize.def;
-    this.bpm = LOOPER_PARAMS.bpm.def;
+    this.bpm = LOOPER_PARAMS.bpm.def; // the tempo now (gliding toward bpmTarget)
+    this.bpmTarget = this.bpm;
     this.grid = LOOPER_PARAMS.grid.def;
     this.quantizeStrength = LOOPER_PARAMS.quantizeStrength.def;
     this.swing = LOOPER_PARAMS.swing.def;
@@ -89,7 +99,17 @@ export class GestureLooper {
     const p = LOOPER_PARAMS[name];
     if (!p || !Number.isFinite(value)) return;
     let v = value < p.min ? p.min : value > p.max ? p.max : value;
-    if (name === 'grid' || name === 'quantize') v = Math.round(v);
+    if (name === 'quantize') v = Math.round(v);
+    if (name === 'grid') { // one of the grids
+      let near = GRIDS[0];
+      for (let i = 1; i < GRIDS.length; i++) if (Math.abs(GRIDS[i] - v) < Math.abs(near - v)) near = GRIDS[i];
+      v = near;
+    }
+    if (name === 'bpm') { // glides there (see onStep); with no beat running yet, nothing to glide
+      this.bpmTarget = v;
+      if (this.transportOrigin < 0 || this.transportOrigin === this.step + 1) this.bpm = v; // (just started: set, no glide)
+      return;
+    }
     this[name] = v;
     if (name === 'quantize') {
       if (v && this.transportOrigin < 0) this.transportOrigin = this.step + 1; // the beat starts now
@@ -97,9 +117,30 @@ export class GestureLooper {
     }
   }
 
+  // One step of a tempo glide. The beat count at this step stays as it was:
+  // the origin moves so (step − origin) · bpm is unchanged.
+  glideTempo(step) {
+    const t = this.bpmTarget;
+    let next = this.bpm + (t - this.bpm) * BPM_GLIDE;
+    if (Math.abs(t - next) < 1e-3) next = t;
+    if (this.transportOrigin >= 0) {
+      let o = step - ((step - this.transportOrigin) * this.bpm) / next;
+      // Slowing down moves the origin earlier — maybe before the stream
+      // began, which would read as "no grid" (−1). Move it later by whole
+      // bars instead: every beat and downbeat stays where it is.
+      if (o < 0) { const bar = (BEATS_PER_BAR * 60 * SIM_RATE) / next; o += Math.ceil(-o / bar) * bar; }
+      this.transportOrigin = o;
+    }
+    this.bpm = next;
+  }
+
   // Beats since the grid began (−1 when there's no grid), for the page.
   beatPosition() {
-    return this.transportOrigin < 0 ? -1 : ((this.step - this.transportOrigin) * this.bpm) / (60 * SIM_RATE);
+    if (this.transportOrigin < 0) return -1;
+    const b = ((this.step - this.transportOrigin) * this.bpm) / (60 * SIM_RATE);
+    // (Early on, a slowdown can put the origin a bar or two ahead of now — see
+    // glideTempo: count from a bar earlier, downbeats unchanged.)
+    return b >= 0 ? b : b + Math.ceil(-b / BEATS_PER_BAR) * BEATS_PER_BAR;
   }
 
   // An action from the page on one layer.
@@ -173,6 +214,7 @@ export class GestureLooper {
 
   onStep(step, engine) {
     this.step = step;
+    if (this.bpm !== this.bpmTarget) this.glideTempo(step);
     const at = step / SIM_RATE;
     for (let l = 0; l < LOOP_LAYERS; l++) {
       const s = this.state[l];
@@ -336,7 +378,9 @@ export class GestureLooper {
     if (!this.quantize || this.quantizeStrength <= 0) return t;
     const g = (60 * SIM_RATE) / (this.bpm * this.grid);
     const k = Math.round(t / g);
-    const target = k * g + ((((k % 2) + 2) % 2) === 1 ? this.swing * g : 0);
+    // (Swing is for beats and their parts: on a whole- or half-note grid it
+    // would push every second bar late, so it's left off there.)
+    const target = k * g + (this.grid >= 1 && (((k % 2) + 2) % 2) === 1 ? this.swing * g : 0);
     return Math.round(t + this.quantizeStrength * (target - t));
   }
 

@@ -8,7 +8,7 @@ import { buildPitches, SCALES } from './tuning.js';
 import { stonePositions } from './layout.js';
 import { EV_DROP, EV_STROKE, EV_LOOP, EV_PARAM } from './ring.js';
 import { PARAM_KEYS } from './instrument.js';
-import { LOOP_RECORD, LOOP_PLAY_STOP, LOOP_MUTE, LOOP_CLEAR, LOOP_CLEAR_ALL, LOOP_EVENTS, MAX_LOOP_SECONDS, EMPTY, PLAYING, STOPPED } from './looper.js';
+import { GestureLooper, LOOP_RECORD, LOOP_PLAY_STOP, LOOP_MUTE, LOOP_CLEAR, LOOP_CLEAR_ALL, LOOP_EVENTS, MAX_LOOP_SECONDS, EMPTY, PLAYING, STOPPED } from './looper.js';
 import { performance } from 'node:perf_hooks';
 
 let failures = 0;
@@ -345,14 +345,14 @@ console.log('\n3b. Quantize pulls when stones ring toward the grid');
   report(snap.inst.heldOverflow === 0, 'the held-note queue never overflowed', `${snap.inst.heldOverflow}`);
   {
     // Busy water, every stone of a chromatic range, at the coarsest grid
-    // (1.5 s at 40 BPM in quarters): repeat hits on a stone at one grid point
+    // (6 s at 40 BPM in whole notes): repeat hits on a stone at one grid point
     // ring once, the queue never overflows, and every note is on the grid.
     const fs = 48000, all = buildPitches({ scale: SCALES.chromatic, root: 36, low: 36, high: 96 });
     const inst = new Instrument({ sampleRate: fs, seed: 3 });
     const { xs, ys } = stonePositions(all.length);
     inst.setStones(xs, ys, all.map((p) => p.hz), all.length);
     inst.setParam('threshold', 0.005); inst.setParam('splash', 0.6);
-    inst.setParam('bpm', 40); inst.setParam('grid', 1); inst.setParam('quantize', 1);
+    inst.setParam('bpm', 40); inst.setParam('grid', 0.25); inst.setParam('quantize', 1);
     const heard = [];
     let base = 0;
     const strike = inst.bells.strike.bind(inst.bells);
@@ -514,6 +514,64 @@ console.log('\n6. CPU per 128-sample block at 48 kHz (budget 2667 µs)');
   for (let k = 0; k < blocks; k++) r.inst.process(L, R, 128);
   const us = ((performance.now() - t0) * 1000) / blocks;
   report(us / 2667 < 0.3, `4 layers × 400 gestures looping: ${us.toFixed(0)} µs/block, ${((us / 2667) * 100).toFixed(1)}%`, 'limit 30%');
+}
+
+console.log('\n12. Tempo glides, and the beat keeps its place');
+// (Dash, Oct 2026: "the transition should be smooth, so you can gradually
+// speed up or slow down your piece".)
+{
+  const lp = new GestureLooper();
+  let step = 0;
+  const run = (seconds, each) => { for (const end = step + seconds * SIM_RATE; step < end; step++) { lp.onStep(step, null); if (each) each(); } };
+  lp.setParam('bpm', 90);
+  lp.setParam('quantize', 1); // the beat starts
+  run(2);
+  const before = lp.beatPosition();
+  let last = before, worst = 0;
+  lp.setParam('bpm', 120);
+  run(3, () => { const b = lp.beatPosition(); worst = Math.max(worst, b - last); last = b; });
+  const perStep = 120 / 60 / SIM_RATE;
+  report(worst <= perStep * 1.001 && lp.bpm === 120,
+    'speeding up 90 → 120 bpm: the beat count never jumps, and reaches the new tempo',
+    `largest step ${(worst / perStep).toFixed(3)}× a 120-bpm step; now ${lp.bpm} bpm`);
+  const a = lp.beatPosition(); run(1); const rate = lp.beatPosition() - a;
+  report(Math.abs(rate - 2) < 1e-6, 'after the glide, two beats a second at 120 bpm', `${rate.toFixed(6)} beats`);
+  // Slowing right after the beat starts: the grid stays (never "no grid"),
+  // the count never jumps backwards, and downbeats stay downbeats.
+  {
+    const s = new GestureLooper();
+    let k = 0;
+    s.setParam('bpm', 240); s.setParam('quantize', 1);
+    for (; k < 300; k++) s.onStep(k, null);
+    s.setParam('bpm', 40);
+    let lost = false, back = false, prev = s.beatPosition();
+    for (; k < 6000; k++) { s.onStep(k, null); const b = s.beatPosition(); if (b < 0 && s.transportOrigin < 0) lost = true; if (b < prev - 1e-9 && Math.abs(b - prev + 4) > 0.01) back = true; prev = b; }
+    report(!lost && !back && s.transportOrigin >= 0 && s.bpm === 40,
+      'slowing 240 → 40 bpm just after the beat starts: the grid stays, the count only ever moves on (or back a whole bar)',
+      `origin ${s.transportOrigin.toFixed(1)}, ${s.bpm} bpm`);
+  }
+  // A glide, not a step: partway after 0.1 s, all but a hair after 1 s.
+  const g = new GestureLooper(); g.setParam('quantize', 1); for (let k = 0; k < 10; k++) g.onStep(k, null);
+  g.setParam('bpm', 60);
+  for (let k = 10; k < 110; k++) g.onStep(k, null);
+  const mid = g.bpm;
+  for (let k = 110; k < 1010; k++) g.onStep(k, null);
+  report(mid < 85 && mid > 65 && Math.abs(g.bpm - 60) < 0.5, 'the glide takes about a second to settle', `${mid.toFixed(1)} bpm after 0.1 s, ${g.bpm.toFixed(2)} after 1 s`);
+  // Before the beat has begun, a tempo is simply set.
+  const h = new GestureLooper(); h.setParam('bpm', 150);
+  report(h.bpm === 150, 'with no beat running, a tempo is set at once');
+}
+
+console.log('\n13. More grids: whole and half notes, triplets, 32nds');
+{
+  const lp = new GestureLooper();
+  lp.setParam('quantize', 1); lp.setParam('bpm', 120); // a beat is 500 steps
+  const at = (grid, t) => { lp.setParam('grid', grid); return lp.quantizeTime(t); };
+  const cases = [[0.25, 1100, 2000], [0.5, 700, 1000], [1.5, 400, 333], [6, 100, 83], [8, 80, 63]];
+  const got = cases.map(([gr, t]) => at(gr, t));
+  report(cases.every(([, , want], i) => Math.abs(got[i] - want) <= 1),
+    'a touch\'s copy snaps to whole notes, half notes, quarter triplets, sixteenth triplets and 32nds',
+    cases.map(([gr, t], i) => `${gr}/beat: ${t} → ${got[i]}`).join(', '));
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll looper checks passed.');

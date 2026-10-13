@@ -150,9 +150,8 @@
       #page-beat fieldset { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
       #page-beat fieldset > legend { display: block; float: left; }
       #page-beat .quantized:not([hidden]) { display: flex; align-items: center; gap: 10px 22px; flex-wrap: wrap; }
-      #page-beat .quantized .knobs { grid-template-columns: repeat(2, 150px); gap: 4px 20px; }
-      #page-beat .field { display: flex; gap: 10px; }
-      #page-beat #bpm { width: 5em; }
+      #page-beat .tempo { width: 220px; grid-template-columns: 1fr; }
+      #page-beat .quantized .knobs { grid-template-columns: repeat(3, 150px); gap: 4px 20px; }
     }
     #surface { width: 100%; aspect-ratio: 128 / 97; display: block; background: var(--surface);
       border: 1px solid var(--edge); touch-action: none; cursor: crosshair;
@@ -525,16 +524,16 @@
       <section class="page" id="page-beat" data-page="beat" role="tabpanel" aria-labelledby="tab-beat">
           <fieldset>
             <legend>Beat</legend>
-            <div class="field"><span>BPM</span><input id="bpm" type="number" min="40" max="240" step="1"></div>
+            <div id="tempo-controls" class="knobs tempo"></div>
             <label class="row" style="color: var(--fg)" title="pulls notes toward the beat; at full strength every note lands on the grid">
               <input id="quantize" type="checkbox"> quantize notes</label>
             <div class="quantized" hidden>
-              <div class="field"><span>grid</span><select id="grid"></select></div>
               <div id="quantize-controls" class="knobs"></div>
             </div>
-            <div class="note long">The tape always keeps this tempo: a take starts on a beat and lasts whole
-              beats, and the pond's rim pulses on the beat. Quantize pulls when stones ring toward the beat
-              too — at full strength every note lands on the grid; lower, the water keeps more of its own time.</div>
+            <div class="note long">Slide the tempo to speed up or slow down your piece: it glides there and
+              the beat keeps its place. A take starts on a beat and lasts whole beats; a tape keeps the tempo it
+              was recorded at. The pond's rim pulses on the beat. Quantize pulls when stones ring toward the
+              grid — at full strength every note lands on it; lower, the water keeps more of its own time.</div>
           </fieldset>
       </section>
       <section class="page" id="page-tape" data-page="tape" role="tabpanel" aria-labelledby="tab-tape">

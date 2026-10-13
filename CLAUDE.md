@@ -114,11 +114,14 @@ both are in view at once (Dash, Oct 2026).
   gesture events. (Stir, built since, isn't recorded yet: a returning looper
   must record its stream of stir states, let-go included — and the hand
   states of Still, if Still returns.)
-- **The beat** (Dash, Oct 2026): one tempo, its BPM always shown, that the
-  tape always keeps. It starts with the first take (or when quantize notes is
-  turned on), and while it runs the pond's rim pulses on it. **Quantize
-  notes** (optional, off by default) pulls *when stones ring* toward the beat
-  grid, with a strength control from lean to snap (the default when enabled),
+- **The beat** (Dash, Oct 2026): one tempo, a slider always shown, that new
+  takes keep. Moving it glides there and the beat keeps its place, "so you
+  can gradually speed up or slow down your piece" (the water's flow is a
+  separate thing and never changes with it). It starts with the first take
+  (or when quantize notes is turned on), and while it runs the pond's rim
+  pulses on it. **Quantize notes** (optional, off by default) pulls *when
+  stones ring* toward the beat grid — whole notes down to 32nds, triplets
+  included, on a stepped slider — with a strength control from lean to snap (the default when enabled),
   plus swing: a struck stone can wait for the next grid point, never sound
   early. At 0% the water keeps its own time, at 100% every note lands on the
   grid like a sequencer — a way to find serendipitous sequences and build
@@ -134,9 +137,11 @@ both are in view at once (Dash, Oct 2026).
   (Dash, Oct 2026); they record the water's sound, not other tapes. A tape
   always plays back exactly what was recorded — retuning never touches it — so
   you can lay a bassline, then a melody, then harmonies in other tunings.
-  Tapes always keep the tempo (Dash, Oct 2026): a take starts on a beat (the
+  Tapes keep the tempo (Dash, Oct 2026): a take starts on a beat (the
   first take sets the downbeat if no beat is running) and finishes on the
-  beat nearest where you end it, so it lasts whole beats; their lengths
+  beat nearest where you end it, so it lasts whole beats — of the tempo it
+  was recorded at: changing the tempo never touches a tape, as retuning
+  never does; their lengths
   differ, so the way they line up keeps changing. **Record primes** (Dash,
   Oct 2026): rec arms the track, and the take — or an overdub — starts the
   moment the water first rings a stone ("when the first stone gets hit with

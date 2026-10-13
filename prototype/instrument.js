@@ -55,7 +55,7 @@ export class Instrument {
     // only the last segment's); step / SIM_RATE is its stream time.
     // Note quantize: struck stones held for the grid, in time order (stream
     // sample to ring at). Fixed capacity; if it's ever full a note rings now.
-    this.heldCap = 16 * MAX_STONES; // the busiest pond at 90% on the coarsest grid peaks near 8 × MAX_STONES
+    this.heldCap = 32 * MAX_STONES; // the busiest pond at 90% on the coarsest grid (a whole note at 40 bpm: 6 s) peaks near 24 × MAX_STONES
     this.heldAt = new Float64Array(this.heldCap);
     this.heldStone = new Int32Array(this.heldCap);
     this.heldVel = new Float64Array(this.heldCap);
@@ -179,7 +179,7 @@ export class Instrument {
     const fs = this.fs, g = (60 * fs) / (lp.bpm * lp.grid), x = (t - (lp.transportOrigin * fs) / SIM_RATE) / g;
     let prev = -Infinity, next = Infinity;
     for (let k = Math.floor(x) - 1, last = k + 3; k <= last; k++) { // swing moves a point by < 1 grid step
-      const p = k + ((((k % 2) + 2) % 2) === 1 ? lp.swing : 0);
+      const p = k + (lp.grid >= 1 && (((k % 2) + 2) % 2) === 1 ? lp.swing : 0); // no swing on whole- or half-note grids
       if (p <= x && p > prev) prev = p;
       if (p >= x && p < next) next = p;
     }

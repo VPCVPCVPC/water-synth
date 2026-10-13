@@ -426,7 +426,7 @@ function slider({ label, hint, get, set, to, from, show }) {
 // downward swipe that starts on it still scrolls the page.
 // { el, readout, show, get, refresh, setDisabled }.
 const THUMB = 7; // px: half the thumb, the track's margin at each end
-function slide({ label, hint, get, set, to, from, show, def, steps = 0 }) {
+function slide({ label, hint, get, set, to, from, show, def, steps = 0, keyStep = 0.01 }) {
   const el = document.createElement('div');
   el.className = 'slide';
   el.title = hint;
@@ -500,7 +500,7 @@ function slide({ label, hint, get, set, to, from, show, def, steps = 0 }) {
   el.addEventListener('focus', () => { if (el.matches(':focus-visible')) hintHere(); }); // from the keyboard
   el.addEventListener('keydown', (e) => {
     const unit = steps > 0 ? 1 / steps : 0;
-    let step = { ArrowUp: 0.01, ArrowRight: 0.01, ArrowDown: -0.01, ArrowLeft: -0.01, PageUp: 0.1, PageDown: -0.1 }[e.key];
+    let step = { ArrowUp: keyStep, ArrowRight: keyStep, ArrowDown: -keyStep, ArrowLeft: -keyStep, PageUp: 0.1, PageDown: -0.1 }[e.key];
     if (step !== undefined) {
       step *= e.shiftKey ? 0.2 : 1;
       if (unit && Math.abs(step) < unit) step = Math.sign(step) * unit; // a whole-number slider always moves one
@@ -903,16 +903,29 @@ function buildLoopControls() {
     shown.hidden = !quantize.checked;
     sendParam('quantize');
   });
-  const bpm = document.getElementById('bpm');
-  bpm.value = values.bpm;
-  bpm.addEventListener('change', () => {
-    const v = Math.round(Number(bpm.value));
-    if (!(v >= PARAMS.bpm.min && v <= PARAMS.bpm.max)) { bpm.value = values.bpm; return; }
-    values.bpm = v; sendParam('bpm');
+  // Tempo (Dash, Oct 2026: a slider, "so you can gradually speed up or slow
+  // down your piece"): whole BPM; the engine glides there and keeps the beat
+  // in its place.
+  const span = PARAMS.bpm.max - PARAMS.bpm.min;
+  const tempo = slide({
+    label: 'tempo', hint: 'the beat — slide to speed up or slow down; it glides there and the beat keeps its place',
+    get: () => values.bpm, set: (v) => { values.bpm = v; sendParam('bpm'); }, def: PARAMS.bpm.def, steps: span, keyStep: 1 / span, // arrows: 1 bpm
+    to: (v) => (v - PARAMS.bpm.min) / span, from: (f) => Math.round(PARAMS.bpm.min + f * span), show: (v) => `${v} bpm`,
   });
-  const grid = fillSelect('grid', [[1, '1/4'], [2, '1/8'], [3, '1/8 triplets'], [4, '1/16']], values.grid);
-  grid.addEventListener('change', () => { values.grid = Number(grid.value); sendParam('grid'); });
+  document.getElementById('tempo-controls').append(tempo.el);
+  // The quantize grid, coarse to fine, as a stepped slider.
+  const last = GRID_CHOICES.length - 1;
+  const grid = slide({
+    label: 'grid', hint: 'where notes are pulled to: from a whole note (once a bar) down to 32nds',
+    get: () => values.grid, set: (v) => { values.grid = v; sendParam('grid'); }, def: PARAMS.grid.def, steps: last,
+    to: (v) => gridIndex(v) / last, from: (f) => GRID_CHOICES[Math.round(f * last)][0], show: (v) => GRID_CHOICES[gridIndex(v)][1],
+  });
+  document.getElementById('quantize-controls').prepend(grid.el);
 }
+// Quantize grids: points per beat, and their names.
+const GRID_CHOICES = [[0.25, 'whole notes'], [0.5, 'half notes'], [1, 'quarters'], [1.5, 'quarter triplets'],
+  [2, '8ths'], [3, '8th triplets'], [4, '16ths'], [6, '16th triplets'], [8, '32nds']];
+const gridIndex = (v) => { let best = 0; GRID_CHOICES.forEach(([per], i) => { if (Math.abs(per - v) < Math.abs(GRID_CHOICES[best][0] - v)) best = i; }); return best; };
 
 // ---- sound loops (tapes) -------------------------------------------------------------
 
@@ -1134,9 +1147,9 @@ function restoreSession() {
   if (!saved || saved.v !== 1) return;
   for (const [k, p] of Object.entries(PARAMS)) {
     const v = num(saved.values && saved.values[k], p.min, p.max);
-    if (v !== undefined) values[k] = (k === 'quantize' || k === 'grid' || k === 'bpm') ? Math.round(v) : v;
+    if (v !== undefined) values[k] = (k === 'quantize' || k === 'bpm') ? Math.round(v) : v;
   }
-  if (!(values.grid >= 1 && values.grid <= 4)) values.grid = PARAMS.grid.def; // the page offers quarters to sixteenths
+  values.grid = GRID_CHOICES[gridIndex(values.grid)][0]; // one of the page's grids
   const t = saved.tuning || {};
   if (typeof t.scale === 'string' && Object.prototype.hasOwnProperty.call(SCALES, t.scale)) tuning.scale = t.scale;
   const root = num(t.root, 0, 11); if (root !== undefined) tuning.root = Math.round(root);

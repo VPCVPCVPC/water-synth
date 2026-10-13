@@ -189,16 +189,22 @@ your touches into the water, are set aside for now.)
   twice) erases every track. Clearing never touches the water.
 - Tracks have their own lengths, so they drift against each other.
 
-**Beat** — one tempo (**BPM**, always shown) that the tape always keeps: a
+**Beat** — **tempo**, a slider always shown (40–240 bpm): slide it to speed
+up or slow down your piece — it glides there and the beat keeps its place
+(the water's flow doesn't change). New takes keep the tempo: a
 take starts on a beat — the first take sets the downbeat if no beat is
 running — and **finish** ends it on the nearest beat (a little late, and it
 trims back to the beat just gone, so the reach to the key isn't heard each
 pass), so each track is a whole number of beats of its own (3, 5, 7…) and
-they line up differently each time. While a beat runs, the pond's rim pulses
-on it (brighter on each bar's first beat).
+they line up differently each time. A tape keeps the tempo it was recorded
+at (changing the tempo never touches it, as retuning never does). While a
+beat runs, the pond's rim pulses on it (brighter on each bar's first beat).
 
 **quantize notes** (off by default) pulls *when stones ring* toward the beat
-grid — strength from lean to snap (snap by default), swing and grid size: a
+grid. **grid** steps from whole notes and half notes through quarters,
+quarter triplets, 8ths, 8th triplets, 16ths and 16th triplets to 32nds;
+**strength** goes from lean to snap (snap by default); **swing** pushes every
+second grid point late (not on whole- or half-note grids). A
 struck stone can wait for the next grid point (never sound early). At full
 strength every note lands on the grid, like a sequencer — the water still
 picks which stones ring and how hard; lower, the water keeps more of its own
@@ -460,6 +466,12 @@ voice editor untouched you hear exactly the Phase 1c bell.
 49. **Bell and synth side by side:** do people find the synth layer right
     away? Does seeing both invite raising it too far, so the synth buries
     the water?
+50. **Tempo slider:** speed up or slow down while you play — does the glide
+    feel musical (too slow, too fast)? Tapes keep their own tempo: right,
+    or should they follow (that would mean time-stretching them)?
+51. **Grids:** whole and half notes at snap can hold a note for a bar or
+    more before it rings — useful, or too long? Do the triplet grids and
+    32nds earn their place?
 
 ### Decisions for Dash
 

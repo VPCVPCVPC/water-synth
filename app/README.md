@@ -28,6 +28,29 @@ npm run build        # builds ../prototype/dist and copies it into both apps
 After changing the prototype, `npm run build` again (it rebuilds `dist` and
 syncs both apps).
 
+## On your own iPhone or iPad, free
+
+No paid membership is needed to put the app on your own devices — a free
+Apple ID is enough (Apple's "personal team"):
+
+1. `npm run ios` opens the project in Xcode.
+2. Xcode → Settings → Accounts → **+** → Apple ID: sign in.
+3. Select the **App** target → **Signing & Capabilities** → tick
+   **Automatically manage signing** → Team: *your name (Personal Team)*.
+   If Xcode says the bundle identifier isn't available, change it to
+   something only you use (e.g. `com.yourname.watersynth`).
+4. Plug in the iPhone or iPad with a cable and tap **Trust**. Turn on
+   **Developer Mode** (Settings → Privacy & Security → Developer Mode; it
+   restarts the device).
+5. Pick the device at the top of Xcode and press **Run** (▶).
+6. The first time: on the device, Settings → General → VPN & Device
+   Management → your Apple ID → **Trust**.
+
+The limits of a free account: the app stops opening after **7 days** (plug
+in and press Run again to renew it), at most 3 such apps per device, and
+you can't send it to anyone else — that needs the paid membership
+(TestFlight or the App Store).
+
 ## What's set up
 
 - App name **Water Synth** (the working title), ID `com.watersynth.app` —

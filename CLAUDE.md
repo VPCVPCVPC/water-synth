@@ -114,8 +114,8 @@ both are in view at once (Dash, Oct 2026).
   gesture events. (Stir, built since, isn't recorded yet: a returning looper
   must record its stream of stir states, let-go included — and the hand
   states of Still, if Still returns.)
-- **The beat** (Dash, Oct 2026): one tempo, a slider always shown, that new
-  takes keep. Moving it glides there and the beat keeps its place, "so you
+- **The beat** (Dash, Oct 2026): one tempo, a slider always shown, that
+  takes keep and tapes follow. Moving it glides there and the beat keeps its place, "so you
   can gradually speed up or slow down your piece" (the water's flow is a
   separate thing and never changes with it). It starts with the first take
   (or when quantize notes is turned on), and while it runs the pond's rim
@@ -139,9 +139,10 @@ both are in view at once (Dash, Oct 2026).
   you can lay a bassline, then a melody, then harmonies in other tunings.
   Tapes keep the tempo (Dash, Oct 2026): a take starts on a beat (the
   first take sets the downbeat if no beat is running) and finishes on the
-  beat nearest where you end it, so it lasts whole beats — of the tempo it
-  was recorded at: changing the tempo never touches a tape, as retuning
-  never does; their lengths
+  beat nearest where you end it, so it lasts whole beats; tapes follow
+  tempo changes, keeping their pitch (Dash, Oct 2026: "Recorded tapes should
+  follow tempo changes!" — a time-stretch; an overdub at a new tempo
+  re-records the track at it, so every layer stays in tune); their lengths
   differ, so the way they line up keeps changing. **Record primes** (Dash,
   Oct 2026): rec arms the track, and the take — or an overdub — starts the
   moment the water first rings a stone ("when the first stone gets hit with

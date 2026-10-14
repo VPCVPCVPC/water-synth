@@ -191,13 +191,17 @@ your touches into the water, are set aside for now.)
 
 **Beat** — **tempo**, a slider always shown (40–240 bpm): slide it to speed
 up or slow down your piece — it glides there and the beat keeps its place
-(the water's flow doesn't change). New takes keep the tempo: a
+(the water's flow doesn't change). Tapes keep to it: a
 take starts on a beat — the first take sets the downbeat if no beat is
 running — and **finish** ends it on the nearest beat (a little late, and it
 trims back to the beat just gone, so the reach to the key isn't heard each
 pass), so each track is a whole number of beats of its own (3, 5, 7…) and
-they line up differently each time. A tape keeps the tempo it was recorded
-at (changing the tempo never touches it, as retuning never does). While a
+they line up differently each time. Recorded tapes follow the tempo too,
+keeping their pitch (Dash: "Recorded tapes should follow tempo changes!"): a
+tape at another tempo than it was recorded at plays through a time-stretch,
+staying on the beat. Overdub one at a new tempo and the first pass
+re-records the track at it (what it plays, plus you), so every layer stays
+in tune. While a
 beat runs, the pond's rim pulses on it (brighter on each bar's first beat).
 
 **quantize notes** (off by default) pulls *when stones ring* toward the beat
@@ -467,8 +471,10 @@ voice editor untouched you hear exactly the Phase 1c bell.
     away? Does seeing both invite raising it too far, so the synth buries
     the water?
 50. **Tempo slider:** speed up or slow down while you play — does the glide
-    feel musical (too slow, too fast)? Tapes keep their own tempo: right,
-    or should they follow (that would mean time-stretching them)?
+    feel musical (too slow, too fast)? Tapes follow it, keeping pitch: how
+    do they sound stretched a long way (a bell's attack can soften a
+    little)? Overdubbing at a new tempo re-records the track first — any
+    loss you can hear after several tempo changes?
 51. **Grids:** whole and half notes at snap can hold a note for a bar or
     more before it rings — useful, or too long? Do the triplet grids and
     32nds earn their place?
@@ -593,7 +599,7 @@ About four minutes; eight files (the voices CPU budget is a process of its own):
   crossfaded; takes always start on a beat (the first sets the downbeat) and
   finish on the nearest one, whole beats of their own lengths; record primes
   a track and the first stone the water rings starts it, at that sample (a
-  touch alone doesn't); retuning never touches a tape; the status frame; bit-identical at
+  touch alone doesn't); retuning never touches a tape; a tape follows a tempo glide keeping its pitch and its place on the beat, the same at any block size, and an overdub at a new tempo re-records it there with both layers in tune; the status frame; bit-identical at
   block sizes 1…8192 and the same loudness over time at 44.1/48/96 kHz; limits
   and bad input; the whole path through the instrument (the tape level, `EV_TAPE`,
   the frame); CPU.

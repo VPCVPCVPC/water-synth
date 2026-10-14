@@ -18,7 +18,7 @@ import { LOOP_RECORD, LOOP_CLEAR_ALL } from './looper.js';
 import { FRAME_TAPES } from './visuals.js';
 import { SIM_RATE } from './surface.js';
 import { performance } from 'node:perf_hooks';
-import { cents, spectrum } from './check-lib.mjs';
+import { cents, spectrum, measurePitch, fftSize } from './check-lib.mjs';
 
 let failures = 0;
 function report(ok, name, detail) {
@@ -799,6 +799,170 @@ console.log('\n16. Record primes; the first stone the water rings starts the tak
     const ok = runs.every((r) => same(r.out, runs[0].out) && same(r.tape, runs[0].tape) && r.start === runs[0].start);
     report(ok, `${overdub ? 'an overdub' : 'a first take'} started by a stone mid-block: tape and output identical at block sizes 64, 128, 1024 and 6144`,
       `take starts at ${runs.map((r) => r.start).join(' / ')}`);
+  }
+}
+
+// ---- 17. Tapes follow the tempo, keeping their pitch -------------------------------------
+console.log('\n17. Tapes follow the tempo (Dash: "Recorded tapes should follow tempo changes!"), keeping pitch');
+{
+  // A deck with a real grid that steps as the stream runs (so the tempo can glide).
+  const tempoRig = (block = 128, rate = 48000) => {
+    const grid = new GestureLooper();
+    grid.setParam('bpm', 120);
+    const d = new TapeDeck({ sampleRate: rate, grid });
+    grid.gridUser = d;
+    let pos = 0, step = -1;
+    const L = new Float32Array(block), R = new Float32Array(block);
+    const run = (seconds, live = () => 0, at = []) => {
+      const end = pos + Math.round(seconds * rate), out = new Float64Array(end - pos), start = pos;
+      let q = 0;
+      while (pos < end) {
+        while (q < at.length && at[q].sample <= pos) at[q++].fn();
+        let m = Math.min(block, end - pos);
+        if (q < at.length && at[q].sample < pos + m) m = at[q].sample - pos;
+        const last = Math.floor(((pos + m - 1) * SIM_RATE) / rate);
+        while (step < last) grid.onStep(++step, null); // the grid runs ahead of the tape, as in the instrument
+        for (let i = 0; i < m; i++) { const v = live((pos + i) / rate); L[i] = v; R[i] = v; }
+        d.now = pos;
+        d.process(L, R, m);
+        for (let i = 0; i < m; i++) out[pos - start + i] = L[i];
+        pos += m;
+      }
+      return out;
+    };
+    return { d, grid, rate, run, get pos() { return pos; } };
+  };
+  const sine = (hz, a = 0.3) => (t) => a * Math.sin(2 * Math.PI * hz * t);
+  // Record 4 beats of 440 Hz at 120 bpm (2 s), starting the grid with it.
+  const take = (block) => {
+    const T = tempoRig(block);
+    T.run(0.1, () => 0, [{ sample: 0, fn: () => { T.d.action(0, TAPE_RECORD); T.d.rang(); } }]);
+    T.run(1.9, sine(440));
+    T.run(0.5, sine(440), [{ sample: T.pos, fn: () => T.d.action(0, TAPE_RECORD) }]);
+    return T;
+  };
+  {
+    const T = take(128), d = T.d;
+    const lenBefore = d.length[0];
+    T.grid.setParam('bpm', 90);
+    T.run(3); // the glide settles
+    const out = T.run(4);
+    const p = measurePitch(out, T.rate, 440, fftSize(T.rate));
+    report(d.state[0] === PLAYING && d.recBpm[0] === 120 && p.hz && Math.abs(cents(p.hz, 440)) < 3,
+      'at 90 bpm, a tape recorded at 120 still sounds at its own pitch', p.hz ? `${p.hz.toFixed(2)} Hz (${cents(p.hz, 440).toFixed(2)}¢), recorded at ${d.recBpm[0]} bpm` : p.error);
+    // Stays on the beat: the playhead, in beats, matches the grid's beats since the loop's top.
+    const f = new Float32Array(TAPE_FIELDS * TAPE_TRACKS); d.writeStatus(f, 0);
+    const loopSec = f[2], beatSec = 60 / T.grid.bpm;
+    report(lenBefore === d.length[0] && Math.abs(loopSec / beatSec - 4) < 0.01,
+      'the 4-beat loop now lasts 4 beats at 90 bpm (2.67 s), the tape itself unchanged', `${loopSec.toFixed(3)} s = ${(loopSec / beatSec).toFixed(3)} beats`);
+    const tapeBeats = (f[3] / beatSec) % 4, gridBeats = ((T.grid.beatPosition() % 4) + 4) % 4;
+    const diff = Math.min(Math.abs(tapeBeats - gridBeats), 4 - Math.abs(tapeBeats - gridBeats));
+    report(diff < 0.02, 'after the glide, the tape is still on the beat', `tape at beat ${tapeBeats.toFixed(3)} of 4, grid at ${gridBeats.toFixed(3)}`);
+  }
+  {
+    // CPU: four tapes, all following a different tempo (the grain alignment
+    // is the cost), per 128-sample block.
+    const T = tempoRig(128), d = T.d;
+    for (let k = 0; k < 4; k++) {
+      T.run(0.05, () => 0, [{ sample: T.pos, fn: () => { d.action(k, TAPE_RECORD); d.rang(); } }]);
+      T.run(1.95, sine(220 * (k + 1)));
+      T.run(0.6, () => 0, [{ sample: T.pos, fn: () => d.action(k, TAPE_RECORD) }]);
+    }
+    T.grid.setParam('bpm', 97);
+    T.run(3);
+    let best = Infinity;
+    for (let rep = 0; rep < 3; rep++) { const t0 = performance.now(); T.run(2); best = Math.min(best, ((performance.now() - t0) * 1000) / ((2 * 48000) / 128)); }
+    report(d.state.every((x) => x === PLAYING) && best / 2667 < 0.15, `4 tapes following the tempo: ${best.toFixed(0)} µs/block, ${((best / 2667) * 100).toFixed(1)}%`, 'limit 15%');
+  }
+  {
+    // Stale audio must never come back: a re-recording whose tempo glides
+    // mid-pass writes every sample of the new loop, and a gap the playhead
+    // races through (tempo up during the first pass) is still all silence.
+    const T = take(128), d = T.d;
+    d.L.fill(4, d.spare * d.capacity, (d.spare + 1) * d.capacity); d.R.fill(4, d.spare * d.capacity, (d.spare + 1) * d.capacity); // an old take in the spare
+    T.grid.setParam('bpm', 90); T.run(3);
+    T.run(0.01, () => 0, [{ sample: T.pos, fn: () => { d.action(0, TAPE_RECORD); d.rang(); } }]);
+    T.run(1, sine(660, 0.2));
+    T.grid.setParam('bpm', 150); // mid-pass
+    T.run(4, sine(660, 0.2));
+    T.run(0.01, () => 0, [{ sample: T.pos, fn: () => d.action(0, TAPE_RECORD) }]);
+    const out = T.run(4);
+    report(peak(out) < 1, 'a re-recording that glides mid-pass leaves nothing of an older take', `peak ${peak(out).toFixed(3)}`);
+  }
+  {
+    const T = tempoRig(128), d = T.d;
+    d.L.fill(5, 0, d.capacity); d.R.fill(5, 0, d.capacity); // an old take where the gap will be
+    T.grid.setParam('quantize', 1); T.run(0.3); // a beat running, so the take starts late in it (a gap)
+    T.run(0.5, () => 0, [{ sample: T.pos + Math.round(0.2 * T.rate), fn: () => { d.action(0, TAPE_RECORD); d.rang(); } }]);
+    T.run(1.6, sine(440));
+    T.run(0.6, sine(440), [{ sample: T.pos, fn: () => d.action(0, TAPE_RECORD) }]);
+    T.grid.setParam('bpm', 240); // through the gap at up to twice the speed
+    const out = T.run(4);
+    report(d.length[0] > 0 && peak(out) < 1, 'a gap raced through at twice the speed is still silence', `peak ${peak(out).toFixed(3)}`);
+  }
+  {
+    // An overdub held through a glide: it waits while the tempo moves, then
+    // re-records at the new tempo — the dub is kept, never dropped.
+    const T = take(128), d = T.d;
+    T.run(0.01, () => 0, [{ sample: T.pos, fn: () => { d.action(0, TAPE_RECORD); d.rang(); } }]); // dub at its own tempo
+    T.run(0.5, sine(880, 0.3));
+    T.grid.setParam('bpm', 150);
+    T.run(8, sine(880, 0.3)); // through the glide and a pass at 150
+    let top = 0;
+    for (let i = 0; i < d.length[0]; i++) top = Math.max(top, Math.abs(d.L[d.slot[0] * d.capacity + i]));
+    report(d.recBpm[0] === 150 && top > 0.5, 'an overdub held through a glide re-records at the new tempo and keeps the dub', `recorded at ${d.recBpm[0]} bpm, tape peak ${top.toFixed(2)}`);
+  }
+  {
+    // CPU at 192 kHz: the search costs the same as at 48 kHz.
+    const T = tempoRig(128, 192000), d = T.d;
+    for (let k = 0; k < 4; k++) {
+      T.run(0.05, () => 0, [{ sample: T.pos, fn: () => { d.action(k, TAPE_RECORD); d.rang(); } }]);
+      T.run(1.95, sine(220 * (k + 1)));
+      T.run(0.6, () => 0, [{ sample: T.pos, fn: () => d.action(k, TAPE_RECORD) }]);
+    }
+    T.grid.setParam('bpm', 97); T.run(2);
+    let worst = 0;
+    const t0 = performance.now(), blocks = (2 * 192000) / 128;
+    for (let b = 0; b < blocks; b++) { const s0 = performance.now(); T.run(128 / 192000); worst = Math.max(worst, performance.now() - s0); }
+    const avg = ((performance.now() - t0) * 1000) / blocks, budget = (128 / 192000) * 1e6;
+    report(avg / budget < 0.3, `4 tapes following the tempo at 192 kHz: ${avg.toFixed(0)} µs/block on average, ${((avg / budget) * 100).toFixed(1)}% (worst block ${(worst * 1000).toFixed(0)} µs)`, 'limit 30%');
+  }
+  {
+    // The same glide at block sizes 64 and 1024: identical output.
+    const a = take(64), b = take(1024);
+    a.grid.setParam('bpm', 150); b.grid.setParam('bpm', 150);
+    const oa = a.run(3), ob = b.run(3);
+    let same = oa.length === ob.length;
+    for (let i = 0; same && i < oa.length; i++) if (oa[i] !== ob[i]) same = false;
+    report(same, 'gliding to 150 bpm: identical at block sizes 64 and 1024');
+  }
+  {
+    // Overdub at a new tempo: the track is re-recorded at it, and both layers keep their pitch.
+    const T = take(128), d = T.d;
+    T.grid.setParam('bpm', 90);
+    T.run(3);
+    T.run(0.01, () => 0, [{ sample: T.pos, fn: () => { d.action(0, TAPE_RECORD); d.rang(); } }]);
+    T.run(3, sine(660, 0.2)); // a pass and a bit (4 beats at 90 = 2.67 s)
+    T.run(0.01, () => 0, [{ sample: T.pos, fn: () => d.action(0, TAPE_RECORD) }]); // end the dub
+    const beat90 = (60 * T.rate) / 90;
+    report(d.recBpm[0] === 90 && Math.abs(d.length[0] - 4 * beat90) < 2 && d.bounceT === -1,
+      'an overdub at 90 bpm re-records the track at 90 (4 beats long), then carries on as usual', `recorded at ${d.recBpm[0]} bpm, ${(d.length[0] / beat90).toFixed(3)} beats`);
+    T.grid.setParam('bpm', 120);
+    T.run(3);
+    const out = T.run(4);
+    // (Each tone's own peak, within ±60¢ — two tones at once, so not measurePitch's lowest-partial guard.)
+    const size = fftSize(T.rate), mag = spectrum(out, size), bin = T.rate / size;
+    const peakNear = (hz) => {
+      const lo = Math.floor((hz * 2 ** (-60 / 1200)) / bin), hi = Math.ceil((hz * 2 ** (60 / 1200)) / bin);
+      let k = lo; for (let i = lo; i <= hi; i++) if (mag[i] > mag[k]) k = i;
+      if (k <= lo || k >= hi) return { error: 'no peak' };
+      const a = Math.log(mag[k - 1]), b = Math.log(mag[k]), c = Math.log(mag[k + 1]);
+      return { hz: (k + (0.5 * (a - c)) / (a - 2 * b + c)) * bin };
+    };
+    const p1 = peakNear(440), p2 = peakNear(660);
+    report(p1.hz && p2.hz && Math.abs(cents(p1.hz, 440)) < 3 && Math.abs(cents(p2.hz, 660)) < 3,
+      'back at 120 bpm, the old layer and the dub are both at their own pitch',
+      `${p1.hz ? p1.hz.toFixed(2) : p1.error} Hz, ${p2.hz ? p2.hz.toFixed(2) : p2.error} Hz`);
   }
 }
 

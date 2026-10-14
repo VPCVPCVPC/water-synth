@@ -52,6 +52,7 @@ export const LOOPER_PARAMS = {
 
 const BEATS_PER_BAR = 4;
 const GRIDS = [0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8]; // the grids the page offers (points per beat)
+const BPM_LOG = 4096; // steps of tempo history kept (4 s)
 // A tempo change glides there over about this (Dash, Oct 2026: "the
 // transition should be smooth, so you can gradually speed up or slow down
 // your piece"), and the beat keeps its place: the grid's origin moves so
@@ -88,6 +89,9 @@ export class GestureLooper {
     this.quantize = LOOPER_PARAMS.quantize.def;
     this.bpm = LOOPER_PARAMS.bpm.def; // the tempo now (gliding toward bpmTarget)
     this.bpmTarget = this.bpm;
+    // The tempo in force at each recent step (a ring), so the tapes can follow
+    // a glide sample by sample, the same however the stream is split.
+    this.bpmLog = new Float64Array(BPM_LOG).fill(this.bpm);
     this.grid = LOOPER_PARAMS.grid.def;
     this.quantizeStrength = LOOPER_PARAMS.quantizeStrength.def;
     this.swing = LOOPER_PARAMS.swing.def;
@@ -115,6 +119,12 @@ export class GestureLooper {
       if (v && this.transportOrigin < 0) this.transportOrigin = this.step + 1; // the beat starts now
       else if (!v) this.releaseGrid();
     }
+  }
+
+  // The tempo in force during step `step` (one of the last BPM_LOG steps;
+  // before the first step ran, the current tempo).
+  bpmAt(step) {
+    return step >= 0 && step <= this.step && this.step - step < BPM_LOG ? this.bpmLog[step & (BPM_LOG - 1)] : this.bpm;
   }
 
   // One step of a tempo glide. The beat count at this step stays as it was:
@@ -215,6 +225,7 @@ export class GestureLooper {
   onStep(step, engine) {
     this.step = step;
     if (this.bpm !== this.bpmTarget) this.glideTempo(step);
+    this.bpmLog[step & (BPM_LOG - 1)] = this.bpm;
     const at = step / SIM_RATE;
     for (let l = 0; l < LOOP_LAYERS; l++) {
       const s = this.state[l];

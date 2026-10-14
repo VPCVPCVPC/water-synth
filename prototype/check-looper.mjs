@@ -562,6 +562,17 @@ console.log('\n12. Tempo glides, and the beat keeps its place');
   report(h.bpm === 150, 'with no beat running, a tempo is set at once');
 }
 
+console.log('\n12b. A beat kept running for the chord progression');
+{
+  const lp = new GestureLooper();
+  lp.setParam('beatOn', 1);
+  const started = lp.transportOrigin >= 0;
+  lp.setParam('beatOn', 0);
+  report(started && lp.transportOrigin === -1, 'beatOn starts a beat when there is none, and letting go frees it (nothing else on it)');
+  lp.setParam('quantize', 1); lp.setParam('beatOn', 1); lp.setParam('beatOn', 0);
+  report(lp.transportOrigin >= 0, 'quantize still holds the beat after beatOn lets go');
+}
+
 console.log('\n13. More grids: whole and half notes, triplets, 32nds');
 {
   const lp = new GestureLooper();

@@ -204,6 +204,17 @@
       box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 3px var(--fg); }
     .slide:focus-visible .sl-thumb { outline: 1px solid var(--fg); outline-offset: 3px; }
     .slide[hidden] { display: none; }
+    /* Chord pads: a row of small keys; the sounding one lit, a tapped one blinking until its bar. */
+    .chords { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .chords .sub { margin: 0; }
+    .pads { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pads:empty::before { content: 'no chords yet — set a root and scale, then save'; color: var(--muted); font-size: 10px; letter-spacing: 0.1em; }
+    .pad-wrap { display: inline-flex; }
+    .pad { min-width: 52px; min-height: 40px; padding: 0 10px; text-transform: none; letter-spacing: 0.06em; }
+    .pad[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+    .pad.pending { animation: blink 0.8s steps(2) infinite; }
+    .pad-del { min-width: 40px; min-height: 40px; padding: 0 6px; border-left: 0; color: var(--muted); white-space: nowrap; }
+    @media (prefers-reduced-motion: reduce) { .pad.pending { animation: none; border-style: dashed; } }
     .slide.off { opacity: 0.35; }
     .slide.off .sl-track { cursor: default; }
     /* The voice: the stone's bell and the synth layer side by side, both in view at once. */
@@ -531,8 +542,8 @@
               <div id="quantize-controls" class="knobs"></div>
             </div>
             <div class="note long">Slide the tempo to speed up or slow down your piece: it glides there and
-              the beat keeps its place. A take starts on a beat and lasts whole beats; a tape keeps the tempo it
-              was recorded at. The pond's rim pulses on the beat. Quantize pulls when stones ring toward the
+              the beat keeps its place. A take starts on a beat and lasts whole beats, and recorded tapes follow
+              the tempo, keeping their pitch. The pond's rim pulses on the beat. Quantize pulls when stones ring toward the
               grid — at full strength every note lands on it; lower, the water keeps more of its own time.</div>
           </fieldset>
       </section>
@@ -577,6 +588,13 @@
                   <button id="ref440" type="button">440</button><button id="ref432" type="button">432</button></div>
               </div>
               <div id="tuning-note" class="note"></div>
+              <div class="chords" role="group" aria-labelledby="chords-head">
+                <span class="sub" id="chords-head">chords — tap one: it changes on the next bar</span>
+                <div class="pads" id="pads"></div>
+                <div class="row"><button id="pad-add" type="button">+ save this as a chord</button></div>
+                <label class="row" style="color: var(--fg); min-height: 40px"><input id="prog" type="checkbox"> play them in order</label>
+                <div id="prog-controls" class="knobs"></div>
+              </div>
             </fieldset>
           </section>
         <section class="page" id="page-voice" data-page="voice" role="tabpanel" aria-labelledby="tab-voice">
@@ -628,6 +646,7 @@
         <li><b>Camera</b> (top bar): move in front of it and your movement makes ripples — the picture stays on this device.</li>
         <li><b>Tap a stone</b> to lift it, then tap the water to set it down. Its sound is under Voice.</li>
         <li><b>Tape</b> records the water's sound and loops it — layer up to four tracks, each with its own fader to fade it in and out. <b>● REC</b> at the top of the pond primes the picked track: the take starts when the water first rings a stone, and ends on the nearest beat when you press it again, so every tape is whole beats of the tempo. Tap <b>TAPE</b> for every track's keys and faders. Or, without leaving the water, <b>swipe two fingers</b> on the pond: <b>up</b> to rec (again to finish), <b>down</b> to play or stop, <b>left / right</b> to change track (on a computer: 1–4, R, P).</li>
+        <li><b>Chords</b> (under Tuning): save a few roots and scales as pads; tap one and the stones change on the next bar — or let them play in order, a few bars each, and record over the progression.</li>
         <li><b>Record piece</b> saves everything you hear as a WAV.</li>
       </ol>
       <p class="note">Sliders: drag along one, or tap where you want it; double-tap to reset. Your settings stay in this browser.

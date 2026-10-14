@@ -271,13 +271,24 @@ to spread evenly over the whole pond. **release placed** (tap twice) frees the
 stones you placed.
 
 **Tuning** — scale (major, natural minor, dorian, major/minor pentatonic,
-chromatic, maqam Rast), root, lowest and highest note (C1–C8), and the
+chromatic, maqam Rast, or a chord: major, minor, sus2, sus4, maj7, min7, 7),
+root, lowest and highest note (C1–C8), and the
 reference pitch (A4 in Hz, 400–480 in this prototype; 440 and 432 one tap
 away — the tuning core itself takes any frequency). The stones slider decides
 how many stones share the scale notes in the range. Note names are relative
 to A4 at the chosen reference (at 432 Hz, A4 is still labelled "A4"). Changing these retunes the stones; it
 never touches the water. A stone still ringing keeps its old pitch until it's
 next struck, then its old ring crossfades out over 100 ms.
+
+**Chords** (under Tuning) — **+ save this as a chord** keeps the current root
+and scale (or chord) as a pad, up to 8. Tap a pad and the stones change to it
+on the next bar line (at once if no beat runs) — the same stones in the same
+places, only their notes change. **play them in order** steps through the
+pads by itself, **bars each** bars per chord, counted from the beat's
+downbeat (it starts a beat if none runs); tapping a pad takes over again.
+Record a take a whole number of chords long and every pass carries the
+changes; overdubs line up with them. × (tap twice) removes a pad. Pads are
+kept with your settings.
 
 **Voice** — what a struck stone sounds like. Every stone shares one voice
 (Dash: per-stone voices are off the page). The editor shows the **bell** and
@@ -478,6 +489,12 @@ voice editor untouched you hear exactly the Phase 1c bell.
 51. **Grids:** whole and half notes at snap can hold a note for a bar or
     more before it rings — useful, or too long? Do the triplet grids and
     32nds earn their place?
+52. **Chord pads and progression:** build a 4-chord progression and record
+    over it. Is "on the next bar line" the right moment (or should a tap
+    change at once, or on the next beat)? Are chord-only scales (just the
+    chord's notes) musical in the water, or would you rather keep the
+    scale and only move the root? Should pads live on the pond too, for
+    playing changes live?
 
 ### Decisions for Dash
 

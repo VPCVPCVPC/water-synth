@@ -47,6 +47,7 @@ export const LOOPER_PARAMS = {
   // sixteenths, 6 sixteenth triplets, 8 thirty-seconds.
   grid: { min: 0.25, max: 8, def: 2 },
   quantizeStrength: { min: 0, max: 1, def: 1 }, // 0 = as played, 1 = snapped (Dash: snap by default)
+  beatOn: { min: 0, max: 1, def: 0 }, // 1: keep a beat running (the chord progression needs one)
   swing: { min: 0, max: 0.5, def: 0 }, // fraction of a grid step that every second step is pushed late
 };
 
@@ -87,6 +88,7 @@ export class GestureLooper {
     // alive while it holds a tape on it.
     this.gridUser = null;
     this.quantize = LOOPER_PARAMS.quantize.def;
+    this.beatOn = LOOPER_PARAMS.beatOn.def;
     this.bpm = LOOPER_PARAMS.bpm.def; // the tempo now (gliding toward bpmTarget)
     this.bpmTarget = this.bpm;
     // The tempo in force at each recent step (a ring), so the tapes can follow
@@ -103,7 +105,7 @@ export class GestureLooper {
     const p = LOOPER_PARAMS[name];
     if (!p || !Number.isFinite(value)) return;
     let v = value < p.min ? p.min : value > p.max ? p.max : value;
-    if (name === 'quantize') v = Math.round(v);
+    if (name === 'quantize' || name === 'beatOn') v = Math.round(v);
     if (name === 'grid') { // one of the grids
       let near = GRIDS[0];
       for (let i = 1; i < GRIDS.length; i++) if (Math.abs(GRIDS[i] - v) < Math.abs(near - v)) near = GRIDS[i];
@@ -115,7 +117,7 @@ export class GestureLooper {
       return;
     }
     this[name] = v;
-    if (name === 'quantize') {
+    if (name === 'quantize' || name === 'beatOn') {
       if (v && this.transportOrigin < 0) this.transportOrigin = this.step + 1; // the beat starts now
       else if (!v) this.releaseGrid();
     }
@@ -159,7 +161,7 @@ export class GestureLooper {
       for (let l = 0; l < LOOP_LAYERS; l++) this.clear(l);
       // A fresh start: a new beat from now if quantize is on (unless a tape
       // still holds the old one).
-      if (!(this.gridUser && this.gridUser.usesGrid())) this.transportOrigin = this.quantize ? this.step + 1 : -1;
+      if (!(this.gridUser && this.gridUser.usesGrid())) this.transportOrigin = this.quantize || this.beatOn ? this.step + 1 : -1;
       return;
     }
     if (!Number.isInteger(layer) || layer < 0 || layer >= LOOP_LAYERS) return;
@@ -411,7 +413,7 @@ export class GestureLooper {
 
   // Forget the bar grid once nothing is on it any more: no loop, and no tape.
   releaseGrid() {
-    if (this.quantize || !this.allEmpty() || (this.gridUser && this.gridUser.usesGrid())) return;
+    if (this.quantize || this.beatOn || !this.allEmpty() || (this.gridUser && this.gridUser.usesGrid())) return;
     this.transportOrigin = -1;
   }
 

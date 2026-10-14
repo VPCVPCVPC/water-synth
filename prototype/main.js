@@ -194,6 +194,16 @@ function confirmButton(button, action) {
 
 const ROOTS = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
 const tuning = { scale: 'pentatonicMajor', root: 0, low: 48, high: 84, refHz: 440, stoneCount: 0 }; // stoneCount 0: one per note
+// Chord pads (Dash, Oct 2026: "the best way to do a chord change if you
+// wanted to have a progression built into your recording"): each holds a
+// root and a scale (or chord); tapping one retunes the stones on the next
+// bar line, and the progression plays them in order, `bars` bars each,
+// counted from the beat's own downbeat — so takes on the beat line up with
+// the changes. (Declared here: restoreSession reads them.)
+const MAX_PADS = 8;
+const pads = []; // { scale, root }
+const progression = { on: false, bars: 2 };
+let padActive = -1, padPending = -1, padAtBar = -1; // the pad sounding; the one tapped, and the bar it waits for
 const layout = { seed: 0, spread: 1 };
 const placed = new Map(); // stone index → { x, y } placed by hand
 let stones = { xs: new Float64Array(0), ys: new Float64Array(0), hzs: [], labels: [], count: 0 };
@@ -201,7 +211,9 @@ let stonesUnsent = false;
 
 let notesInRange = 0, stoneCountKnob = null; // scale notes in the range; the stone-count knob
 let scaleNotes = []; // the scale notes in range, low to high — where a stone sits picks one
-function retune() {
+// `keepStones`: a chord change — same stones in the same places, only their
+// notes change (a pad's chord may have more or fewer notes in range).
+function retune(keepStones = false) {
   let pitches;
   try {
     pitches = buildPitches({
@@ -210,11 +222,14 @@ function retune() {
     });
   } catch (err) {
     setTuningNote(`${err.message} — keeping the previous ${stones.count} stones`);
-    return;
+    return false;
   }
-  if (pitches.length === 0) { setTuningNote(`no scale notes in this range — keeping the previous ${stones.count} stones`); return; }
+  if (pitches.length === 0) { setTuningNote(`no scale notes in this range — keeping the previous ${stones.count} stones`); return false; }
   notesInRange = pitches.length;
   scaleNotes = pitches;
+  // A chord change keeps the stones: if that's not one per note any more,
+  // the count is pinned (so what's shown, and the next retune, agree).
+  if (keepStones && stones.count && stones.count !== (tuning.stoneCount || notesInRange)) tuning.stoneCount = stones.count;
   const count = tuning.stoneCount || notesInRange;
   stoneNote();
   if (stoneCountKnob) stoneCountKnob.refresh();
@@ -224,6 +239,7 @@ function retune() {
   stones = withPitches({ ...kept, count });
   sendStones();
   refreshVoice(); // a stone the editor was on may be gone
+  return true;
 }
 
 // "16 notes in range · 16 stones · low left, high right" (or bottom → top upright).
@@ -288,6 +304,126 @@ function fillSelect(id, entries, value) {
   return sel;
 }
 
+// ---- chord pads and the progression ---------------------------------------------------
+
+// "C maj7", "A m", "F sus4"… short enough for a pad.
+const CHORD_SHORT = {
+  // (Syncopate has only capitals, so "m" would read as "M": minor is spelled out.)
+  majorTriad: '', minorTriad: 'min', sus2: 'sus2', sus4: 'sus4', major7: 'maj7', minor7: 'min7', dominant7: '7',
+  major: 'major', minor: 'minor', dorian: 'dorian', pentatonicMajor: 'pent', pentatonicMinor: 'min pent', chromatic: 'chrom', rast: 'rast',
+};
+const CHORD_TIGHT = new Set(['', '7', 'maj7', 'sus2', 'sus4']); // written straight after the root
+const padName = (p) => {
+  const short = CHORD_SHORT[p.scale];
+  if (short === undefined) return `${ROOTS[p.root]} ${SCALES[p.scale].name}`;
+  return CHORD_TIGHT.has(short) ? `${ROOTS[p.root]}${short}` : `${ROOTS[p.root]} ${short}`;
+};
+
+function applyPad(i) {
+  const p = pads[i];
+  if (!p) return;
+  const was = { scale: tuning.scale, root: tuning.root };
+  tuning.scale = p.scale; tuning.root = p.root;
+  if (!retune(true)) { Object.assign(tuning, was); padPending = -1; padFailed = i; paintPadState(); return; } // no notes in the range: stays as it was
+  document.getElementById('scale').value = p.scale;
+  document.getElementById('root').value = String(p.root);
+  padActive = i; padPending = -1;
+  // A tap that took over from the progression kept its beat running until
+  // the chord landed; now it can go (unless a tape or quantize holds it).
+  if (!progression.on && values.beatOn) { values.beatOn = 0; sendParam('beatOn'); }
+  paintPadState();
+}
+// A pad tapped: on the next bar line if the beat runs, else now. Tapping
+// one takes over from the progression (live changes win).
+function queuePad(i, beat) {
+  // (The progression stops but its beat runs on until this chord lands.)
+  if (progression.on) { progression.on = false; document.getElementById('prog').checked = false; }
+  if (beat < 0) { applyPad(i); return; }
+  padPending = i; padAtBar = Math.floor(beat / 4) + 1;
+  paintPadState();
+}
+let lastBeat = -1, padFailed = -1, padFailedBar = -1; // a pad that couldn't apply: not retried until the next bar
+function chordsOnBeat(beat) {
+  lastBeat = beat;
+  // A chord waiting for a bar line the beat won't bring (it stopped, or
+  // started over from a new downbeat): it lands now.
+  if (beat < 0) { if (padPending >= 0) applyPad(padPending); return; }
+  const bar = Math.floor(beat / 4);
+  if (padPending >= 0 && (bar >= padAtBar || bar < padAtBar - 1)) applyPad(padPending);
+  if (bar !== padFailedBar) { padFailed = -1; padFailedBar = bar; }
+  if (progression.on && pads.length) {
+    const i = Math.floor(bar / progression.bars) % pads.length;
+    if (i !== padActive && i !== padFailed) applyPad(i);
+  }
+}
+function setProgression(on) {
+  progression.on = on && pads.length > 0;
+  document.getElementById('prog').checked = progression.on;
+  // Switched off with a chord still waiting for its bar: it lands now; on,
+  // the progression takes over from it.
+  if (padPending >= 0) { if (progression.on) padPending = -1; else applyPad(padPending); }
+  // The progression keeps a beat running (it starts one if there's none yet).
+  values.beatOn = progression.on ? 1 : 0;
+  sendParam('beatOn');
+  paintPadState();
+}
+// The tuning changed by hand: no pad is sounding any more.
+function padsLetGo() { if (padActive >= 0) { padActive = -1; paintPadState(); } }
+// Which pad is sounding, and which is waiting — without rebuilding the pads
+// (focus, and a × tapped once, stay put).
+function paintPadState() {
+  document.querySelectorAll('#pads .pad').forEach((b, i) => {
+    b.setAttribute('aria-pressed', i === padActive ? 'true' : 'false');
+    b.classList.toggle('pending', i === padPending);
+    const p = pads[i];
+    if (p) b.setAttribute('aria-label', `${ROOTS[p.root]} ${SCALES[p.scale].name}${i === padPending ? ', on the next bar' : ''}`);
+  });
+}
+// The pads themselves — only when the list changes.
+function paintPads() {
+  const box = document.getElementById('pads');
+  box.replaceChildren(...pads.map((p, i) => {
+    const wrap = document.createElement('span');
+    wrap.className = 'pad-wrap';
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pad';
+    b.textContent = padName(p);
+    b.title = `${ROOTS[p.root]} ${SCALES[p.scale].name} — on the next bar line`;
+    b.addEventListener('click', () => { wake(); queuePad(i, lastBeat); });
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'pad-del'; del.textContent = '×';
+    del.setAttribute('aria-label', `remove the ${ROOTS[p.root]} ${SCALES[p.scale].name} pad (tap twice)`);
+    confirmButton(del, () => {
+      pads.splice(i, 1);
+      if (padActive === i) padActive = -1; else if (padActive > i) padActive--;
+      if (padPending === i) padPending = -1; else if (padPending > i) padPending--;
+      if (!pads.length) setProgression(false);
+      paintPads();
+    });
+    wrap.append(b, del);
+    return wrap;
+  }));
+  document.getElementById('pad-add').disabled = pads.length >= MAX_PADS;
+  document.getElementById('prog').disabled = pads.length === 0;
+  paintPadState();
+}
+function buildChordControls() {
+  document.getElementById('pad-add').addEventListener('click', () => {
+    if (pads.length >= MAX_PADS) return;
+    pads.push({ scale: tuning.scale, root: tuning.root });
+    padActive = pads.length - 1;
+    paintPads();
+  });
+  document.getElementById('prog').addEventListener('change', (e) => setProgression(e.target.checked));
+  const bars = slide({
+    label: 'bars each', hint: 'how many bars each chord lasts when the progression plays them in order',
+    get: () => progression.bars, set: (v) => { progression.bars = v; }, def: 2, steps: 7, keyStep: 1 / 7,
+    to: (v) => (v - 1) / 7, from: (f) => 1 + Math.round(f * 7), show: (v) => `${v} bar${v === 1 ? '' : 's'}`,
+  });
+  document.getElementById('prog-controls').append(bars.el);
+  paintPads();
+}
+
 function buildTuningControls() {
   const notes = [];
   for (let n = RANGE_LOW; n <= RANGE_HIGH; n++) notes.push([n, noteLabel(n)]);
@@ -298,8 +434,8 @@ function buildTuningControls() {
   const ref = document.getElementById('ref');
   ref.value = tuning.refHz;
 
-  scale.addEventListener('change', () => { tuning.scale = scale.value; retune(); });
-  root.addEventListener('change', () => { tuning.root = Number(root.value); retune(); });
+  scale.addEventListener('change', () => { tuning.scale = scale.value; retune(); padsLetGo(); });
+  root.addEventListener('change', () => { tuning.root = Number(root.value); retune(); padsLetGo(); });
   low.addEventListener('change', () => {
     tuning.low = Number(low.value);
     if (tuning.high < tuning.low) { tuning.high = tuning.low; high.value = String(tuning.high); }
@@ -1150,6 +1286,7 @@ function restoreSession() {
     if (v !== undefined) values[k] = (k === 'quantize' || k === 'bpm') ? Math.round(v) : v;
   }
   values.grid = GRID_CHOICES[gridIndex(values.grid)][0]; // one of the page's grids
+  values.beatOn = 0; // (the progression starts off; it turns the beat on itself)
   const t = saved.tuning || {};
   if (typeof t.scale === 'string' && Object.prototype.hasOwnProperty.call(SCALES, t.scale)) tuning.scale = t.scale;
   const root = num(t.root, 0, 11); if (root !== undefined) tuning.root = Math.round(root);
@@ -1157,6 +1294,13 @@ function restoreSession() {
   if (low !== undefined && high !== undefined && low <= high) { tuning.low = Math.round(low); tuning.high = Math.round(high); }
   const ref = num(t.refHz, REF_MIN_HZ, REF_MAX_HZ); if (ref !== undefined) tuning.refHz = ref;
   const count = num(t.stoneCount, 0, MAX_STONES); if (count !== undefined) tuning.stoneCount = Math.round(count);
+  const ch = saved.chords || {};
+  for (const p of Array.isArray(ch.pads) ? ch.pads : []) {
+    const r = num(p && p.root, 0, 11);
+    if (pads.length < MAX_PADS && p && typeof p.scale === 'string' && Object.prototype.hasOwnProperty.call(SCALES, p.scale) && r !== undefined) pads.push({ scale: p.scale, root: Math.round(r) });
+  }
+  padActive = pads.findIndex((p) => p.scale === tuning.scale && p.root === tuning.root);
+  const bars = num(ch.bars, 1, 8); if (bars !== undefined) progression.bars = Math.round(bars);
   const l = saved.layout || {};
   const seed = num(l.seed, 0, 1e9); if (seed !== undefined) layout.seed = Math.round(seed);
   const spread = num(l.spread, 0, 1); if (spread !== undefined) layout.spread = spread;
@@ -1181,6 +1325,7 @@ let lastSaved = '';
 function saveSession() {
   const json = JSON.stringify({
     v: 1, values, tuning, layout, placed: [...placed].map(([i, p]) => [i, p.x, p.y]),
+    chords: { pads, bars: progression.bars },
     voices: { shared: voiceValues.get(SHARED) },
     animate: { mode: animator.mode === 'camera' ? 'off' : animator.mode, speed: animator.speed, path: animator.path.map((p) => [p.x, p.y]) },
     faders: tapeFaders,
@@ -1239,6 +1384,7 @@ if (FEEDBACK_URL) {
 }
 
 buildTuningControls();
+buildChordControls();
 buildKnobs();
 buildVoiceControls();
 buildSavedVoices();
@@ -1941,6 +2087,7 @@ function draw(now) {
   // follow the tempo): the rim pulses whenever there's a beat to play to.
   const beating = beatAt >= 0;
   const beat = beating ? beatAt + ((now - beatTime) / 1000) * (values.bpm / 60) : -1;
+  chordsOnBeat(beat);
   // A frame of perfectly still water after another one changes nothing on screen.
   if (frame && frame[0] === 0 && lastFrameEnergy === 0 && frame[1] === 0) frame = null;
   if (frame) lastFrameEnergy = frame[0];

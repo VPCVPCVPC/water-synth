@@ -64,7 +64,7 @@ export class VisualReader {
     this.frame = new Float32Array(sab, 8);
     this.copy = new Float32Array(this.frame.length);
     this.scratch = new Float32Array(this.frame.length);
-    this.lastSeq = -1;
+    this.lastSeq = 0; // (seq 0 is the empty frame before the audio's first write: never handed out)
   }
 
   // Returns the latest complete frame, or null if there's nothing new/whole.

@@ -23,6 +23,15 @@ export const SCALES = Object.freeze({
   chromatic: scale('Chromatic', [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100]),
   // Maqam Rast on its tonic: E and B are half-flat (24-TET quarter tones).
   rast: scale('Maqam Rast', [0, 200, 350, 500, 700, 900, 1050]),
+  // Chords (Dash, Oct 2026: chord changes for a progression): only the
+  // chord's notes, repeated up the range — the stones ring nothing else.
+  majorTriad: scale('Major chord', [0, 400, 700]),
+  minorTriad: scale('Minor chord', [0, 300, 700]),
+  sus2: scale('Sus2 chord', [0, 200, 700]),
+  sus4: scale('Sus4 chord', [0, 500, 700]),
+  major7: scale('Major 7th chord', [0, 400, 700, 1100]),
+  minor7: scale('Minor 7th chord', [0, 300, 700, 1000]),
+  dominant7: scale('Dominant 7th chord', [0, 400, 700, 1000]),
 });
 
 export const REFERENCES = Object.freeze({

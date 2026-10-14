@@ -118,7 +118,8 @@ both are in view at once (Dash, Oct 2026).
   takes keep and tapes follow. Moving it glides there and the beat keeps its place, "so you
   can gradually speed up or slow down your piece" (the water's flow is a
   separate thing and never changes with it). It starts with the first take
-  (or when quantize notes is turned on), and while it runs the pond's rim
+  (or when quantize notes or the chord progression is turned on), and while
+  it runs the pond's rim
   pulses on it. **Quantize notes** (optional, off by default) pulls *when
   stones ring* toward the beat grid — whole notes down to 32nds, triplets
   included, on a stepped slider — with a strength control from lean to snap (the default when enabled),
@@ -264,6 +265,16 @@ Hard pitch snapping fights the concept of a flowing medium. (This is pitch,
 not the loopers' timing quantize.) The water can bend a ringing
 stone's pitch (e.g. pressure from passing waves); quantization strength sets
 how firmly the stone is pulled back to its scale degree, and glide how fast.
+
+**Chord changes** (Dash, Oct 2026: "the best way to do a chord change if you
+wanted to have a progression built into your recording"): chords are scales
+too (major, minor, sus, 7ths — only the chord's notes), and **chord pads**
+hold a root and a scale or chord each. Tapping a pad retunes the stones on
+the next bar line (at once if no beat runs) — same stones in the same places, only their notes change
+— and a **progression** plays the pads in order, some bars each, counted
+from the beat's own downbeat (turning it on starts a beat if none runs), so
+takes on the beat carry the changes and overdubs line up with them. The
+water never changes; tapes keep the tuning they were recorded in.
 
 Later, if it earns its place: MTS-ESP support and MPE per-note pitch.
 

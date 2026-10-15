@@ -310,7 +310,8 @@ function fillSelect(id, entries, value) {
 const CHORD_SHORT = {
   // (Syncopate has only capitals, so "m" would read as "M": minor is spelled out.)
   majorTriad: '', minorTriad: 'min', sus2: 'sus2', sus4: 'sus4', major7: 'maj7', minor7: 'min7', dominant7: '7',
-  major: 'major', minor: 'minor', dorian: 'dorian', pentatonicMajor: 'pent', pentatonicMinor: 'min pent', chromatic: 'chrom', rast: 'rast',
+  diminished: 'dim', halfDiminished7: 'min7b5',
+  major: 'major', minor: 'minor', dorian: 'dorian', phrygian: 'phryg', lydian: 'lydian', mixolydian: 'mixo', locrian: 'locrian', pentatonicMajor: 'pent', pentatonicMinor: 'min pent', chromatic: 'chrom', rast: 'rast',
 };
 const CHORD_TIGHT = new Set(['', '7', 'maj7', 'sus2', 'sus4']); // written straight after the root
 const padName = (p) => {
@@ -372,12 +373,15 @@ function padsLetGo() { if (padActive >= 0) { padActive = -1; paintPadState(); } 
 // Which pad is sounding, and which is waiting — without rebuilding the pads
 // (focus, and a × tapped once, stay put).
 function paintPadState() {
-  document.querySelectorAll('#pads .pad').forEach((b, i) => {
+  document.querySelectorAll('#pads .pad, #pond-pads .pond-pad').forEach((b) => {
+    const i = Number(b.dataset.i);
     b.setAttribute('aria-pressed', i === padActive ? 'true' : 'false');
     b.classList.toggle('pending', i === padPending);
     const p = pads[i];
     if (p) b.setAttribute('aria-label', `${ROOTS[p.root]} ${SCALES[p.scale].name}${i === padPending ? ', on the next bar' : ''}`);
   });
+  const order = document.querySelector('#pond-pads .pond-order');
+  if (order) order.setAttribute('aria-pressed', progression.on ? 'true' : 'false');
 }
 // The pads themselves — only when the list changes.
 function paintPads() {
@@ -403,6 +407,22 @@ function paintPads() {
     wrap.append(b, del);
     return wrap;
   }));
+  box.querySelectorAll('.pad').forEach((b, i) => { b.dataset.i = String(i); });
+  // On the pond: the same pads, and the progression's switch.
+  const pond = document.getElementById('pond-pads');
+  const order = document.createElement('button');
+  order.type = 'button'; order.className = 'pond-order'; order.textContent = 'in order';
+  order.title = 'play the chords in order, on the bar';
+  order.addEventListener('click', () => { wake(); setProgression(!progression.on); });
+  pond.replaceChildren(order, ...pads.map((p, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pond-pad'; b.dataset.i = String(i);
+    b.textContent = padName(p);
+    b.title = `${ROOTS[p.root]} ${SCALES[p.scale].name} — on the next bar line`;
+    b.addEventListener('click', () => { wake(); queuePad(i, lastBeat); });
+    return b;
+  }));
+  pond.hidden = pads.length === 0;
   document.getElementById('pad-add').disabled = pads.length >= MAX_PADS;
   document.getElementById('prog').disabled = pads.length === 0;
   paintPadState();

@@ -15,9 +15,16 @@ const scale = (name, cents) => Object.freeze({ name, cents: Object.freeze(cents)
 
 // Read-only: callers can't alter the built-ins by accident.
 export const SCALES = Object.freeze({
-  major: scale('Major', [0, 200, 400, 500, 700, 900, 1100]),
-  minor: scale('Natural minor', [0, 200, 300, 500, 700, 800, 1000]),
+  // The seven modes, in order (Dash, Oct 2026: "each scale degree
+  // represented to go with each chord"): the major scale started on each
+  // of its degrees. Keys are kept as saved settings know them.
+  major: scale('Major (Ionian)', [0, 200, 400, 500, 700, 900, 1100]),
   dorian: scale('Dorian', [0, 200, 300, 500, 700, 900, 1000]),
+  phrygian: scale('Phrygian', [0, 100, 300, 500, 700, 800, 1000]),
+  lydian: scale('Lydian', [0, 200, 400, 600, 700, 900, 1100]),
+  mixolydian: scale('Mixolydian', [0, 200, 400, 500, 700, 900, 1000]),
+  minor: scale('Natural minor (Aeolian)', [0, 200, 300, 500, 700, 800, 1000]),
+  locrian: scale('Locrian', [0, 100, 300, 500, 600, 800, 1000]),
   pentatonicMajor: scale('Major pentatonic', [0, 200, 400, 700, 900]),
   pentatonicMinor: scale('Minor pentatonic', [0, 300, 500, 700, 1000]),
   chromatic: scale('Chromatic', [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100]),
@@ -32,6 +39,9 @@ export const SCALES = Object.freeze({
   major7: scale('Major 7th chord', [0, 400, 700, 1100]),
   minor7: scale('Minor 7th chord', [0, 300, 700, 1000]),
   dominant7: scale('Dominant 7th chord', [0, 400, 700, 1000]),
+  // The seventh degree's chords, so every degree of a mode has its own.
+  diminished: scale('Diminished chord', [0, 300, 600]),
+  halfDiminished7: scale('Half-diminished 7th chord', [0, 300, 600, 1000]),
 });
 
 export const REFERENCES = Object.freeze({

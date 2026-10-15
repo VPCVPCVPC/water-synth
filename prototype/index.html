@@ -77,10 +77,12 @@
        below; tuning and voice down the right. A phone on its side: the pond
        on the left, the pages beside it. --below is the room kept under the
        pond so the controls start above the fold. */
-    .instrument { --below: 330px; width: min(100%, 1400px); display: flex; flex-direction: column; align-items: center; }
-    .stage { width: min(100%, calc((100dvh - var(--below)) * 128 / 97)); min-width: min(100%, 300px);
+    .instrument { --below: 330px; --pads: 0px; width: min(100%, 1400px); display: flex; flex-direction: column; align-items: center; }
+    /* Chord pads, once there are any, take a row under the pond. */
+    .instrument:has(#pond-pads:not([hidden])) { --pads: 50px; }
+    .stage { width: min(100%, calc((100dvh - var(--below) - var(--pads)) * 128 / 97)); min-width: min(100%, 300px);
       display: flex; flex-direction: column; -webkit-user-select: none; user-select: none; }
-    .instrument.rotated .stage { width: min(100%, calc((100dvh - var(--below)) * 97 / 128)); }
+    .instrument.rotated .stage { width: min(100%, calc((100dvh - var(--below) - var(--pads)) * 97 / 128)); }
     .tabs { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-bottom: 1px solid var(--edge);
       margin-top: 10px; position: sticky; top: 0; z-index: 2; background: var(--bg); }
     .tabs button { border: 0; border-bottom: 2px solid transparent; padding: 10px 0 8px; font-size: 10px; letter-spacing: 0.06em;
@@ -106,7 +108,7 @@
     @media (orientation: landscape) and (max-height: 599px) {
       /* A phone on its side: the pond fills the height, the pages beside it. */
       .instrument { --below: 76px; display: grid; align-items: start; column-gap: 18px; grid-template-rows: auto 1fr;
-        grid-template-columns: min(62vw, calc((100dvh - var(--below)) * 128 / 97)) minmax(0, 1fr); }
+        grid-template-columns: min(62vw, calc((100dvh - var(--below) - var(--pads)) * 128 / 97)) minmax(0, 1fr); }
       .instrument > .stage, .instrument.rotated > .stage { grid-row: 1 / span 2; width: 100%; min-width: 0; position: sticky; top: 8px; }
       .tabs { margin-top: 0; }
     }
@@ -115,7 +117,7 @@
       /* The pond with its strip along the bottom (tabs: water | stones), the
          beat under it, the tape below; tuning and voice down the right. */
       .instrument { --below: 325px; --side: clamp(300px, 26vw, 380px);
-        --pond: max(520px, min(calc(100vw - 32px - 26px - var(--side)), calc((100dvh - var(--below)) * 128 / 97)));
+        --pond: max(520px, min(calc(100vw - 32px - 26px - var(--side)), calc((100dvh - var(--below) - var(--pads)) * 128 / 97)));
         display: grid; align-items: start; justify-content: center; column-gap: 26px;
         grid-template-columns: var(--pond) var(--side);
         grid-template-rows: auto auto auto auto 1fr;
@@ -125,6 +127,7 @@
       /* The strip sits in the pond's frame. */
       .tabs { grid-area: tabs; margin: 0; position: static; display: flex; background: var(--surface);
         border: 1px solid var(--edge); border-top: 0; border-bottom: 1px solid var(--edge); padding: 0 8px; }
+      .instrument:has(#pond-pads:not([hidden])) .tabs { border-top: 1px solid var(--edge); } /* the pads sit between */
       .tabs button { flex: none; padding: 9px 12px 7px; }
       .tabs button:not([data-page="water"]):not([data-page="stones"]) { display: none; }
       #page-water, #page-stones { grid-area: strip; background: var(--surface); border: 1px solid var(--edge); border-top: 0;
@@ -210,6 +213,18 @@
     .pads { display: flex; flex-wrap: wrap; gap: 6px; }
     .pads:empty::before { content: 'no chords yet — set a root and scale, then save'; color: var(--muted); font-size: 10px; letter-spacing: 0.1em; }
     .pad-wrap { display: inline-flex; }
+    /* The same pads right under the pond, off the water: no stone is ever
+       hidden behind them. */
+    .pond-pads { display: flex; gap: 4px; margin-top: 6px; height: 44px; overflow-x: auto; overscroll-behavior-x: contain;
+      scrollbar-width: none; }
+    .pond-pads::-webkit-scrollbar { display: none; }
+    .pond-pads .pond-order { position: sticky; left: 0; z-index: 1; background: var(--bg); }
+    .pond-pads[hidden] { display: none; }
+    .pond-pads button { flex: none; min-height: 40px; min-width: 44px; padding: 0 9px; font-size: 10px; letter-spacing: 0.06em;
+      border-color: var(--faint); background: transparent; }
+    .pond-pads button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+    .pond-pads .pending { animation: blink 0.8s steps(2) infinite; }
+    @media (prefers-reduced-motion: reduce) { .pond-pads .pending { animation: none; border-style: dashed; } }
     .pad { min-width: 52px; min-height: 40px; padding: 0 10px; text-transform: none; letter-spacing: 0.06em; }
     .pad[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
     .pad.pending { animation: blink 0.8s steps(2) infinite; }
@@ -307,7 +322,7 @@
     /* Open: the whole tape in one performance space — four tracks, each with
        rec, play/stop, mute, clear and a fader, and clear all. */
     .quick-deck { display: none; }
-    .quick.open { padding: 6px; max-height: calc(100% - 16px); overflow-y: auto; overscroll-behavior: contain; }
+    .quick.open { padding: 6px; max-height: calc(100% - 16px - var(--pads)); overflow-y: auto; overscroll-behavior: contain; }
     .quick.open .quick-deck { display: grid; grid-template-columns: repeat(4, 40px); gap: 4px; justify-items: stretch; }
     .quick.open .quick-pick, .quick.open .quick-rec { display: none; }
     .quick-deck .qd-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
@@ -484,6 +499,9 @@
           <button type="button" class="quick-rec" id="quick-rec" aria-keyshortcuts="R" title="record · finish · dub (key R)"><span class="dot"></span><span class="word">rec</span></button>
         </div>
         <div class="swipe-note" id="swipe-note" role="status" aria-live="polite"></div>
+        <!-- Chord pads right under the pond (Dash, Oct 2026: "the pads should sit on the pond or
+             right next to it"): the same pads as under Tuning, to change chords while you play. -->
+        <div class="pond-pads" id="pond-pads" role="group" aria-label="chords" hidden></div>
         <div class="meter" aria-hidden="true"><div class="track"><div id="output" class="fill"></div></div></div>
       </div>
       <nav class="tabs" role="tablist" aria-label="controls">

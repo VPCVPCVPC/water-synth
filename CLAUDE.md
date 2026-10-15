@@ -268,12 +268,16 @@ how firmly the stone is pulled back to its scale degree, and glide how fast.
 
 **Chord changes** (Dash, Oct 2026: "the best way to do a chord change if you
 wanted to have a progression built into your recording"): chords are scales
-too (major, minor, sus, 7ths — only the chord's notes), and **chord pads**
+too (major, minor, sus, diminished, 7ths — only the chord's notes; with
+the seven modes, every degree has its own chord or mode, Dash: "each scale
+degree represented to go with each chord"), and **chord pads**
 hold a root and a scale or chord each. Tapping a pad retunes the stones on
 the next bar line (at once if no beat runs) — same stones in the same places, only their notes change
 — and a **progression** plays the pads in order, some bars each, counted
 from the beat's own downbeat (turning it on starts a beat if none runs), so
 takes on the beat carry the changes and overdubs line up with them. The
+pads sit right under the pond too, in a strip, for changing chords
+while playing (Dash: "the pads should sit on the pond or right next to it"). The
 water never changes; tapes keep the tuning they were recorded in.
 
 Later, if it earns its place: MTS-ESP support and MPE per-note pitch.

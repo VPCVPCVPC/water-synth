@@ -270,8 +270,10 @@ others, since their places pick their notes). **spread** goes from gathered in l
 to spread evenly over the whole pond. **release placed** (tap twice) frees the
 stones you placed.
 
-**Tuning** — scale (major, natural minor, dorian, major/minor pentatonic,
-chromatic, maqam Rast, or a chord: major, minor, sus2, sus4, maj7, min7, 7),
+**Tuning** — scale (the seven modes in degree order: major/Ionian, dorian,
+phrygian, lydian, mixolydian, natural minor/Aeolian, locrian; major/minor
+pentatonic, chromatic, maqam Rast; or a chord: major, minor, sus2, sus4, maj7,
+min7, 7, dim, min7b5 — every degree of a mode has its triad and 7th),
 root, lowest and highest note (C1–C8), and the
 reference pitch (A4 in Hz, 400–480 in this prototype; 440 and 432 one tap
 away — the tuning core itself takes any frequency). The stones slider decides
@@ -288,7 +290,9 @@ pads by itself, **bars each** bars per chord, counted from the beat's
 downbeat (it starts a beat if none runs); tapping a pad takes over again.
 Record a take a whole number of chords long and every pass carries the
 changes; overdubs line up with them. × (tap twice) removes a pad. Pads are
-kept with your settings.
+kept with your settings. Once you have pads, they also sit right under the pond,
+in a strip (**in order** there turns the progression on and
+off), so you can change chords while you play.
 
 **Voice** — what a struck stone sounds like. Every stone shares one voice
 (Dash: per-stone voices are off the page). The editor shows the **bell** and
@@ -493,8 +497,9 @@ voice editor untouched you hear exactly the Phase 1c bell.
     over it. Is "on the next bar line" the right moment (or should a tap
     change at once, or on the next beat)? Are chord-only scales (just the
     chord's notes) musical in the water, or would you rather keep the
-    scale and only move the root? Should pads live on the pond too, for
-    playing changes live?
+    scale and only move the root? Do the pads under the pond help you
+    change chords live? With the seven modes and every degree's chord,
+    do you build progressions from chords, from modes, or both?
 
 ### Decisions for Dash
 

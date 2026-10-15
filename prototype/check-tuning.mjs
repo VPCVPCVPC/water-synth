@@ -42,6 +42,18 @@ console.log('\n2. Building pitches from scale, root and range');
   report(p.map((x) => x.label).join(' ') === 'G3 A3 B3 C4 D4 E4 F4 G4', 'D dorian, G3–G4 (root inside range)', p.map((x) => x.label).join(' '));
 }
 {
+  // The seven modes are the major scale started on each of its degrees, and
+  // every degree's chord (diminished on the seventh) is inside the scale.
+  const modes = ['major', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'minor', 'locrian'];
+  const maj = SCALES.major.cents;
+  const rotated = modes.every((k, d) => SCALES[k].cents.join() === maj.map((_, i) => (maj[(i + d) % 7] - maj[d] + 1200) % 1200).join());
+  const triads = ['majorTriad', 'minorTriad', 'minorTriad', 'majorTriad', 'majorTriad', 'minorTriad', 'diminished'];
+  const sevenths = ['major7', 'minor7', 'minor7', 'major7', 'dominant7', 'minor7', 'halfDiminished7'];
+  const fits = (k, d) => SCALES[k].cents.every((c) => maj.includes((maj[d] + c) % 1200));
+  report(rotated && triads.every(fits) && sevenths.every(fits),
+    'the seven modes rotate the major scale, and each degree has its triad and 7th chord');
+}
+{
   // Range that isn't on scale notes at either end.
   const p = buildPitches({ scale: SCALES.major, root: 60, low: 60.5, high: 63.5 });
   report(p.map((x) => x.note).join(',') === '62', 'range edges between scale notes include only what lies inside', p.map((x) => x.label).join(' '));

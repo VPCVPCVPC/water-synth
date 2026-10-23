@@ -1524,13 +1524,13 @@ function syncCamera() {
   const want = cameraRipples || animator.mode === 'camera';
   const note = document.getElementById('camera-note');
   // A word in the status line, then back to what it said (the playing hint).
-  const say = (text) => {
+  const say = (text, ms = 5000) => {
     if (note) note.textContent = text;
     const before = statusBack ? status.dataset.before : status.textContent;
     clearTimeout(statusBack);
     status.dataset.before = before;
     status.textContent = text;
-    statusBack = setTimeout(() => { statusBack = 0; if (status.textContent === text) status.textContent = before; }, 5000);
+    statusBack = setTimeout(() => { statusBack = 0; if (status.textContent === text) status.textContent = before; }, ms);
   };
   if (want && !camera.on && !document.hidden) {
     const ask = ++cameraAsk;
@@ -1541,11 +1541,25 @@ function syncCamera() {
       showCamera();
     }).catch((err) => {
       if (ask !== cameraAsk || camera.on) return; // a newer start, or it's running after all
-      if (cameraRipples || animator.mode === 'camera') say(`no camera: ${err && err.message ? err.message : err}`);
+      // A browser that was once told "block" (or a computer that keeps the
+      // camera from the browser) refuses at once, with no question asked:
+      // say where to let it in.
+      if (cameraRipples || animator.mode === 'camera') say(cameraTrouble(err), 15000);
       if (cameraRipples) showCameraRipples(false); // the button lets go (without asking again)
     });
   } else if (!want) { cameraAsk++; camera.stop(); } // also cancels a start still asking
   showCamera();
+}
+function cameraTrouble(err) {
+  const name = err && err.name;
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    // Chrome says "by system" when the Mac itself keeps the camera from it.
+    if (/system/i.test(err.message || '')) return 'the computer blocks the camera for this browser — allow it in System Settings, Privacy & Security, Camera, then restart the browser';
+    return 'camera blocked for this page — allow it from the icon in the address bar, then try again';
+  }
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'no camera found on this device';
+  if (name === 'NotReadableError' || name === 'AbortError') return 'the camera is busy — close other apps using it, then try again';
+  return `no camera: ${err && err.message ? err.message : err}`;
 }
 function showCamera() {
   document.getElementById('camera').classList.toggle('on', camera.on);

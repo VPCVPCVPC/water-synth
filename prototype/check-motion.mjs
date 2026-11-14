@@ -88,8 +88,11 @@ console.log('\n3b. The same frame twice teaches nothing');
 
 console.log('\n4. Stronger for more movement');
 {
-  const small = drops(run(new MotionGestures(), [...Array.from({ length: 10 }, () => frame()), frame([{ x: 16, y: 12, r: 1, v: 220 }]), frame([{ x: 17, y: 12, r: 1, v: 220 }])]));
-  const big = drops(run(new MotionGestures(), [...Array.from({ length: 10 }, () => frame()), frame([{ x: 16, y: 12, r: 4 }]), frame([{ x: 17, y: 12, r: 4 }])]));
+  // (At the most sensitive setting, so a small move counts at all: this is
+  // about how hard, not whether.)
+  const keen = () => { const g = new MotionGestures(); g.sensitivity = 1; return g; };
+  const small = drops(run(keen(), [...Array.from({ length: 10 }, () => frame()), frame([{ x: 16, y: 12, r: 1, v: 140 }]), frame([{ x: 17, y: 12, r: 1, v: 140 }])]));
+  const big = drops(run(keen(), [...Array.from({ length: 10 }, () => frame()), frame([{ x: 16, y: 12, r: 4 }]), frame([{ x: 17, y: 12, r: 4 }])]));
   report(small.length === 1 && big.length >= 1 && Math.max(...big.map((e) => e.strength)) > small[0].strength && big.every((e) => e.strength <= 2),
     'a bigger, sharper movement drops harder (never harder than the hardest touch)',
     `small ${small[0] ? small[0].strength.toFixed(2) : '—'} (${small.length}), big ${big[0] ? big[0].strength.toFixed(2) : '—'} (${big.length})`);
@@ -176,18 +179,18 @@ console.log('\n10. Sensitivity');
   const low = at(0), high = at(1);
   report(low === 0 && high === 1, 'a small, faint movement: ignored at the lowest sensitivity, caught at the highest', `low ${low}, high ${high}`);
   const g = new MotionGestures();
-  report(g.sensitivity === 0.5, 'the default sits in the middle');
+  report(g.sensitivity === 0.4, 'the default sits a little below the middle (Dash: "still too sensitive")');
   // Dash, Nov 2026: "way too sensitive" — at the default, a small, faint
   // movement (a finger, a shadow) is let be; a hand still plays.
   seed = 99;
   const dflt = drops(run(new MotionGestures(), scene())).length;
   report(dflt === 0, 'at the default, a small, faint movement makes no ripple', `${dflt} drops`);
-  // … but a hand-sized one does, even moving slowly in a grainy room: its
-  // edges are weighed together, not each alone.
+  // … but a hand waved clearly does, even in a grainy room: its edges are
+  // weighed together, not each alone.
   seed = 5;
   const hand = run(new MotionGestures(), [...Array.from({ length: 30 }, () => frame([], 8)),
-    ...Array.from({ length: 12 }, (_, k) => frame([{ x: 6 + k, y: 12, r: 3, v: 150 }], 8))]);
-  report(drops(hand).length >= 1, 'at the default, a hand (7 × 7 cells, faint, one cell a frame, grainy room) drops a ripple', `${drops(hand).length} drops, ${drags(hand).length} trail`);
+    ...Array.from({ length: 12 }, (_, k) => frame([{ x: 4 + 2 * k, y: 12, r: 3, v: 180 }], 8))]);
+  report(drops(hand).length >= 1, 'at the default, a hand (7 × 7 cells, clear, a quick wave, grainy room) drops a ripple', `${drops(hand).length} drops, ${drags(hand).length} trail`);
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll motion checks passed.');

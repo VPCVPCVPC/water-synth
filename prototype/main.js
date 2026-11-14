@@ -1336,7 +1336,9 @@ function restoreSession() {
   if (typeof an.mode === 'string' && ['off', 'drift', 'path', 'water'].includes(an.mode)) restoredAnimate = an.mode; // never the camera unasked
   const speed = num(an.speed, 0, 1); if (speed !== undefined) animator.speed = speed;
   if (Array.isArray(an.path)) animator.setPath(an.path.slice(0, 2000).map((p) => ({ x: num(p && p[0], 0, 1), y: num(p && p[1], 0, 1) })));
-  const sense = num(saved.cameraSensitivity, 0, 1); if (sense !== undefined) motionGestures.sensitivity = sense;
+  // (Saved under a new name since the Nov 2026 rescale: an older saved sense
+  // meant something else, so it starts again from the default.)
+  const sense = num(saved.cameraSense, 0, 1); if (sense !== undefined) motionGestures.sensitivity = sense;
   if (Array.isArray(saved.faders)) for (let t = 0; t < TRACKS; t++) { const f = num(saved.faders[t], 0, 1); if (f !== undefined) tapeFaders[t] = f; }
   // (Stones' own voices from older sessions are left behind: one voice now.)
   if (saved.voices && saved.voices.shared) voiceValues.set(SHARED, voice(saved.voices.shared));
@@ -1349,7 +1351,7 @@ function saveSession() {
     voices: { shared: voiceValues.get(SHARED) },
     animate: { mode: animator.mode === 'camera' ? 'off' : animator.mode, speed: animator.speed, path: animator.path.map((p) => [p.x, p.y]) },
     faders: tapeFaders,
-    cameraSensitivity: motionGestures.sensitivity,
+    cameraSense: motionGestures.sensitivity,
   });
   if (json === lastSaved) return;
   try { localStorage.setItem(SESSION_KEY, json); lastSaved = json; } catch { /* private window: not kept */ }

@@ -16,15 +16,17 @@ const MATCH = 0.18; // a spot this close (frame widths) to one seen last frame i
 const LOST_SECONDS = 0.15; // a spot unseen this long has stopped
 // How readily movement counts, from sensitivity 0 (only big, sharp moves)
 // to 1 (small ones too): the bar above the camera's grain, and the movement
-// a spot needs. The default sits in the middle.
-// (Raised Nov 2026 — Dash: "it's way too sensitive currently": the middle
-// now needs about a third more change, and a moving thing 2½ times the
-// movement — weighed over the whole thing, so a hand still plays and a
-// small flicker doesn't; the bottom needs much more; the top is as before.)
-const GRAIN_TIMES = [10, 3]; // movement must beat this many times the grain …
+// a spot needs. The default sits a little below the middle.
+// (Raised twice in Nov 2026 — Dash: "it's way too sensitive currently",
+// then "still too sensitive": the default, below the middle, now wants
+// about twice the change over the grain and six times the movement it did
+// in October — a clear, quick hand; the bottom only a big sweep; the top
+// is as before, for a dim, quiet room. Movement is weighed over the whole
+// moving thing, so a hand counts whole.)
+const GRAIN_TIMES = [14, 3]; // movement must beat this many times the grain …
 const BAR_FLOOR = 8; // … plus this many luminance steps
-const MIN_MASS = [700, 40]; // movement (luminance steps × cells) a spot needs to count
-export const DEFAULT_SENSITIVITY = 0.5;
+const MIN_MASS = [1400, 40]; // movement (luminance steps × cells) a spot needs to count
+export const DEFAULT_SENSITIVITY = 0.4;
 const SPOT_APART = 0.17; // frame widths: closer peaks are one moving thing (a hand is one spot, not several)
 const SPOT_REACH = 3; // cells each side over which a spot's movement is weighed
 const LASTING_REACH = 5; // … and, against the frame before last, a merged spot's (a hand's two edges)

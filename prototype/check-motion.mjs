@@ -53,7 +53,8 @@ console.log('\n2. Something starts moving: one drop, where it is (mirrored)');
 
 console.log('\n3. Moving on: a steady trail that follows it, not more drops');
 // A hand sweeping at a steady pace, in a landscape frame and in a portrait
-// one (a phone held upright): the trail must keep going one way at about the
+// one (a phone held upright): the trail — reported every 0.12 s at most, so
+// it isn't busy — must keep going one way at about the
 // hand's own speed — never hopping back and forth between the hand's front
 // and back edges (each hop would be a hard slap: trail strength grows with speed).
 for (const [w, h, axis] of [[32, 24, 'x'], [24, 32, 'y']]) {
@@ -74,7 +75,7 @@ for (const [w, h, axis] of [[32, 24, 'x'], [24, 32, 'y']]) {
   // (The first moments catch the spot up from where it was first seen to the
   // hand's centre; after that it must keep the hand's pace.)
   const top = Math.max(...t.slice(3).map((e) => e.speed));
-  report(d.length <= 1 && t.length >= 10 && backwards === 0 && top < 2 * truth,
+  report(d.length <= 1 && t.length >= 4 && t.length <= 9 && backwards === 0 && top < 2 * truth,
     `${w}×${h} frame: a sweep draws a trail that keeps going one way, at about its own speed`,
     `${d.length} drop, ${t.length} drags, ${backwards} backwards; fastest after the start ${top.toFixed(2)} vs true ${truth.toFixed(2)} per s`);
 }
@@ -115,8 +116,8 @@ console.log('\n6. Never a flood');
     for (let j = 0; j < 6; j++) blobs.push({ x: Math.floor(rand() * W), y: Math.floor(rand() * H), r: 2 });
     fs.push(frame(k % 2 ? blobs : []));
   }
-  const d = drops(run(g, fs));
-  report(d.length <= 6 * 2 + 6, 'at most ~6 drops a second, however busy the picture', `${d.length} drops in 2 s`);
+  const out = run(g, fs), n = drops(out).length + drags(out).length; // trails' drops count too
+  report(n <= 5 * 2 + 5, 'at most ~5 camera ripples a second in all (starts and trails), however busy the picture', `${n} in 2 s`);
 }
 
 console.log('\n7. Stops: nothing more once it\'s still');

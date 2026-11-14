@@ -1,8 +1,9 @@
 // motion.js — movement in front of the camera becomes gestures, like touch
 // (CLAUDE.md, "Camera / motion input"): where something starts moving, a
 // drop — harder for more movement; while it keeps moving, a drag that follows
-// it. A dancer's hand sweeping across the frame draws a trail of ripples; a
-// sudden flick drops one. The water, the stones and the tape don't care where
+// it (which the page lays down as a few light drops along the way). A
+// dancer's hand sweeping across the frame draws a trail of ripples; a sudden
+// flick drops one. The water, the stones and the tape don't care where
 // a gesture came from.
 //
 // Pure and page-side: update() takes two small grey frames (Uint8 luminance,
@@ -33,8 +34,9 @@ const LASTING_REACH = 5; // … and, against the frame before last, a merged spo
 const MASS_PER_STRENGTH = 900; // a hand's quick wave ≈ strength 1
 const MAX_STRENGTH = 2; // as hard as the hardest touch
 const MIN_STRENGTH = 0.3;
-const MAX_DROPS_PER_SECOND = 6; // the camera never floods the water
+const MAX_DROPS_PER_SECOND = 5; // every camera ripple, starts and trails together: the camera never floods the water
 const MIN_DRAG = 0.008; // frame widths: smaller wobbles aren't a drag
+const DRAG_EVERY = 0.12; // seconds: a followed spot reports its trail this often at most (Dash: the trails were "too busy")
 const NOISE_ADAPT = 0.1; // how fast the grain estimate follows the camera (per frame)
 const FOLLOW = 0.6; // a followed spot moves this far toward where it's seen each frame (steadies a wobbling centre)
 
@@ -195,7 +197,8 @@ export class MotionGestures {
           continue;
         }
         const x = o.x + (s.x - o.x) * FOLLOW, y = o.y + (s.y - o.y) * FOLLOW, d = Math.hypot(x - o.x, y - o.y);
-        if (d >= MIN_DRAG) {
+        if (d >= MIN_DRAG && this.time - o.moved >= DRAG_EVERY - 1e-6 && this.dropTokens >= 1) {
+          this.dropTokens -= 1; // a trail's drop spends from the same allowance
           // The pace, steadied over a few frames (a 32-cell picture moves in
           // whole-cell steps; trail strength grows with speed, so a jerky
           // pace would come out as uneven slaps).

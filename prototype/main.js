@@ -31,6 +31,7 @@ import {
 const SAMPLE_RATE = 48000;
 const GRID_W = SURFACE_W, GRID_H = SURFACE_H; // the water's cells
 const ASPECT = GRID_H / GRID_W;
+const CAMERA_GAIN = 0.45; // camera ripples against a touch's (Dash, Nov 2026: "too strong")
 const STONE_HIT_MOUSE_PX = 10, STONE_HIT_TOUCH_PX = 18; // how close a tap must be to pick up a stone
 const LIFT_TAP_MS = 300; // a press on a stone shorter than this (and still) lifts it
 const LIFT_TIMEOUT_MS = 5000; // a lifted stone left alone goes back down
@@ -700,7 +701,7 @@ function buildKnobs() {
   // sensitive" — a room's grain and flicker must never play). Shown while
   // the camera makes ripples.
   cameraSenseRow = slide({
-    label: 'camera sense', hint: 'how much movement the camera needs before it makes a ripple — lower for a busy or flickering room',
+    label: 'camera sense', hint: 'how much movement the camera needs before it makes a ripple, and how hard its ripples are — lower for a busy room or gentler water',
     get: () => motionGestures.sensitivity, set: (v) => { motionGestures.sensitivity = v; }, def: DEFAULT_SENSITIVITY,
     to: (v) => v, from: (f) => f, show: (v) => `${Math.round(v * 100)}%`,
   });
@@ -1518,8 +1519,8 @@ function setAnimate(mode) {
 
 // ---- the camera: movement makes ripples, and/or steers the stones ------------------------
 //
-// One camera serves both: "camera" in the bar (your movement drops and drags
-// ripples, like touch) and Animate's "camera" (it steers the stones). It's on
+// One camera serves both: "camera" in the bar (your movement drops ripples,
+// and trails of light ones, like touch) and Animate's "camera" (it steers the stones). It's on
 // while either wants it. Everything stays on this device: the picture is
 // shrunk to a 32 × 24 grey thumbnail here and compared with the last one.
 function syncCamera() {
@@ -1584,15 +1585,19 @@ document.getElementById('camera-toggle').addEventListener('click', () => { wake(
 function cameraGestures(now) {
   if (!cameraRipples || !events || !camera.fresh) return;
   for (const g of motionGestures.update(camera.prev, camera.cur, camera.w, camera.h, camera.dt)) {
+    // Gentler than a finger (Dash, Nov 2026: each ripple "too big", the
+    // trails "too busy"): drops at under half a touch's strength, softer
+    // still at a lower camera sense, and a trail is a few light drops along
+    // the way (one each time the movement is reported), not a stroke.
+    const soft = CAMERA_GAIN * (0.4 + 0.6 * motionGestures.sensitivity);
     if (g.type === 'drop') {
       const p = fromCanvas(g.x, g.y);
-      events.push(EV_DROP, p.x, p.y, g.strength);
+      events.push(EV_DROP, p.x, p.y, g.strength * soft);
       camMarks.push({ x: p.x, y: p.y, at: now });
     } else {
-      const a = fromCanvas(g.x0, g.y0), b = fromCanvas(g.x1, g.y1);
-      const across = Math.hypot(g.x1 - g.x0, g.y1 - g.y0), took = across / g.speed; // seconds the move took
-      const speed = Math.sqrt((b.x - a.x) ** 2 + ((b.y - a.y) * ASPECT) ** 2) / took; // surface-widths per second, as for a drag
-      if (speed > 0 && Number.isFinite(speed)) events.push(EV_STROKE, a.x, a.y, b.x, b.y, Math.min(16, speed));
+      const b = fromCanvas(g.x1, g.y1);
+      const strength = Math.min(0.9, 0.25 + 0.3 * g.speed) * soft; // a quicker move, a firmer drop
+      if (strength > 0 && Number.isFinite(strength)) events.push(EV_DROP, b.x, b.y, strength);
       camMarks.push({ x: b.x, y: b.y, at: now });
     }
   }

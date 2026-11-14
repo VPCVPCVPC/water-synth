@@ -113,7 +113,9 @@ both are in view at once (Dash, Oct 2026).
   playback is a natural input for Erosion later, so loops are stored as timed
   gesture events. (Stir, built since, isn't recorded yet: a returning looper
   must record its stream of stir states, let-go included — and the hand
-  states of Still, if Still returns.)
+  states of Still, if Still returns. The camera's trails now arrive as
+  light drops, so a returning looper would record them as drops, which
+  quantize could lean toward the grid.)
 - **The beat** (Dash, Oct 2026): one tempo, a slider always shown, that
   takes keep and tapes follow. Moving it glides there and the beat keeps its place, "so you
   can gradually speed up or slow down your piece" (the water's flow is a
@@ -308,8 +310,8 @@ Build in this order:
 
 **Camera / motion input (first version built Oct 2026, for testing):** a dancer plays the
 instrument with her movement. Camera motion is an input, not Vessel. Motion in
-the camera frame becomes gesture events, like touch — at first drops and drags
-where movement happens, stronger for bigger, quicker movement; how body motion maps to
+the camera frame becomes gesture events, like touch — at first drops, and
+trails of light drops, where movement happens, stronger for bigger, quicker movement; how body motion maps to
 Stir, Wave and Still stays open — so the water, the stones and the loopers
 don't care where a gesture came from. Every
 input source enters through one gesture path, and the gesture looper (when in
@@ -317,8 +319,10 @@ use) records gestures from any source. Motion analysis stays on the device.
 (Animate's *steer by camera*, in testing now, is a second use: the camera
 moves stones and never disturbs the water.) The first version (Dash, Oct
 2026: "motion activation of the ripples"): where movement starts, a drop,
-harder for bigger, sharper movement; while it keeps moving, a drag that
-follows it; up to four moving things at once, at most six drops a second;
+harder for bigger, sharper movement; while it keeps moving, a trail that
+follows it — a few light drops along the way, not a stroke, and every
+camera ripple gentler than a finger's (Dash, Nov 2026: "too strong"); up
+to four moving things at once, at most five camera ripples a second in all;
 mirrored; it learns the camera's grain by itself. It goes through the same
 path as touch (the stones it rings start a primed tape; the tape hears it). Turned on from
 the top bar; it shares the one camera with Animate.

@@ -103,7 +103,7 @@ Voice) forgets them.
   (harder for bigger, sharper movement); while it keeps moving, a trail of
   ripples that follows it, like a drag. It's a mirror: move to your left and
   the ripples are on your left. Up to four moving things at once (two hands,
-  a head…), never more than ten drops a second. It learns your camera's
+  a head…), never more than six drops a second. It learns your camera's
   grain by itself, ignores the whole picture brightening or dimming
   (exposure, flickering lights), and a new movement must carry on into a
   second frame before it drops (Dash: it was "way too sensitive"). While

@@ -318,7 +318,7 @@ use) records gestures from any source. Motion analysis stays on the device.
 moves stones and never disturbs the water.) The first version (Dash, Oct
 2026: "motion activation of the ripples"): where movement starts, a drop,
 harder for bigger, sharper movement; while it keeps moving, a drag that
-follows it; up to four moving things at once, at most ten drops a second;
+follows it; up to four moving things at once, at most six drops a second;
 mirrored; it learns the camera's grain by itself. It goes through the same
 path as touch (the stones it rings start a primed tape; the tape hears it). Turned on from
 the top bar; it shares the one camera with Animate.

@@ -17,16 +17,21 @@ const LOST_SECONDS = 0.15; // a spot unseen this long has stopped
 // How readily movement counts, from sensitivity 0 (only big, sharp moves)
 // to 1 (small ones too): the bar above the camera's grain, and the movement
 // a spot needs. The default sits in the middle.
-const GRAIN_TIMES = [7, 3]; // movement must beat this many times the grain …
+// (Raised Nov 2026 — Dash: "it's way too sensitive currently": the middle
+// now needs about a third more change, and a moving thing 2½ times the
+// movement — weighed over the whole thing, so a hand still plays and a
+// small flicker doesn't; the bottom needs much more; the top is as before.)
+const GRAIN_TIMES = [10, 3]; // movement must beat this many times the grain …
 const BAR_FLOOR = 8; // … plus this many luminance steps
-const MIN_MASS = [240, 40]; // movement (luminance steps × cells) a spot needs to count
+const MIN_MASS = [700, 40]; // movement (luminance steps × cells) a spot needs to count
 export const DEFAULT_SENSITIVITY = 0.5;
 const SPOT_APART = 0.17; // frame widths: closer peaks are one moving thing (a hand is one spot, not several)
 const SPOT_REACH = 3; // cells each side over which a spot's movement is weighed
+const LASTING_REACH = 5; // … and, against the frame before last, a merged spot's (a hand's two edges)
 const MASS_PER_STRENGTH = 900; // a hand's quick wave ≈ strength 1
 const MAX_STRENGTH = 2; // as hard as the hardest touch
 const MIN_STRENGTH = 0.3;
-const MAX_DROPS_PER_SECOND = 10; // the camera never floods the water
+const MAX_DROPS_PER_SECOND = 6; // the camera never floods the water
 const MIN_DRAG = 0.008; // frame widths: smaller wobbles aren't a drag
 const NOISE_ADAPT = 0.1; // how fast the grain estimate follows the camera (per frame)
 const FOLLOW = 0.6; // a followed spot moves this far toward where it's seen each frame (steadies a wobbling centre)
@@ -119,7 +124,7 @@ export class MotionGestures {
           const n = m[yy * w + xx];
           mass += n; sx += n * xx; sy += n * yy;
         }
-        if (mass < minMass) continue;
+        if (!(mass > 0)) continue;
         found.push({ x: 1 - (sx / mass + 0.5) / w, y: (sy / mass + 0.5) / h, mass, sx, sy });
       }
     }
@@ -130,8 +135,10 @@ export class MotionGestures {
       if (g) { g.mass += f.mass; g.sx += f.sx; g.sy += f.sy; }
       else groups.push({ x: f.x, y: f.y, mass: f.mass, sx: f.sx, sy: f.sy });
     }
+    // The movement a spot needs is weighed once its peaks are merged: a broad
+    // hand changes the picture only at its edges, each too thin alone.
     const spots = [];
-    for (const g of groups) spots.push({ x: 1 - (g.sx / g.mass + 0.5) / w, y: (g.sy / g.mass + 0.5) / h, mass: g.mass, cx: g.sx / g.mass, cy: g.sy / g.mass });
+    for (const g of groups) if (g.mass >= minMass) spots.push({ x: 1 - (g.sx / g.mass + 0.5) / w, y: (g.sy / g.mass + 0.5) / h, mass: g.mass, cx: g.sx / g.mass, cy: g.sy / g.mass });
     // Against the frame before last: something there for one frame only
     // appears and vanishes in the same place — two frames of change — but
     // leaves little change across both, so it rarely drops (a blip close to
@@ -144,10 +151,12 @@ export class MotionGestures {
     }
     const lasting = (sp) => {
       if (!before) return true;
-      const x0 = Math.round(sp.cx), y0 = Math.round(sp.cy);
+      // (Over the reach of a merged spot: a hand's leading and trailing
+      // edges both sit within it.)
+      const x0 = Math.round(sp.cx), y0 = Math.round(sp.cy), r = LASTING_REACH;
       let mass = 0;
-      for (let y = Math.max(0, y0 - SPOT_REACH); y <= Math.min(h - 1, y0 + SPOT_REACH); y++) {
-        for (let x = Math.max(0, x0 - SPOT_REACH); x <= Math.min(w - 1, x0 + SPOT_REACH); x++) {
+      for (let y = Math.max(0, y0 - r); y <= Math.min(h - 1, y0 + r); y++) {
+        for (let x = Math.max(0, x0 - r); x <= Math.min(w - 1, x0 + r); x++) {
           const d = Math.abs(cur[y * w + x] - before[y * w + x] - this.beforeShift) - t;
           if (d > 0) mass += d;
         }
@@ -195,7 +204,29 @@ export class MotionGestures {
         }
         o.seen = this.time;
       } else {
-        fresh.push({ x: s.x, y: s.y, seen: this.time, moved: this.time, speed: 0, sure: false, mass: s.mass });
+        fresh.push({ x: s.x, y: s.y, cx: s.cx, cy: s.cy, seen: this.time, moved: this.time, speed: 0, sure: false, mass: s.mass });
+      }
+    }
+    // Something that appeared last frame and isn't seen moving now (a slow
+    // or faint hand: only its thin edges change from here on) still counts
+    // if the picture there stays changed against the frame before last —
+    // it arrived and stayed; a blip would have gone again.
+    for (let k = 0; k < this.spots.length; k++) {
+      const o = this.spots[k];
+      if (taken.has(k) || o.sure || this.time - o.seen > dt * 1.5 || !before || !lasting(o)) continue;
+      // … and something there is still moving now (a slow hand keeps
+      // changing at its edges; a lamp coming on, a screen's new picture, a
+      // head shifting once, has nothing moving the frame after).
+      let moving = 0;
+      const x0 = Math.round(o.cx), y0 = Math.round(o.cy);
+      for (let y = Math.max(0, y0 - LASTING_REACH); y <= Math.min(h - 1, y0 + LASTING_REACH); y++) {
+        for (let x = Math.max(0, x0 - LASTING_REACH); x <= Math.min(w - 1, x0 + LASTING_REACH); x++) moving += m[y * w + x];
+      }
+      if (moving < minMass * 0.25) continue;
+      o.sure = true; o.seen = this.time; o.moved = this.time;
+      if (this.dropTokens >= 1) {
+        this.dropTokens -= 1;
+        out.push({ type: 'drop', x: o.x, y: o.y, strength: Math.min(MAX_STRENGTH, Math.max(MIN_STRENGTH, o.mass / MASS_PER_STRENGTH)) });
       }
     }
     this.spots.push(...fresh);

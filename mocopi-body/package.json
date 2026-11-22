@@ -1,0 +1,11 @@
+{
+  "name": "mocopi-body",
+  "private": true,
+  "type": "module",
+  "description": "Sony mocopi motion sensors → a body and what it's doing (energy, height, spread, stillness…), for any instrument in the browser.",
+  "scripts": {
+    "bridge": "node bridge/bridge.mjs",
+    "demo": "node bridge/bridge.mjs --demo",
+    "check": "node check/check.mjs"
+  }
+}

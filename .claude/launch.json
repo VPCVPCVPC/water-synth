@@ -30,6 +30,15 @@
       ],
       "port": 8125,
       "autoPort": true
+    },
+    {
+      "name": "mocopi-demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "mocopi-body/bridge/bridge.mjs",
+        "--demo"
+      ],
+      "port": 12352
     }
   ]
 }

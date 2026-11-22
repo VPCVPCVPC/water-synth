@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mocopi Body</title>
+<style>
+  :root { --bg: #000; --fg: #fff; --muted: #888; --faint: #333; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 12px/1.4 ui-monospace, Menlo, monospace; letter-spacing: 0.06em; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 320px; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+  h1 { font-size: 12px; font-weight: normal; text-transform: uppercase; letter-spacing: 0.3em; margin: 0 0 8px; }
+  canvas { width: 100%; aspect-ratio: 4 / 3; border: 1px solid var(--faint); display: block; }
+  #status { color: var(--muted); margin: 8px 0 0; min-height: 1.4em; }
+  .row { display: grid; grid-template-columns: 96px 1fr 64px; gap: 8px; align-items: center; margin: 6px 0; }
+  .bar { height: 6px; border: 1px solid var(--faint); position: relative; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--fg); width: 0; }
+  .bar.centred i { left: 50%; }
+  .v { text-align: right; color: var(--muted); }
+  .flag { display: inline-block; padding: 2px 8px; border: 1px solid var(--faint); margin: 8px 8px 0 0; color: var(--muted); }
+  .flag.on { color: var(--bg); background: var(--fg); border-color: var(--fg); }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>mocopi body</h1>
+    <canvas id="view" width="800" height="600" aria-label="the body, from the front and from above"></canvas>
+    <p id="status">connecting…</p>
+  </section>
+  <section aria-label="features">
+    <h1>what the body is doing</h1>
+    <div id="rows"></div>
+    <span class="flag" id="still">still</span><span class="flag" id="lost">lost</span>
+    <p style="color: var(--muted)">Stand still for a second after starting, so it learns which way is up and how tall you are.</p>
+  </section>
+</main>
+<script type="module">
+import { MocopiBody } from '../src/client.js';
+import { BONE } from '../src/skeleton.js';
+
+const url = new URLSearchParams(location.search).get('bridge') || location.origin;
+const body = new MocopiBody({ url });
+const status = document.getElementById('status');
+body.onstatus = (t) => { status.textContent = t; };
+
+const ROWS = [
+  ['energy', (f) => f.energy, 0, 1], ['energy, long', (f) => f.energyLong, 0, 1],
+  ['height', (f) => f.height, -1, 1], ['level', (f) => f.level, 0, 1], ['spread', (f) => f.spread, 0, 1],
+  ['stillness s', (f) => f.stillness, 0, 10],
+  ['left hand', (f) => f.limbs.leftHand, 0, 4], ['right hand', (f) => f.limbs.rightHand, 0, 4],
+  ['left foot', (f) => f.limbs.leftFoot, 0, 4], ['right foot', (f) => f.limbs.rightFoot, 0, 4],
+  ['head', (f) => f.limbs.head, 0, 4], ['hips', (f) => f.limbs.hips, 0, 4],
+];
+const rows = document.getElementById('rows');
+const els = ROWS.map(([name, , lo]) => {
+  const r = document.createElement('div'); r.className = 'row';
+  r.innerHTML = `<span>${name}</span><span class="bar${lo < 0 ? ' centred' : ''}"><i></i></span><span class="v"></span>`;
+  rows.append(r);
+  return { i: r.querySelector('i'), v: r.querySelector('.v') };
+});
+
+const LINKS = [];
+for (let i = 1; i < 27; i++) LINKS.push(i); // each bone to its parent
+const cv = document.getElementById('view'), g = cv.getContext('2d');
+
+function draw() {
+  const f = body.tick(), sk = body.skeleton;
+  ROWS.forEach(([, get, lo, hi], k) => {
+    const v = get(f), e = els[k];
+    if (lo < 0) { const w = Math.max(-1, Math.min(1, v)) * 50; e.i.style.width = `${Math.abs(w)}%`; e.i.style.left = w < 0 ? `${50 + w}%` : '50%'; }
+    else e.i.style.width = `${Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100}%`;
+    e.v.textContent = v.toFixed(2);
+  });
+  document.getElementById('still').classList.toggle('on', f.still);
+  document.getElementById('lost').classList.toggle('on', f.lost);
+  if (f.lost && body.frames) status.textContent = 'no frames — the sensors or the network dropped';
+  else if (body.frames) status.textContent = `${body.frames} frames${f.ready ? '' : ' — stand still: learning up and height'}`;
+
+  g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+  const [ui, us] = f.upAxis || [1, 1];
+  const [a, b] = [0, 1, 2].filter((i) => i !== ui);
+  const hips = sk.world[BONE.root];
+  // Front (left half): across vs up, around the hips. Above (right half): the floor.
+  const S = 200;
+  const front = (p) => [200 + (p[a] - hips[a]) * S, 520 - p[ui] * us * S];
+  const above = (p) => [600 + p[a] * 80, 300 + p[b] * 80];
+  g.strokeStyle = '#333'; g.beginPath(); g.moveTo(400, 20); g.lineTo(400, 580); g.moveTo(20, 520); g.lineTo(380, 520); g.stroke();
+  g.strokeStyle = '#fff'; g.lineWidth = 2;
+  for (const i of LINKS) {
+    const p = sk.parents[i]; if (p < 0) continue;
+    const [x0, y0] = front(sk.world[p]), [x1, y1] = front(sk.world[i]);
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+  }
+  g.fillStyle = '#fff';
+  for (const i of [BONE.head, BONE.l_hand, BONE.r_hand, BONE.l_foot, BONE.r_foot]) { const [x, y] = front(sk.world[i]); g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill(); }
+  const [cx, cy] = above(hips);
+  g.strokeStyle = '#555'; g.lineWidth = 1; g.strokeRect(600 - 160, 300 - 160, 320, 320);
+  g.beginPath(); g.arc(cx, cy, 6 + 20 * f.spread, 0, 7); g.stroke();
+  g.fillStyle = '#888'; g.font = '12px ui-monospace, monospace';
+  g.fillText('front', 20, 30); g.fillText('from above (2 m each way)', 440, 30);
+  requestAnimationFrame(draw);
+}
+body.start();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

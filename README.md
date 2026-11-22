@@ -20,6 +20,8 @@ source/dsp/      portable DSP — no JUCE, no platform code, unit-tested
 source/plugin/   JUCE plugin wrapper, parameters, MIDI, audio↔UI bridge
 ui/              WebView interface source
 prototype/       browser sketches of the medium
+app/             the phone and tablet app (Capacitor)
+mocopi-body/     Sony mocopi sensors → a body and its features, for any instrument
 tests/           unit tests and offline render/analysis harnesses
 tools/           scripts for rendering, benchmarking, validation
 docs/            setup and design documentation

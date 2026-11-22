@@ -325,9 +325,151 @@ camera ripple gentler than a finger's (Dash, Nov 2026: "too strong"); up
 to four moving things at once, at most five camera ripples a second in all;
 mirrored; it learns the camera's grain by itself. It goes through the same
 path as touch (the stones it rings start a primed tape; the tape hears it). Turned on from
-the top bar; it shares the one camera with Animate.
+the top bar; it shares the one camera with Animate. Body-worn sensors (Sony mocopi, `mocopi-body/`) are a
+second motion input, through the same gesture path; see Dancer Mode.
 
 Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
+
+## Dancer Mode (Dash, Nov 2026 — for Kacie)
+
+> Design draft for Dash's review; only the mocopi package (below) is built —
+> the dancer page is not.
+
+Dash: "a version of this that is totally driven by her movements, but remains
+interesting and changing and generative in a way that can work for a full
+60-minute set." A dancer, Kacie, plays the instrument with her body alone, on
+stage, with the pond projected for the audience.
+
+**Still the same instrument.** The core idea holds: she never picks a note,
+she disturbs the water and the water plays. Dancer Mode adds two things on
+top of the instrument: her movement steering the instrument's *settings*
+(tempo, flow, harmony, register) as well as disturbing the water, and a slow
+arc that keeps an hour from repeating itself. Only her movement ever
+disturbs the water; the walk and the arc change settings, never ring a
+stone. Proposed: a separate page in the same code (`prototype/dancer.html`,
+its own logic in `prototype/dancer/`), served beside the instrument, using
+the same water, stones, voice, tape and camera — fixes reach both, and the
+dancer page's own logic stays out of the instrument's way (shared code is
+still shared: the checks guard both).
+
+**Mostly hands-off** (Dash): press start, and the piece runs from her
+movement and the arc. A small operator strip for emergencies only — fade
+out, hold the harmony where it is, an intensity ceiling, the sensors'
+status and the switch to the camera, camera sense, and the tempo range — kept off the projection (the pond goes full screen on the
+projector as its own window, the strip stays on the laptop's screen). Here
+the beat runs from start and her energy sets the tempo, so the beat's
+slider lives in the strip as its range: the dancer page's exception to "a
+slider always shown".
+
+### Her movement: mocopi first, the camera as backup
+Dash, Nov 2026: Kacie wears **Sony mocopi** sensors (six on the body). They
+measure her directly — no stage light, no distance, no camera grain, and a
+dropout is plainly a dropout, never stillness — so, proposed: they are her
+main input, with the camera as a backup reading the same features. Either
+way her body reaches the water the way touch and the camera do: as gesture
+events (drops, trails) through the one gesture path, so the water, the
+stones and the tape don't care where they came from; her features steer
+settings on top of that. The mocopi side is a
+package of its own, `mocopi-body/` (Dash: "a package to take over to a
+totally new instrument"): it knows nothing about the water, and gives any
+page a body and its features — energy, each limb's speed, height, level,
+spread, stillness, lost. A small bridge on the laptop passes the app's
+packets (UDP) to the page; it can record a take and replay it, so the
+instrument can be built and tuned against her real movement without her.
+Built Nov 2026 (the package and its viewer); not yet joined to the water.
+
+### What her movement drives
+Everything moves slowly and smoothly: one sharp gesture never jolts the
+music; a phrase of dancing does.
+- **Energy** (how much she moves, over the last ~10–20 s) → **tempo**,
+  gliding within a set range (say 60–130 BPM; the beat glides as it already
+  does), and **flow** (the water's pace) — tying the two together on
+  purpose here, though the instrument keeps them apart. Tempo is only heard
+  through quantize notes (and the walk's bar lines, and any tape), so
+  quantize would be on in Dancer Mode — at what grid and strength, and
+  whether her movement steers them, is open.
+- **Each gesture's speed and size** → how hard its ripples land (from a
+  limb's speed with mocopi, from the frame's movement with the camera).
+- **Height** (arms raised vs. low to the floor) → **register** (which part
+  of the range the stones span) or the voice's brightness.
+- **Spread** (open, wide vs. held in) → how wide the scale is: open
+  (pentatonic) when held in, the full mode, then tension notes when wide.
+- **Stillness held for a few seconds** → a **section change**: with
+  nothing disturbing it the water settles on its own, and on the next bar
+  the harmony moves somewhere new. Her stillness turns the page. (A camera
+  that stops seeing her, or sensors that drop out, must not count as
+  stillness.)
+
+### Harmony that moves by itself
+A **harmonic walk** built on the chord and mode engine (the seven modes, each
+degree's chords), stepping on bar lines:
+- Calm: it stays, or steps to near neighbours (relative and parallel modes,
+  a fifth away). Intense: it changes more often and travels further.
+- **Brightness follows her:** modes ordered bright to dark (Lydian, Ionian,
+  Mixolydian, Dorian, Aeolian, Phrygian); rising energy or height brightens,
+  sinking darkens.
+- It remembers where it has been, so an hour doesn't keep returning to the
+  same few keys.
+- Stones keep their places; only their notes change (as with chord pads).
+
+### Keeping 60 minutes alive
+- **A slow arc** (not yet *Cycle*, which moves through Phase states and
+  stays in phase 7): stone count, timbre, range and water decay drift over
+  many minutes, so minute 40 doesn't sound like minute 5 even if she
+  dances alike.
+- **The tape can layer itself** (to try; a deliberate exception to "rec
+  arms the track", for this page only): when she repeats a strong phrase,
+  it records the water and lets the layer fade, at most one such layer at
+  a time, and it is gone by the next section change, so it never clashes
+  with the harmony the walk has moved to.
+
+### On stage
+- The sensors need the phone and laptop on one network (the show's own:
+  mocopi's data isn't encrypted) and a calibration as she puts them on.
+- The camera, as the backup, is not decided yet (laptop or external,
+  wide-angle): tuning is for a **full body at stage distance under stage
+  light** — very different from a hand at a laptop — learned on site in a
+  short calibration.
+- **Projected:** the pond is the show's picture; Dancer Mode shows the pond
+  full screen, with nothing else on it.
+- If her input drops out (the sensors, and the camera if it's the
+  backup — whether the page switches to the camera by itself or the
+  operator does is open), the water does what it always does without
+  input: it settles to silence (any tape layer fading with it), the walk
+  and the arc hold, and the operator strip says so. Silence is the
+  medium's own state; nothing invents notes for her.
+- **Record piece** must hold a whole set (60+ minutes: about 1.3 GB if it's
+  held in memory, so it would stream to disk).
+
+### Build order (each step ends with Dash and Kacie listening and moving)
+1. The dancer page: full-screen pond, her body in through the mocopi
+   bridge (live or a replayed take; the camera as backup), the operator
+   strip, the features shown as a test view for tuning (the package's
+   viewer is a start).
+2. Energy → tempo and flow.
+3. The harmonic walk, with stillness turning the page.
+4. Height and spread → register and scale width.
+5. The slow arc; the self-layering tape (if it earns its place).
+6. Stage tuning with Kacie on site; a full 60-minute run.
+
+### Open questions
+- How her body disturbs the water: which limbs drop, where on the pond a
+  drop lands (her place on the floor, a limb's height or direction), how
+  hard.
+- Whether the camera backup must give the same features (height, spread
+  and level are much harder from a flat picture), and whether it's worth
+  building.
+- mocopi's packet format is unofficial: its units and up axis are
+  unconfirmed until a first real take.
+- Quantize in Dancer Mode: which grid and strength, and does her movement
+  steer them?
+- Which mappings feel like hers once she dances with them — they are
+  guesses until then.
+- Should stillness also calm the water (Still), or only turn the page?
+- Does the arc follow the clock (an hour shaped in advance), her history,
+  or both?
+- How much harmonic travel an hour can carry before it stops feeling like
+  one piece.
 
 ## Tech stack
 - **Framework:** the phone and tablet app is the web instrument wrapped with
@@ -385,6 +527,12 @@ Later possibilities: a second-screen surface, OSC from a phone's motion sensors.
    relative to phase 2's user testing is Dash's call): the build-phase-2
    instrument wrapped with Capacitor for the iPhone/iPad and Android app
    stores from one code base (`app/`). Phases 3–6 (the JUCE plugin) follow and reuse this interface.
+
+   2c. **Dancer Mode** (Dash, Nov 2026, for Kacie) — a page of its own in the
+   same code, driven by a dancer's movement for a full 60-minute set, in its
+   own listening-gated steps (see Dancer Mode); pending Dash's approval of the
+   design, and when it runs beside store prep and phase 2's user testing is
+   his call.
 3. **Plugin skeleton** — builds, loads in a host, makes a sound, passes pluginval.
 4. **Port the medium** to C++ in `source/dsp` (what build phase 2 proved,
    including its gestures and the Phase modes).
